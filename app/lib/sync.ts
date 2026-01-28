@@ -1,6 +1,5 @@
 import {
   getMonitoredApplication,
-  updateMonitoredApplicationRepository,
 } from '~/db/monitored-applications';
 import {
   createDeployment,
@@ -94,16 +93,6 @@ export async function syncDeploymentsFromNais(
       });
 
       alertsCreated++;
-    }
-
-    // If this is the first deployment for this app, auto-update detected repo
-    if (!monitoredApp.detected_github_owner && !repositoryMismatch) {
-      console.log(`📝 Auto-updating detected repository for first deployment`);
-      await updateMonitoredApplicationRepository(
-        monitoredApp.id,
-        detectedOwner,
-        detectedRepoName
-      );
     }
 
     // Create deployment record WITHOUT four-eyes verification

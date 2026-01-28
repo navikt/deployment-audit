@@ -126,19 +126,11 @@ export default function Apps({ loaderData, actionData }: Route.ComponentProps) {
                 <Table.HeaderCell scope="col">Applikasjon</Table.HeaderCell>
                 <Table.HeaderCell scope="col">Miljø</Table.HeaderCell>
                 <Table.HeaderCell scope="col">Godkjent repository</Table.HeaderCell>
-                <Table.HeaderCell scope="col">Detektert repository</Table.HeaderCell>
-                <Table.HeaderCell scope="col">Status</Table.HeaderCell>
                 <Table.HeaderCell scope="col">Handlinger</Table.HeaderCell>
               </Table.Row>
             </Table.Header>
             <Table.Body>
               {teamApps.map((app) => {
-                const hasRepoMismatch =
-                  app.detected_github_owner &&
-                  app.detected_github_repo_name &&
-                  (app.detected_github_owner !== app.approved_github_owner ||
-                    app.detected_github_repo_name !== app.approved_github_repo_name);
-
                 return (
                   <Table.Row key={app.id}>
                     <Table.DataCell>
@@ -153,28 +145,6 @@ export default function Apps({ loaderData, actionData }: Route.ComponentProps) {
                       >
                         {app.approved_github_owner}/{app.approved_github_repo_name}
                       </a>
-                    </Table.DataCell>
-                    <Table.DataCell>
-                      {app.detected_github_owner && app.detected_github_repo_name ? (
-                        <a
-                          href={`https://github.com/${app.detected_github_owner}/${app.detected_github_repo_name}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          {app.detected_github_owner}/{app.detected_github_repo_name}
-                        </a>
-                      ) : (
-                        <span className={styles.textSubtle}>Ikke synkronisert ennå</span>
-                      )}
-                    </Table.DataCell>
-                    <Table.DataCell>
-                      {hasRepoMismatch ? (
-                        <span className={styles.textDangerBold}>⚠️ Mismatch</span>
-                      ) : app.detected_github_owner ? (
-                        <span className={styles.textSuccess}>✓ OK</span>
-                      ) : (
-                        <span className={styles.textSubtle}>Ikke synkronisert</span>
-                      )}
                     </Table.DataCell>
                     <Table.DataCell>
                       <div className={styles.actionButtons}>

@@ -7,8 +7,6 @@ export interface MonitoredApplication {
   app_name: string;
   approved_github_owner: string;
   approved_github_repo_name: string;
-  detected_github_owner: string | null;
-  detected_github_repo_name: string | null;
   is_active: boolean;
   created_at: Date;
   updated_at: Date;
@@ -127,28 +125,6 @@ export async function deactivateMonitoredApplication(id: number): Promise<Monito
   const result = await pool.query(
     'UPDATE monitored_applications SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *',
     [id]
-  );
-
-  if (result.rows.length === 0) {
-    throw new Error('Application not found');
-  }
-
-  return result.rows[0];
-}
-
-export async function updateMonitoredApplicationRepository(
-  id: number,
-  detectedOwner: string,
-  detectedRepoName: string
-): Promise<MonitoredApplication> {
-  const result = await pool.query(
-    `UPDATE monitored_applications 
-     SET detected_github_owner = $1, 
-         detected_github_repo_name = $2, 
-         updated_at = CURRENT_TIMESTAMP 
-     WHERE id = $3 
-     RETURNING *`,
-    [detectedOwner, detectedRepoName, id]
   );
 
   if (result.rows.length === 0) {
