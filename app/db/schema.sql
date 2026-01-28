@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS deployments (
   -- Nais deployment data
   nais_deployment_id VARCHAR(255) UNIQUE NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-  deployer_username VARCHAR(255) NOT NULL,
+  deployer_username VARCHAR(255), -- Nullable: not always provided by Nais API
   commit_sha VARCHAR(40) NOT NULL,
   trigger_url TEXT,
   

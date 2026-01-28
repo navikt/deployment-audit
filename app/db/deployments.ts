@@ -5,7 +5,7 @@ export interface Deployment {
   monitored_app_id: number;
   nais_deployment_id: string;
   created_at: Date;
-  deployer_username: string;
+  deployer_username: string | null;
   commit_sha: string;
   trigger_url: string | null;
   detected_github_owner: string;
@@ -30,7 +30,7 @@ export interface CreateDeploymentParams {
   monitoredApplicationId: number;
   naisDeploymentId: string;
   createdAt: Date;
-  deployerUsername: string;
+  deployerUsername: string | null;
   commitSha: string;
   triggerUrl: string | null;
   detectedGithubOwner: string;

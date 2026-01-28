@@ -199,7 +199,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
 
         <div>
           <Detail>Deployer</Detail>
-          <BodyShort>{deployment.deployer_username}</BodyShort>
+          <BodyShort>{deployment.deployer_username || '(ukjent)'}</BodyShort>
         </div>
 
         <div>

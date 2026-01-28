@@ -217,7 +217,7 @@ export default function Deployments({ loaderData }: Route.ComponentProps) {
                       {deployment.detected_github_owner}/{deployment.detected_github_repo_name}
                     </a>
                   </Table.DataCell>
-                  <Table.DataCell>{deployment.deployer_username}</Table.DataCell>
+                  <Table.DataCell>{deployment.deployer_username || '(ukjent)'}</Table.DataCell>
                   <Table.DataCell>
                     <a
                       href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/commit/${deployment.commit_sha}`}
