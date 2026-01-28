@@ -111,6 +111,21 @@ Initializing database...
 Database initialization complete
 ```
 
+**Hvis du har eksisterende data (migrering fra V1 til V2):**
+```bash
+psql $DATABASE_URL -f app/db/migrate_v1_to_v2.sql
+```
+
+**Eller start fresh med V2 schema:**
+```bash
+# Drop existing database (WARNING: deletes all data!)
+dropdb nais_audit
+createdb nais_audit
+
+# Run V2 schema
+psql $DATABASE_URL -f app/db/schema_v2.sql
+```
+
 
 ### 4. Start utviklingsserver
 
