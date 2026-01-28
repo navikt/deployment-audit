@@ -73,29 +73,7 @@ export async function syncDeploymentsFromNais(
       continue;
     }
 
-    // New deployment - check for repository mismatch
-    const repositoryMismatch =
-      monitoredApp.approved_github_owner !== detectedOwner ||
-      monitoredApp.approved_github_repo_name !== detectedRepoName;
-
-    if (repositoryMismatch) {
-      console.warn(`🚨 Repository mismatch detected for deployment ${naisDep.id}:`, {
-        approved: `${monitoredApp.approved_github_owner}/${monitoredApp.approved_github_repo_name}`,
-        detected: `${detectedOwner}/${detectedRepoName}`,
-      });
-
-      // Create alert
-      await createRepositoryAlert({
-        monitoredApplicationId: monitoredApp.id,
-        deploymentNaisId: naisDep.id,
-        detectedGithubOwner: detectedOwner,
-        detectedGithubRepoName: detectedRepoName,
-      });
-
-      alertsCreated++;
-    }
-
-    // Create deployment record WITHOUT four-eyes verification
+    // Create deployment record first (WITHOUT four-eyes verification)
     console.log(`➕ Creating new deployment: ${naisDep.id}`);
 
     const deploymentParams: CreateDeploymentParams = {
@@ -112,6 +90,28 @@ export async function syncDeploymentsFromNais(
 
     await createDeployment(deploymentParams);
     newCount++;
+
+    // Check for repository mismatch AFTER deployment is created
+    const repositoryMismatch =
+      monitoredApp.approved_github_owner !== detectedOwner ||
+      monitoredApp.approved_github_repo_name !== detectedRepoName;
+
+    if (repositoryMismatch) {
+      console.warn(`🚨 Repository mismatch detected for deployment ${naisDep.id}:`, {
+        approved: `${monitoredApp.approved_github_owner}/${monitoredApp.approved_github_repo_name}`,
+        detected: `${detectedOwner}/${detectedRepoName}`,
+      });
+
+      // Create alert (deployment now exists)
+      await createRepositoryAlert({
+        monitoredApplicationId: monitoredApp.id,
+        deploymentNaisId: naisDep.id,
+        detectedGithubOwner: detectedOwner,
+        detectedGithubRepoName: detectedRepoName,
+      });
+
+      alertsCreated++;
+    }
   }
 
   console.log(`✅ Nais sync complete:`, {
