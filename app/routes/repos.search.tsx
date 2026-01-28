@@ -9,8 +9,8 @@ import {
   Table,
   TextField,
 } from '@navikt/ds-react';
-import { useState } from 'react';
-import { Form, redirect, useNavigation } from 'react-router';
+import { useEffect, useState } from 'react';
+import { Form, redirect, useActionData, useNavigation } from 'react-router';
 import { createRepository } from '../db/repositories';
 import { type GitHubRepo, searchRepositories } from '../lib/github';
 import type { Route } from './+types/repos.search';
@@ -42,16 +42,33 @@ export async function action({ request }: Route.ActionArgs) {
     const teamSlug = formData.get('teamSlug') as string;
     const environment = formData.get('environment') as string;
 
+    console.log('Adding repository:', { repoName, teamSlug, environment });
+
+    if (!repoName || !teamSlug || !environment) {
+      console.error('Missing required fields');
+      return {
+        error: 'Alle felt må fylles ut',
+        repos: [],
+        query: '',
+      };
+    }
+
     try {
+      console.log('Creating repository in database...');
       const repo = await createRepository({
         github_repo_name: repoName,
         nais_team_slug: teamSlug,
         nais_environment_name: environment,
       });
+      console.log('Repository created successfully:', repo);
       return redirect(`/repos/${repo.id}`);
-    } catch (_error) {
+    } catch (error) {
+      console.error('Error creating repository:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Ukjent feil';
       return {
-        error: 'Kunne ikke legge til repository. Sjekk at alle felt er fylt ut.',
+        error: `Kunne ikke legge til repository: ${errorMessage}`,
+        repos: [],
+        query: '',
       };
     }
   }
@@ -68,8 +85,19 @@ export default function ReposSearch({ actionData }: Route.ComponentProps) {
   const isSearching =
     navigation.state === 'submitting' && navigation.formData?.get('intent') === 'search';
 
+  const isAdding =
+    navigation.state === 'submitting' && navigation.formData?.get('intent') === 'add';
+
   const repos = actionData?.repos || [];
   const query = actionData?.query || '';
+
+  // Reset form when modal closes
+  useEffect(() => {
+    if (!selectedRepo) {
+      setTeamSlug('');
+      setEnvironment('');
+    }
+  }, [selectedRepo]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -144,6 +172,10 @@ export default function ReposSearch({ actionData }: Route.ComponentProps) {
             <input type="hidden" name="intent" value="add" />
             <input type="hidden" name="repoName" value={selectedRepo?.name || ''} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              {actionData?.error && navigation.state === 'idle' && (
+                <Alert variant="error">{actionData.error}</Alert>
+              )}
+
               <BodyShort>Konfigurer Nais-innstillinger for dette repositoryet.</BodyShort>
 
               <TextField
@@ -165,8 +197,15 @@ export default function ReposSearch({ actionData }: Route.ComponentProps) {
               />
 
               <div style={{ display: 'flex', gap: '1rem' }}>
-                <Button type="submit">Legg til</Button>
-                <Button type="button" variant="secondary" onClick={() => setSelectedRepo(null)}>
+                <Button type="submit" disabled={isAdding}>
+                  {isAdding ? <Loader size="small" /> : 'Legg til'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setSelectedRepo(null)}
+                  disabled={isAdding}
+                >
                   Avbryt
                 </Button>
               </div>
