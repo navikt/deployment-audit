@@ -354,3 +354,30 @@ export async function getApplicationInfo(
     return null;
   }
 }
+
+/**
+ * Helper function to get date range for common periods
+ */
+export function getDateRange(period: string): { startDate: Date; endDate: Date } {
+  const now = new Date();
+  const endDate = now;
+  let startDate: Date;
+
+  switch (period) {
+    case 'last-month':
+      startDate = new Date(now);
+      startDate.setMonth(now.getMonth() - 1);
+      break;
+    case 'last-12-months':
+      startDate = new Date(now);
+      startDate.setFullYear(now.getFullYear() - 1);
+      break;
+    case 'year-2025':
+      startDate = new Date('2025-01-01');
+      break;
+    default:
+      startDate = new Date(0); // Beginning of time
+  }
+
+  return { startDate, endDate };
+}

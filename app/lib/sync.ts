@@ -190,16 +190,16 @@ async function verifyAndUpdateFourEyes(
     }
 
     // Check if PR has approval after last commit
-    const lastCommitDate = new Date(commitInfo.commit.committer.date);
-    const hasApproval = await verifyPullRequestFourEyes(owner, repo, prInfo.number, lastCommitDate);
+    const lastCommitDate = new Date(commitInfo.commit.author.date);
+    const fourEyesResult = await verifyPullRequestFourEyes(owner, repo, prInfo.number);
 
     console.log(
-      `${hasApproval ? '✅' : '❌'} PR #${prInfo.number} ${hasApproval ? 'has' : 'lacks'} approval after last commit`
+      `${fourEyesResult.hasFourEyes ? '✅' : '❌'} PR #${prInfo.number} ${fourEyesResult.hasFourEyes ? 'has' : 'lacks'} approval after last commit`
     );
 
     await updateDeploymentFourEyes(deploymentId, {
-      hasFourEyes: hasApproval,
-      fourEyesStatus: hasApproval ? 'approved_pr' : 'missing',
+      hasFourEyes: fourEyesResult.hasFourEyes,
+      fourEyesStatus: fourEyesResult.hasFourEyes ? 'approved_pr' : 'missing',
       githubPrNumber: prInfo.number,
       githubPrUrl: prInfo.html_url,
     });
