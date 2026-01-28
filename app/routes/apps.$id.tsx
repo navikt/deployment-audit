@@ -1,4 +1,8 @@
-import { CheckmarkCircleIcon, ExclamationmarkTriangleIcon } from '@navikt/aksel-icons';
+import {
+  CheckmarkCircleIcon,
+  ExclamationmarkTriangleIcon,
+  XMarkOctagonIcon,
+} from '@navikt/aksel-icons';
 import {
   Alert,
   BodyShort,
@@ -129,11 +133,25 @@ export default function AppDetail() {
   const [searchParams] = useSearchParams();
   const currentPeriod = searchParams.get('period') || 'all';
 
-  // Status badge based on alerts
-  const statusVariant = alerts.length === 0 ? 'success' : 'warning';
-  const statusIcon =
-    alerts.length === 0 ? <CheckmarkCircleIcon /> : <ExclamationmarkTriangleIcon />;
-  const statusText = alerts.length === 0 ? 'Alt OK' : `${alerts.length} åpne varsler`;
+  // Status badge based on deployment stats and alerts
+  // Priority: 1. Missing four-eyes (error), 2. Pending verification (warning), 3. Alerts (warning), 4. OK (success)
+  let statusVariant: 'success' | 'warning' | 'error' = 'success';
+  let statusIcon = <CheckmarkCircleIcon />;
+  let statusText = 'Alt OK';
+
+  if (deploymentStats.without_four_eyes > 0) {
+    statusVariant = 'error';
+    statusIcon = <XMarkOctagonIcon />;
+    statusText = `${deploymentStats.without_four_eyes} deployment${deploymentStats.without_four_eyes > 1 ? 's' : ''} mangler four-eyes`;
+  } else if (deploymentStats.pending_verification > 0) {
+    statusVariant = 'warning';
+    statusIcon = <ExclamationmarkTriangleIcon />;
+    statusText = `${deploymentStats.pending_verification} deployment${deploymentStats.pending_verification > 1 ? 's' : ''} venter verifisering`;
+  } else if (alerts.length > 0) {
+    statusVariant = 'warning';
+    statusIcon = <ExclamationmarkTriangleIcon />;
+    statusText = `${alerts.length} åpne varsler`;
+  }
 
   const naisConsoleUrl = `https://console.nav.cloud.nais.io/team/${app.team_slug}/${app.environment_name}/app/${app.app_name}`;
 

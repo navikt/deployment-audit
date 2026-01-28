@@ -1,8 +1,14 @@
-import { ArrowsCirclepathIcon, CheckmarkCircleIcon } from '@navikt/aksel-icons';
-import { Alert, BodyShort, Button, Heading, Table } from '@navikt/ds-react';
+import {
+  ArrowsCirclepathIcon,
+  CheckmarkCircleIcon,
+  ExclamationmarkTriangleIcon,
+  XMarkOctagonIcon,
+} from '@navikt/aksel-icons';
+import { Alert, BodyShort, Button, Heading, Table, Tag } from '@navikt/ds-react';
 import { Form, Link } from 'react-router';
 import { resolveAlertsForLegacyDeployments } from '~/db/alerts.server';
 import { getRepositoriesByAppId } from '~/db/application-repositories.server';
+import { getAppDeploymentStats } from '~/db/deployments.server';
 import { getAllMonitoredApplications } from '~/db/monitored-applications.server';
 import { syncDeploymentsFromNais, verifyDeploymentsFourEyes } from '~/lib/sync.server';
 import styles from '../styles/common.module.css';
@@ -15,21 +21,23 @@ export function meta(_args: Route.MetaArgs) {
 export async function loader() {
   const apps = await getAllMonitoredApplications();
 
-  // Fetch active repository for each app
-  const appsWithRepos = await Promise.all(
+  // Fetch active repository and deployment stats for each app
+  const appsWithData = await Promise.all(
     apps.map(async (app) => {
       const repos = await getRepositoriesByAppId(app.id);
       const activeRepo = repos.find((r) => r.status === 'active');
+      const stats = await getAppDeploymentStats(app.id);
       return {
         ...app,
         active_repo: activeRepo
           ? `${activeRepo.github_owner}/${activeRepo.github_repo_name}`
           : null,
+        stats,
       };
     })
   );
 
-  return { apps: appsWithRepos };
+  return { apps: appsWithData };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -166,12 +174,32 @@ export default function Apps({ loaderData, actionData }: Route.ComponentProps) {
               <Table.Row>
                 <Table.HeaderCell scope="col">Applikasjon</Table.HeaderCell>
                 <Table.HeaderCell scope="col">Miljø</Table.HeaderCell>
+                <Table.HeaderCell scope="col">Status</Table.HeaderCell>
                 <Table.HeaderCell scope="col">Godkjent repository</Table.HeaderCell>
                 <Table.HeaderCell scope="col">Handlinger</Table.HeaderCell>
               </Table.Row>
             </Table.Header>
             <Table.Body>
               {teamApps.map((app) => {
+                // Determine status based on deployment stats
+                let statusVariant: 'success' | 'warning' | 'error' = 'success';
+                let statusIcon = <CheckmarkCircleIcon />;
+                let statusText = 'OK';
+
+                if (app.stats.without_four_eyes > 0) {
+                  statusVariant = 'error';
+                  statusIcon = <XMarkOctagonIcon />;
+                  statusText = `${app.stats.without_four_eyes} mangler`;
+                } else if (app.stats.pending_verification > 0) {
+                  statusVariant = 'warning';
+                  statusIcon = <ExclamationmarkTriangleIcon />;
+                  statusText = `${app.stats.pending_verification} venter`;
+                } else if (app.stats.total === 0) {
+                  statusVariant = 'warning';
+                  statusIcon = <ExclamationmarkTriangleIcon />;
+                  statusText = 'Ingen data';
+                }
+
                 return (
                   <Table.Row key={app.id}>
                     <Table.DataCell>
@@ -180,6 +208,11 @@ export default function Apps({ loaderData, actionData }: Route.ComponentProps) {
                       </Button>
                     </Table.DataCell>
                     <Table.DataCell>{app.environment_name}</Table.DataCell>
+                    <Table.DataCell>
+                      <Tag variant={statusVariant} size="small">
+                        {statusIcon} {statusText}
+                      </Tag>
+                    </Table.DataCell>
                     <Table.DataCell>
                       {app.active_repo ? (
                         <a
