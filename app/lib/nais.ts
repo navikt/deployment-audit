@@ -115,6 +115,8 @@ export async function fetchDeployments(
         depsAfter: undefined, // We'll handle deployment pagination per app
       });
 
+      console.log(`✅ Response received - requested ${deploymentsFirst} deployments per app`);
+
       if (!response.team) {
         console.warn('⚠️  No team data in response - team might not exist or no access');
         break;
@@ -131,6 +133,12 @@ export async function fetchDeployments(
 
       // For each application, paginate through its deployments
       for (const app of response.team.applications.nodes) {
+        const deploymentsCount = app.deployments?.nodes?.length || 0;
+        const hasMore = app.deployments?.pageInfo?.hasNextPage;
+        console.log(
+          `  📋 ${app.name}: ${deploymentsCount} initial deployments, hasNextPage: ${hasMore}`
+        );
+
         const appDeployments: NaisDeployment[] = [];
 
         // First page of deployments (already fetched)
@@ -168,7 +176,7 @@ export async function fetchDeployments(
           depsHasNextPage = appData?.deployments?.pageInfo?.hasNextPage || false;
         }
 
-        console.log(`  - ${app.name}: ${appDeployments.length} deployments (${depsPageCount} page(s))`);
+        console.log(`  ✅ ${app.name}: ${appDeployments.length} total deployments (${depsPageCount} page(s))`);
         allDeployments.push(...appDeployments);
       }
 
