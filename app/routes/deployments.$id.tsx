@@ -9,20 +9,19 @@ import {
 import {
   Alert,
   BodyShort,
+  Box,
   Button,
   Detail,
   Heading,
-  Label,
-  Panel,
   Tag,
   Textarea,
   TextField,
 } from '@navikt/ds-react';
 import { useState } from 'react';
-import { Form, Link } from 'react-router';
-import { createComment, deleteComment, getCommentsByDeploymentId } from '../db/comments.server';
-import { getDeploymentById } from '../db/deployments.server';
-import { verifyDeploymentFourEyes } from '../lib/sync.server';
+import { Form } from 'react-router';
+import { createComment, deleteComment, getCommentsByDeploymentId } from '~/db/comments.server';
+import { getDeploymentById } from '~/db/deployments.server';
+import { verifyDeploymentFourEyes } from '~/lib/sync.server';
 import styles from '../styles/common.module.css';
 import type { Route } from './+types/deployments.$id';
 
@@ -335,8 +334,8 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
             Kubernetes Resources
           </Heading>
           <div className={styles.actionButtons}>
-            {deployment.resources.map((resource: any, idx: number) => (
-              <Tag key={idx} variant="info" size="small">
+            {deployment.resources.map((resource: any) => (
+              <Tag key={`${resource.kind}:${resource.name}`} variant="info" size="small">
                 {resource.kind}: {resource.name}
               </Tag>
             ))}
@@ -346,7 +345,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
 
       {/* PR Details section */}
       {deployment.github_pr_data && (
-        <Panel>
+        <Box>
           <Heading size="small" spacing>
             Pull Request Informasjon
           </Heading>
@@ -478,8 +477,8 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
             <div style={{ marginTop: '1rem' }}>
               <Detail>Labels</Detail>
               <div className={styles.actionButtons}>
-                {deployment.github_pr_data.labels.map((label, idx) => (
-                  <Tag key={idx} variant="neutral" size="small">
+                {deployment.github_pr_data.labels.map((label) => (
+                  <Tag key={label} variant="neutral" size="small">
                     {label}
                   </Tag>
                 ))}
@@ -493,8 +492,11 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
               <div style={{ marginTop: '1rem' }}>
                 <Detail>Reviewers</Detail>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {deployment.github_pr_data.reviewers.map((reviewer, idx) => (
-                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  {deployment.github_pr_data.reviewers.map((reviewer) => (
+                    <div
+                      key={`${reviewer.username}:${reviewer.submitted_at}`}
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                    >
                       {reviewer.state === 'APPROVED' && (
                         <span style={{ fontSize: '1.2rem' }}>✅</span>
                       )}
@@ -548,7 +550,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                   marginTop: '0.5rem',
                 }}
               >
-                {deployment.github_pr_data.checks.map((check, idx) => {
+                {deployment.github_pr_data.checks.map((check) => {
                   const isSuccess = check.conclusion === 'success';
                   const isFailure =
                     check.conclusion === 'failure' ||
@@ -561,7 +563,10 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                   const isInProgress = check.status === 'in_progress' || check.status === 'queued';
 
                   return (
-                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <div
+                      key={check.html_url}
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                    >
                       {isSuccess && (
                         <CheckmarkCircleIcon
                           style={{ color: 'var(--a-icon-success)', fontSize: '1.2rem' }}
@@ -616,7 +621,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
               </div>
             </div>
           )}
-        </Panel>
+        </Box>
       )}
 
       {/* Comments section */}
@@ -630,7 +635,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
         ) : (
           <div className={styles.commentsContainer}>
             {comments.map((comment) => (
-              <Panel key={comment.id} border>
+              <Box key={comment.id} borderWidth="1" padding="space-16">
                 <div className={styles.commentPanel}>
                   <div className={styles.commentContent}>
                     <Detail>
@@ -661,13 +666,13 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                     </Button>
                   </Form>
                 </div>
-              </Panel>
+              </Box>
             ))}
           </div>
         )}
       </div>
 
-      <Panel border>
+      <Box borderWidth="1" padding="space-16">
         <Heading size="small" spacing>
           <ChatIcon aria-hidden /> Legg til kommentar
         </Heading>
@@ -693,7 +698,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
             </div>
           </div>
         </Form>
-      </Panel>
+      </Box>
     </div>
   );
 }

@@ -1,10 +1,10 @@
-import { ArrowsCirclepathIcon, CheckmarkCircleIcon, TrashIcon } from '@navikt/aksel-icons';
+import { ArrowsCirclepathIcon, CheckmarkCircleIcon } from '@navikt/aksel-icons';
 import { Alert, BodyShort, Button, Heading, Table } from '@navikt/ds-react';
 import { Form, Link } from 'react-router';
-import { resolveAlertsForLegacyDeployments } from '../db/alerts.server';
-import { getRepositoriesByAppId } from '../db/application-repositories.server';
-import { getAllMonitoredApplications } from '../db/monitored-applications.server';
-import { syncDeploymentsFromNais, verifyDeploymentsFourEyes } from '../lib/sync.server';
+import { resolveAlertsForLegacyDeployments } from '~/db/alerts.server';
+import { getRepositoriesByAppId } from '~/db/application-repositories.server';
+import { getAllMonitoredApplications } from '~/db/monitored-applications.server';
+import { syncDeploymentsFromNais, verifyDeploymentsFourEyes } from '~/lib/sync.server';
 import styles from '../styles/common.module.css';
 import type { Route } from './+types/apps';
 

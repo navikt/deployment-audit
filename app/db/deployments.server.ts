@@ -243,15 +243,15 @@ export async function getDeploymentStats(monitoredAppId?: number): Promise<{
   }
 
   const result = await pool.query(sql, params);
-  const total = parseInt(result.rows[0].total);
-  const withFourEyes = parseInt(result.rows[0].with_four_eyes);
+  const total = parseInt(result.rows[0].total, 10);
+  const withFourEyes = parseInt(result.rows[0].with_four_eyes, 10);
   const percentage = total > 0 ? Math.round((withFourEyes / total) * 100) : 0;
 
   return {
     total,
     with_four_eyes: withFourEyes,
-    without_four_eyes: parseInt(result.rows[0].without_four_eyes),
-    repository_mismatch: parseInt(result.rows[0].repository_mismatch),
+    without_four_eyes: parseInt(result.rows[0].without_four_eyes, 10),
+    repository_mismatch: parseInt(result.rows[0].repository_mismatch, 10),
     percentage,
   };
 }
@@ -332,15 +332,15 @@ export async function getAppDeploymentStats(
   const result = await pool.query(sql, params);
 
   const row = result.rows[0];
-  const total = parseInt(row.total) || 0;
-  const withFourEyes = parseInt(row.with_four_eyes) || 0;
+  const total = parseInt(row.total, 10) || 0;
+  const withFourEyes = parseInt(row.with_four_eyes, 10) || 0;
   const percentage = total > 0 ? Math.round((withFourEyes / total) * 100) : 0;
 
   return {
     total,
     with_four_eyes: withFourEyes,
-    without_four_eyes: parseInt(row.without_four_eyes) || 0,
-    pending_verification: parseInt(row.pending_verification) || 0,
+    without_four_eyes: parseInt(row.without_four_eyes, 10) || 0,
+    pending_verification: parseInt(row.pending_verification, 10) || 0,
     last_deployment: row.last_deployment ? new Date(row.last_deployment) : null,
     four_eyes_percentage: percentage,
   };

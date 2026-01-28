@@ -9,13 +9,11 @@ import {
   createDeployment,
   type DeploymentFilters,
   getAllDeployments,
-  getDeploymentById,
   getDeploymentByNaisId,
   updateDeploymentFourEyes,
 } from '~/db/deployments.server';
 import { getMonitoredApplication } from '~/db/monitored-applications.server';
 import {
-  getCommit,
   getDetailedPullRequestInfo,
   getPullRequestForCommit,
   verifyPullRequestFourEyes,
@@ -321,9 +319,6 @@ export async function verifyDeploymentFourEyes(
   const [owner, repo] = repoParts;
 
   try {
-    // Get commit info
-    const commitInfo = await getCommit(owner, repo, commitSha);
-
     // Check if commit is part of a PR
     const prInfo = await getPullRequestForCommit(owner, repo, commitSha);
 
@@ -340,7 +335,6 @@ export async function verifyDeploymentFourEyes(
     }
 
     // Check if PR has approval after last commit
-    const lastCommitDate = new Date(commitInfo.commit.author.date);
     const fourEyesResult = await verifyPullRequestFourEyes(owner, repo, prInfo.number);
 
     console.log(

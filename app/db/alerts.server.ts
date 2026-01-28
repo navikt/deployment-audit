@@ -177,9 +177,9 @@ export async function getAlertStats(): Promise<{
     FROM repository_alerts
   `);
   return {
-    total: parseInt(result.rows[0].total),
-    unresolved: parseInt(result.rows[0].unresolved),
-    resolved: parseInt(result.rows[0].resolved),
+    total: parseInt(result.rows[0].total, 10),
+    unresolved: parseInt(result.rows[0].unresolved, 10),
+    resolved: parseInt(result.rows[0].resolved, 10),
   };
 }
 

@@ -1,14 +1,5 @@
-import { MagnifyingGlassIcon, PlusIcon } from '@navikt/aksel-icons';
-import {
-  Alert,
-  BodyShort,
-  Button,
-  Checkbox,
-  Heading,
-  Loader,
-  Table,
-  TextField,
-} from '@navikt/ds-react';
+import { PlusIcon } from '@navikt/aksel-icons';
+import { Alert, BodyShort, Button, Checkbox, Heading, Table, TextField } from '@navikt/ds-react';
 import { useState } from 'react';
 import { Form, useNavigation } from 'react-router';
 import { upsertApplicationRepository } from '../db/application-repositories.server';

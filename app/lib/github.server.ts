@@ -1,4 +1,5 @@
 import { Octokit } from '@octokit/rest';
+import type { GitHubPRData } from '~/db/deployments.server';
 
 let octokit: Octokit | null = null;
 
@@ -16,55 +17,6 @@ export function getGitHubClient(): Octokit {
   }
 
   return octokit;
-}
-
-export interface GitHubRepo {
-  name: string;
-  full_name: string;
-  description: string | null;
-  html_url: string;
-  stargazers_count: number;
-  language: string | null;
-  updated_at: string;
-}
-
-export async function searchRepositories(org: string, query: string): Promise<GitHubRepo[]> {
-  const client = getGitHubClient();
-
-  const searchQuery = `${query} org:${org}`;
-
-  const response = await client.search.repos({
-    q: searchQuery,
-    sort: 'updated',
-    per_page: 10,
-  });
-
-  return response.data.items as GitHubRepo[];
-}
-
-export interface GitHubCommit {
-  sha: string;
-  commit: {
-    author: {
-      name: string;
-      email: string;
-      date: string;
-    };
-    message: string;
-  };
-  html_url: string;
-}
-
-export async function getCommit(owner: string, repo: string, sha: string): Promise<GitHubCommit> {
-  const client = getGitHubClient();
-
-  const response = await client.repos.getCommit({
-    owner,
-    repo,
-    ref: sha,
-  });
-
-  return response.data as GitHubCommit;
 }
 
 export interface PullRequest {
@@ -222,28 +174,7 @@ export async function getDetailedPullRequestInfo(
   owner: string,
   repo: string,
   pull_number: number
-): Promise<{
-  title: string;
-  body: string | null;
-  labels: string[];
-  created_at: string;
-  merged_at: string | null;
-  base_branch: string;
-  commits_count: number;
-  changed_files: number;
-  additions: number;
-  deletions: number;
-  draft: boolean;
-  creator: { username: string; avatar_url: string };
-  merger: { username: string; avatar_url: string } | null;
-  reviewers: Array<{
-    username: string;
-    avatar_url: string;
-    state: string;
-    submitted_at: string;
-  }>;
-  checks_passed: boolean | null;
-} | null> {
+): Promise<GitHubPRData | null> {
   const client = getGitHubClient();
 
   try {

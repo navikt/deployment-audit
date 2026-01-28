@@ -16,7 +16,7 @@ import {
   discoverTeamApplications,
   fetchApplicationDeployments,
   getApplicationInfo,
-} from '../app/lib/nais.server';
+} from '~/lib/nais.server';
 
 const command = process.argv[2];
 const args = process.argv.slice(3);
@@ -81,7 +81,9 @@ async function testFetch(teamSlug: string, envName: string, appName: string) {
         console.log(`\n📌 ${dep.id}`);
         console.log(`   Created: ${new Date(dep.createdAt).toLocaleString('nb-NO')}`);
         console.log(`   Deployer: ${dep.deployerUsername}`);
-        console.log(`   Commit: ${dep.commitSha.substring(0, 8)}`);
+        if (dep.commitSha) {
+          console.log(`   Commit: ${dep.commitSha.substring(0, 8)}`);
+        }
         console.log(`   Repository: ${dep.repository}`);
         console.log(
           `   Resources: ${dep.resources.nodes.length} (${dep.resources.nodes.map((r) => r.kind).join(', ')})`

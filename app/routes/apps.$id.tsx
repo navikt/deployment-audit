@@ -34,8 +34,8 @@ import { syncDeploymentsFromNais } from '~/lib/sync.server';
 import styles from '~/styles/common.module.css';
 
 export async function loader({ params, request }: LoaderFunctionArgs) {
-  const id = parseInt(params.id || '');
-  if (isNaN(id)) {
+  const id = parseInt(params.id || '', 10);
+  if (Number.isNaN(id)) {
     throw new Response('Invalid app ID', { status: 400 });
   }
 
@@ -74,13 +74,12 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     historicalRepos,
     deploymentStats,
     alerts,
-    period,
   };
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
-  const id = parseInt(params.id || '');
-  if (isNaN(id)) {
+  const id = parseInt(params.id || '', 10);
+  if (Number.isNaN(id)) {
     throw new Response('Invalid app ID', { status: 400 });
   }
 
@@ -98,20 +97,20 @@ export async function action({ request, params }: ActionFunctionArgs) {
     }
 
     if (action === 'approve_repo') {
-      const repoId = parseInt(formData.get('repo_id') as string);
+      const repoId = parseInt(formData.get('repo_id') as string, 10);
       const setActive = formData.get('set_active') === 'true';
       await approveRepository(repoId, 'web-user', setActive);
       return { success: 'Repository godkjent!' };
     }
 
     if (action === 'reject_repo') {
-      const repoId = parseInt(formData.get('repo_id') as string);
+      const repoId = parseInt(formData.get('repo_id') as string, 10);
       await rejectRepository(repoId);
       return { success: 'Repository avvist!' };
     }
 
     if (action === 'set_active') {
-      const repoId = parseInt(formData.get('repo_id') as string);
+      const repoId = parseInt(formData.get('repo_id') as string, 10);
       await setRepositoryAsActive(repoId);
       return { success: 'Aktivt repository oppdatert!' };
     }
@@ -124,16 +123,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
 }
 
 export default function AppDetail() {
-  const {
-    app,
-    repositories,
-    activeRepo,
-    pendingRepos,
-    historicalRepos,
-    deploymentStats,
-    alerts,
-    period,
-  } = useLoaderData<typeof loader>();
+  const { app, repositories, activeRepo, pendingRepos, historicalRepos, deploymentStats, alerts } =
+    useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const [searchParams] = useSearchParams();
   const currentPeriod = searchParams.get('period') || 'all';
@@ -193,9 +184,9 @@ export default function AppDetail() {
 
       {/* Statistics Section */}
       <Box
-        background="surface-default"
-        padding="6"
-        borderRadius="large"
+        background="neutral-soft"
+        padding="space-16"
+        borderRadius="12"
         className={styles.marginTop2}
       >
         <Heading size="medium" spacing>
@@ -233,7 +224,7 @@ export default function AppDetail() {
             </BodyShort>
           </div>
         </div>
-        <div className={styles.flexRowGap1 + ' ' + styles.marginTop1}>
+        <div className={`${styles.flexRowGap1} ${styles.marginTop1}`}>
           <Button
             as={Link}
             to={`/deployments?app=${app.id}&period=${currentPeriod}`}
@@ -257,9 +248,9 @@ export default function AppDetail() {
 
       {/* Quick Actions */}
       <Box
-        background="surface-default"
-        padding="6"
-        borderRadius="large"
+        background="neutral-soft"
+        padding="space-16"
+        borderRadius="12"
         className={styles.marginTop2}
       >
         <Heading size="medium" spacing>
@@ -286,9 +277,9 @@ export default function AppDetail() {
       {/* Alerts Section */}
       {alerts.length > 0 && (
         <Box
-          background="surface-warning-subtle"
-          padding="6"
-          borderRadius="large"
+          background="neutral-soft"
+          padding="space-16"
+          borderRadius="12"
           className={styles.marginTop2}
         >
           <Heading size="medium" spacing>
@@ -351,9 +342,9 @@ export default function AppDetail() {
 
       {/* Repositories Section */}
       <Box
-        background="surface-default"
-        padding="6"
-        borderRadius="large"
+        background="neutral-soft"
+        padding="space-16"
+        borderRadius="12"
         className={styles.marginTop2}
       >
         <Heading size="medium" spacing>
@@ -364,7 +355,7 @@ export default function AppDetail() {
         {activeRepo && (
           <div className={styles.marginBottom2}>
             <Label>Aktivt repository</Label>
-            <div className={styles.flexRowSpaceBetween + ' ' + styles.marginTop05}>
+            <div className={`${styles.flexRowSpaceBetween} ${styles.marginTop05}`}>
               <div className={styles.flexRowGap05}>
                 <CheckmarkCircleIcon className={styles.textSuccess} />
                 <a
