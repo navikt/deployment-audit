@@ -55,10 +55,18 @@ export async function syncDeploymentsFromNais(
   for (const naisDep of naisDeployments) {
     totalProcessed++;
 
+    // Skip deployments without repository info
+    if (!naisDep.repository) {
+      console.warn(`⚠️  Skipping deployment without repository: ${naisDep.id}`);
+      skippedCount++;
+      continue;
+    }
+
     // Extract GitHub owner/repo from repository field
     const repoParts = naisDep.repository.split('/');
     if (repoParts.length !== 2) {
       console.warn(`⚠️  Invalid repository format: ${naisDep.repository}`);
+      skippedCount++;
       continue;
     }
 
