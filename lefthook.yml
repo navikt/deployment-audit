@@ -1,0 +1,42 @@
+# Lefthook configuration for Git hooks
+# See: https://github.com/evilmartians/lefthook
+
+pre-commit:
+  parallel: true
+  commands:
+    lint:
+      glob: "*.{js,ts,tsx,jsx}"
+      run: npx biome check --write --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
+      stage_fixed: true
+    
+    typecheck:
+      glob: "*.{ts,tsx}"
+      run: npm run typecheck
+
+pre-push:
+  parallel: true
+  commands:
+    lint:
+      run: npm run lint
+    
+    typecheck:
+      run: npm run typecheck
+
+commit-msg:
+  commands:
+    message-format:
+      run: |
+        MSG_FILE="${LEFTHOOK_FIRST_ARG}"
+        if ! head -1 "$MSG_FILE" | grep -qE "^(feat|fix|docs|style|refactor|perf|test|chore|build|ci|revert)(\(.+?\))?: .{1,}$"; then
+          echo "⛔️ Feil commit-melding format!"
+          echo ""
+          echo "Format skal være: type(scope?): subject"
+          echo ""
+          echo "Eksempler:"
+          echo "  feat: legg til søkefunksjonalitet"
+          echo "  fix(api): rett opp null-sjekk i deployment sync"
+          echo "  docs: oppdater README med instruksjoner"
+          echo ""
+          echo "Tillatte typer: feat, fix, docs, style, refactor, perf, test, chore, build, ci, revert"
+          exit 1
+        fi

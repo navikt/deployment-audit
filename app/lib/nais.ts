@@ -1,0 +1,153 @@
+import { GraphQLClient } from 'graphql-request';
+
+let client: GraphQLClient | null = null;
+
+export function getNaisClient(): GraphQLClient {
+  if (!client) {
+    const url = process.env.NAIS_GRAPHQL_URL || 'http://localhost:4242';
+    client = new GraphQLClient(url);
+  }
+  return client;
+}
+
+export interface NaisDeployment {
+  id: string;
+  createdAt: string;
+  teamSlug: string;
+  environmentName: string;
+  repository: string;
+  deployerUsername: string;
+  commitSha: string;
+  triggerUrl: string;
+}
+
+export interface NaisApplication {
+  name: string;
+  deployments: {
+    nodes: NaisDeployment[];
+  };
+}
+
+export interface TeamResponse {
+  team: {
+    applications: {
+      nodes: NaisApplication[];
+    };
+  };
+}
+
+const DEPLOYMENTS_QUERY = `
+  query($team: Slug!, $appsFirst: Int!, $depsFirst: Int!) {
+    team(slug: $team) {
+      applications(first: $appsFirst) {
+        nodes {
+          name
+          deployments(first: $depsFirst) {
+            nodes {
+              id
+              createdAt
+              teamSlug
+              environmentName
+              repository
+              deployerUsername
+              commitSha
+              triggerUrl
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+export async function fetchDeployments(
+  teamSlug: string,
+  appsFirst: number = 100,
+  deploymentsFirst: number = 100
+): Promise<NaisDeployment[]> {
+  const client = getNaisClient();
+
+  try {
+    const data = await client.request<TeamResponse>(DEPLOYMENTS_QUERY, {
+      team: teamSlug,
+      appsFirst,
+      depsFirst: deploymentsFirst,
+    });
+
+    if (!data.team || !data.team.applications) {
+      return [];
+    }
+
+    // Flatten all deployments from all applications
+    const allDeployments: NaisDeployment[] = [];
+
+    for (const app of data.team.applications.nodes) {
+      if (app.deployments?.nodes) {
+        allDeployments.push(...app.deployments.nodes);
+      }
+    }
+
+    return allDeployments;
+  } catch (error) {
+    console.error('Error fetching deployments from Nais:', error);
+    throw error;
+  }
+}
+
+/**
+ * Fetch deployments within a time range by filtering after retrieval
+ * (since the Nais API has limited filtering capabilities)
+ */
+export async function fetchDeploymentsInRange(
+  teamSlug: string,
+  startDate: Date,
+  endDate: Date
+): Promise<NaisDeployment[]> {
+  const allDeployments = await fetchDeployments(teamSlug, 100, 100);
+
+  return allDeployments.filter((deployment) => {
+    const deploymentDate = new Date(deployment.createdAt);
+    return deploymentDate >= startDate && deploymentDate <= endDate;
+  });
+}
+
+/**
+ * Helper to get date ranges for common periods
+ */
+export function getDateRange(
+  period: 'last-month' | 'last-12-months' | 'year-2025' | 'custom',
+  customStart?: Date,
+  customEnd?: Date
+): { startDate: Date; endDate: Date } {
+  const now = new Date();
+
+  switch (period) {
+    case 'last-month': {
+      const startDate = new Date(now);
+      startDate.setMonth(startDate.getMonth() - 1);
+      return { startDate, endDate: now };
+    }
+
+    case 'last-12-months': {
+      const startDate = new Date(now);
+      startDate.setFullYear(startDate.getFullYear() - 1);
+      return { startDate, endDate: now };
+    }
+
+    case 'year-2025': {
+      const startDate = new Date('2025-01-01T00:00:00Z');
+      const endDate = new Date('2025-12-31T23:59:59Z');
+      return { startDate, endDate };
+    }
+
+    case 'custom': {
+      if (!customStart || !customEnd) {
+        throw new Error('Custom date range requires start and end dates');
+      }
+      return { startDate: customStart, endDate: customEnd };
+    }
+
+    default:
+      throw new Error(`Unknown period: ${period}`);
+  }
+}
