@@ -1,8 +1,9 @@
 import { ArrowsCirclepathIcon, CheckmarkCircleIcon, TrashIcon } from '@navikt/aksel-icons';
 import { Alert, BodyShort, Button, Heading, Table } from '@navikt/ds-react';
 import { Form, Link } from 'react-router';
-import { getAllMonitoredApplications } from '../db/monitored-applications';
-import { syncDeploymentsFromNais, verifyDeploymentsFourEyes } from '../lib/sync';
+import { getRepositoriesByAppId } from '../db/application-repositories.server';
+import { getAllMonitoredApplications } from '../db/monitored-applications.server';
+import { syncDeploymentsFromNais, verifyDeploymentsFourEyes } from '../lib/sync.server';
 import styles from '../styles/common.module.css';
 import type { Route } from './+types/apps';
 
@@ -12,7 +13,22 @@ export function meta(_args: Route.MetaArgs) {
 
 export async function loader() {
   const apps = await getAllMonitoredApplications();
-  return { apps };
+
+  // Fetch active repository for each app
+  const appsWithRepos = await Promise.all(
+    apps.map(async (app) => {
+      const repos = await getRepositoriesByAppId(app.id);
+      const activeRepo = repos.find((r) => r.status === 'active');
+      return {
+        ...app,
+        active_repo: activeRepo
+          ? `${activeRepo.github_owner}/${activeRepo.github_repo_name}`
+          : null,
+      };
+    })
+  );
+
+  return { apps: appsWithRepos };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -134,17 +150,23 @@ export default function Apps({ loaderData, actionData }: Route.ComponentProps) {
                 return (
                   <Table.Row key={app.id}>
                     <Table.DataCell>
-                      <strong>{app.app_name}</strong>
+                      <Button as={Link} to={`/apps/${app.id}`} variant="tertiary" size="small">
+                        {app.app_name}
+                      </Button>
                     </Table.DataCell>
                     <Table.DataCell>{app.environment_name}</Table.DataCell>
                     <Table.DataCell>
-                      <a
-                        href={`https://github.com/${app.approved_github_owner}/${app.approved_github_repo_name}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {app.approved_github_owner}/{app.approved_github_repo_name}
-                      </a>
+                      {app.active_repo ? (
+                        <a
+                          href={`https://github.com/${app.active_repo}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {app.active_repo}
+                        </a>
+                      ) : (
+                        <span className={styles.textSubtle}>(ingen aktivt repo)</span>
+                      )}
                     </Table.DataCell>
                     <Table.DataCell>
                       <div className={styles.actionButtons}>

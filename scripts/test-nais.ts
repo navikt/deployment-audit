@@ -12,7 +12,7 @@
  *   npm run test:nais-fetch -- pensjon-q2 dev-fss pensjon-pen-q2
  */
 
-import { discoverTeamApplications, fetchApplicationDeployments, getApplicationInfo } from '../app/lib/nais';
+import { discoverTeamApplications, fetchApplicationDeployments, getApplicationInfo } from '../app/lib/nais.server';
 
 const command = process.argv[2];
 const args = process.argv.slice(3);

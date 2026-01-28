@@ -11,9 +11,9 @@ import {
 } from '@navikt/ds-react';
 import { useState } from 'react';
 import { Form, Link, redirect, useNavigation } from 'react-router';
-import { getAllDeployments } from '../db/deployments';
-import { deleteRepository, getRepositoryById } from '../db/repositories';
-import { syncDeploymentsForRepository } from '../lib/sync';
+import { getAllDeployments } from '../db/deployments.server';
+import { deleteRepository, getRepositoryById } from '../db/repositories.server';
+import { syncDeploymentsForRepository } from '../lib/sync.server';
 import styles from '../styles/common.module.css';
 import type { Route } from './+types/repos.$id';
 

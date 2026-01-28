@@ -18,7 +18,7 @@ import {
   deleteGoal,
   getBoardById,
   getGoalsByBoardId,
-} from '../db/tertial';
+} from '../db/tertial.server';
 import styles from '../styles/common.module.css';
 import type { Route } from './+types/tertial-boards.$id';
 

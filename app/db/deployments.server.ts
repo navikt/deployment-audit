@@ -1,4 +1,4 @@
-import { pool } from './connection';
+import { pool } from './connection.server';
 
 export interface Deployment {
   id: number;
@@ -14,16 +14,52 @@ export interface Deployment {
   four_eyes_status: string;
   github_pr_number: number | null;
   github_pr_url: string | null;
+  github_pr_data: GitHubPRData | null;
   resources: any; // JSONB
   synced_at: Date;
+}
+
+export interface GitHubPRData {
+  title: string;
+  body: string | null;
+  labels: string[];
+  created_at: string;
+  merged_at: string | null;
+  base_branch: string;
+  commits_count: number;
+  changed_files: number;
+  additions: number;
+  deletions: number;
+  draft: boolean;
+  creator: {
+    username: string;
+    avatar_url: string;
+  };
+  merger: {
+    username: string;
+    avatar_url: string;
+  } | null;
+  reviewers: Array<{
+    username: string;
+    avatar_url: string;
+    state: string; // 'APPROVED', 'CHANGES_REQUESTED', 'COMMENTED'
+    submitted_at: string;
+  }>;
+  checks_passed: boolean | null;
+  checks: Array<{
+    name: string;
+    status: string; // 'queued', 'in_progress', 'completed'
+    conclusion: string | null; // 'success', 'failure', 'cancelled', 'skipped', 'timed_out', 'action_required', 'neutral'
+    started_at: string | null;
+    completed_at: string | null;
+    html_url: string | null;
+  }>;
 }
 
 export interface DeploymentWithApp extends Deployment {
   team_slug: string;
   environment_name: string;
   app_name: string;
-  approved_github_owner: string;
-  approved_github_repo_name: string;
 }
 
 export interface CreateDeploymentParams {
@@ -55,9 +91,7 @@ export async function getAllDeployments(filters?: DeploymentFilters): Promise<De
       d.*,
       ma.team_slug,
       ma.environment_name,
-      ma.app_name,
-      ma.approved_github_owner,
-      ma.approved_github_repo_name
+      ma.app_name
     FROM deployments d
     JOIN monitored_applications ma ON d.monitored_app_id = ma.id
     WHERE 1=1
@@ -123,9 +157,7 @@ export async function getDeploymentById(id: number): Promise<DeploymentWithApp |
       d.*,
       ma.team_slug,
       ma.environment_name,
-      ma.app_name,
-      ma.approved_github_owner,
-      ma.approved_github_repo_name
+      ma.app_name
     FROM deployments d
     JOIN monitored_applications ma ON d.monitored_app_id = ma.id
     WHERE d.id = $1`,
@@ -226,6 +258,7 @@ export async function updateDeploymentFourEyes(
     fourEyesStatus: string;
     githubPrNumber: number | null;
     githubPrUrl: string | null;
+    githubPrData?: GitHubPRData | null;
   }
 ): Promise<Deployment> {
   const result = await pool.query(
@@ -233,10 +266,18 @@ export async function updateDeploymentFourEyes(
      SET has_four_eyes = $1,
          four_eyes_status = $2,
          github_pr_number = $3,
-         github_pr_url = $4
-     WHERE id = $5
+         github_pr_url = $4,
+         github_pr_data = $5
+     WHERE id = $6
      RETURNING *`,
-    [data.hasFourEyes, data.fourEyesStatus, data.githubPrNumber, data.githubPrUrl, deploymentId]
+    [
+      data.hasFourEyes,
+      data.fourEyesStatus,
+      data.githubPrNumber,
+      data.githubPrUrl,
+      data.githubPrData ? JSON.stringify(data.githubPrData) : null,
+      deploymentId,
+    ]
   );
 
   if (result.rows.length === 0) {
@@ -244,4 +285,41 @@ export async function updateDeploymentFourEyes(
   }
 
   return result.rows[0];
+}
+
+export interface AppDeploymentStats {
+  total: number;
+  with_four_eyes: number;
+  without_four_eyes: number;
+  pending_verification: number;
+  last_deployment: Date | null;
+  four_eyes_percentage: number;
+}
+
+export async function getAppDeploymentStats(monitoredAppId: number): Promise<AppDeploymentStats> {
+  const result = await pool.query(
+    `SELECT 
+      COUNT(*) as total,
+      SUM(CASE WHEN has_four_eyes = true THEN 1 ELSE 0 END) as with_four_eyes,
+      SUM(CASE WHEN has_four_eyes = false THEN 1 ELSE 0 END) as without_four_eyes,
+      SUM(CASE WHEN four_eyes_status = 'pending' THEN 1 ELSE 0 END) as pending_verification,
+      MAX(created_at) as last_deployment
+    FROM deployments
+    WHERE monitored_app_id = $1`,
+    [monitoredAppId]
+  );
+
+  const row = result.rows[0];
+  const total = parseInt(row.total) || 0;
+  const withFourEyes = parseInt(row.with_four_eyes) || 0;
+  const percentage = total > 0 ? Math.round((withFourEyes / total) * 100) : 0;
+
+  return {
+    total,
+    with_four_eyes: withFourEyes,
+    without_four_eyes: parseInt(row.without_four_eyes) || 0,
+    pending_verification: parseInt(row.pending_verification) || 0,
+    last_deployment: row.last_deployment ? new Date(row.last_deployment) : null,
+    four_eyes_percentage: percentage,
+  };
 }

@@ -13,7 +13,7 @@ import 'dotenv/config';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { closePool, getPool } from '../app/db/connection';
+import { closePool, getPool } from '../app/db/connection.server';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

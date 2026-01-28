@@ -1,18 +1,26 @@
+import { createRepositoryAlert } from '~/db/alerts.server';
 import {
-  getMonitoredApplication,
-} from '~/db/monitored-applications';
+  findRepositoryForApp,
+  getRepositoriesByAppId,
+  upsertApplicationRepository,
+} from '~/db/application-repositories.server';
 import {
-  createDeployment,
-  getDeploymentByNaisId,
-  getDeploymentById,
-  getAllDeployments,
-  updateDeploymentFourEyes,
   type CreateDeploymentParams,
+  createDeployment,
   type DeploymentFilters,
-} from '~/db/deployments';
-import { createRepositoryAlert } from '~/db/alerts';
-import { fetchApplicationDeployments } from '~/lib/nais';
-import { getCommit, getPullRequestForCommit, verifyPullRequestFourEyes } from '~/lib/github';
+  getAllDeployments,
+  getDeploymentById,
+  getDeploymentByNaisId,
+  updateDeploymentFourEyes,
+} from '~/db/deployments.server';
+import { getMonitoredApplication } from '~/db/monitored-applications.server';
+import {
+  getCommit,
+  getDetailedPullRequestInfo,
+  getPullRequestForCommit,
+  verifyPullRequestFourEyes,
+} from '~/lib/github.server';
+import { fetchApplicationDeployments } from '~/lib/nais.server';
 
 /**
  * Step 1: Sync deployments from Nais API to database
@@ -99,27 +107,88 @@ export async function syncDeploymentsFromNais(
     await createDeployment(deploymentParams);
     newCount++;
 
-    // Check for repository mismatch AFTER deployment is created
-    const repositoryMismatch =
-      monitoredApp.approved_github_owner !== detectedOwner ||
-      monitoredApp.approved_github_repo_name !== detectedRepoName;
+    // Check repository status using application_repositories
+    const repoCheck = await findRepositoryForApp(monitoredApp.id, detectedOwner, detectedRepoName);
 
-    if (repositoryMismatch) {
-      console.warn(`🚨 Repository mismatch detected for deployment ${naisDep.id}:`, {
-        approved: `${monitoredApp.approved_github_owner}/${monitoredApp.approved_github_repo_name}`,
-        detected: `${detectedOwner}/${detectedRepoName}`,
-      });
+    if (!repoCheck.repository) {
+      // Repository not found - create pending approval entry
+      console.warn(
+        `🆕 New repository detected for app ${appName}: ${detectedOwner}/${detectedRepoName}`
+      );
 
-      // Create alert (deployment now exists)
+      // Check if this is the first repo for this app
+      const existingRepos = await getRepositoriesByAppId(monitoredApp.id);
+
+      if (existingRepos.length === 0) {
+        // First repo - auto-approve as active
+        console.log(`📝 Auto-approving first repository as active`);
+        await upsertApplicationRepository({
+          monitoredAppId: monitoredApp.id,
+          githubOwner: detectedOwner,
+          githubRepoName: detectedRepoName,
+          status: 'active',
+          approvedBy: 'system',
+        });
+      } else {
+        // Additional repo - require approval
+        console.log(`⏸️  Creating pending approval entry`);
+        await upsertApplicationRepository({
+          monitoredAppId: monitoredApp.id,
+          githubOwner: detectedOwner,
+          githubRepoName: detectedRepoName,
+          status: 'pending_approval',
+        });
+
+        // Create alert
+        await createRepositoryAlert({
+          monitoredApplicationId: monitoredApp.id,
+          deploymentNaisId: naisDep.id,
+          detectedGithubOwner: detectedOwner,
+          detectedGithubRepoName: detectedRepoName,
+          alertType: 'pending_approval',
+        });
+
+        alertsCreated++;
+      }
+    } else if (repoCheck.repository.status === 'pending_approval') {
+      // Repository exists but pending approval
+      console.warn(
+        `⏸️  Deployment from pending approval repository: ${detectedOwner}/${detectedRepoName}`
+      );
+
       await createRepositoryAlert({
         monitoredApplicationId: monitoredApp.id,
         deploymentNaisId: naisDep.id,
         detectedGithubOwner: detectedOwner,
         detectedGithubRepoName: detectedRepoName,
+        alertType: 'pending_approval',
+      });
+
+      alertsCreated++;
+    } else if (repoCheck.repository.status === 'historical') {
+      // Repository is historical (not active)
+      console.warn(
+        `⚠️  Deployment from historical repository: ${detectedOwner}/${detectedRepoName}`
+      );
+
+      // Get active repo for context
+      const activeRepo = (await getRepositoriesByAppId(monitoredApp.id)).find(
+        (r) => r.status === 'active'
+      );
+
+      await createRepositoryAlert({
+        monitoredApplicationId: monitoredApp.id,
+        deploymentNaisId: naisDep.id,
+        detectedGithubOwner: detectedOwner,
+        detectedGithubRepoName: detectedRepoName,
+        expectedGithubOwner: activeRepo?.github_owner || detectedOwner,
+        expectedGithubRepoName: activeRepo?.github_repo_name || detectedRepoName,
+        alertType: 'historical_repository',
       });
 
       alertsCreated++;
     }
+    // else: repository is active - all good, no alert needed
   }
 
   console.log(`✅ Nais sync complete:`, {
@@ -166,9 +235,7 @@ export async function verifyDeploymentsFourEyes(
   );
 
   // Apply limit if specified
-  const toVerify = filters?.limit
-    ? needsVerification.slice(0, filters.limit)
-    : needsVerification;
+  const toVerify = filters?.limit ? needsVerification.slice(0, filters.limit) : needsVerification;
 
   console.log(
     `📋 Found ${toVerify.length} deployments needing verification (out of ${deploymentsToVerify.length} total)`
@@ -272,11 +339,15 @@ export async function verifyDeploymentFourEyes(
       `${fourEyesResult.hasFourEyes ? '✅' : '❌'} PR #${prInfo.number} ${fourEyesResult.hasFourEyes ? 'has' : 'lacks'} approval after last commit`
     );
 
+    // Fetch detailed PR information
+    const detailedPrInfo = await getDetailedPullRequestInfo(owner, repo, prInfo.number);
+
     await updateDeploymentFourEyes(deploymentId, {
       hasFourEyes: fourEyesResult.hasFourEyes,
       fourEyesStatus: fourEyesResult.hasFourEyes ? 'approved_pr' : 'missing',
       githubPrNumber: prInfo.number,
       githubPrUrl: prInfo.html_url,
+      githubPrData: detailedPrInfo,
     });
 
     return true;

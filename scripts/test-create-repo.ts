@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { createRepository } from '../app/db/repositories';
+import { createRepository } from '../app/db/repositories.server';
 
 async function testCreateRepo() {
   try {

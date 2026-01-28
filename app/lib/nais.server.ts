@@ -186,7 +186,7 @@ export async function fetchApplicationDeployments(
   });
 
   const allDeployments: NaisDeployment[] = [];
-  let after: string | undefined = undefined;
+  let after: string | undefined;
   let pageCount = 0;
   let hasMore = true;
 
@@ -263,18 +263,15 @@ export async function discoverTeamApplications(teamSlug: string): Promise<{
   try {
     // Fetch all applications with pagination
     const allApps: ApplicationWithEnv[] = [];
-    let after: string | undefined = undefined;
+    let after: string | undefined;
     let hasMore = true;
 
     while (hasMore) {
-      const response: TeamApplicationsResponse = await client.request(
-        TEAM_ENVIRONMENTS_QUERY,
-        {
-          team: teamSlug,
-          first: 1000,
-          after: after,
-        }
-      );
+      const response: TeamApplicationsResponse = await client.request(TEAM_ENVIRONMENTS_QUERY, {
+        team: teamSlug,
+        first: 1000,
+        after: after,
+      });
 
       if (!response.team?.applications) {
         console.warn('⚠️  No applications found for team');
@@ -380,4 +377,105 @@ export function getDateRange(period: string): { startDate: Date; endDate: Date }
   }
 
   return { startDate, endDate };
+}
+
+/**
+ * Teams and Applications query for interactive search
+ */
+const TEAMS_AND_APPLICATIONS_QUERY = `
+  query TeamsAndApplications(
+    $teamsFirst: Int!
+    $teamsAfter: Cursor
+    $appsFirst: Int!
+  ) {
+    teams(first: $teamsFirst, after: $teamsAfter) {
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      nodes {
+        slug
+        applications(first: $appsFirst) {
+          nodes {
+            name
+          }
+        }
+      }
+    }
+  }
+`;
+
+export interface TeamWithApps {
+  slug: string;
+  applications: {
+    nodes: Array<{ name: string }>;
+  };
+}
+
+interface TeamsAndApplicationsResponse {
+  teams: {
+    pageInfo: {
+      hasNextPage: boolean;
+      endCursor: string | null;
+    };
+    nodes: TeamWithApps[];
+  };
+}
+
+/**
+ * Fetch all teams and their applications for interactive search
+ * Returns flattened list of team + app combinations
+ */
+export async function fetchAllTeamsAndApplications(): Promise<
+  Array<{
+    teamSlug: string;
+    appName: string;
+  }>
+> {
+  const client = getNaisClient();
+  console.log('🔍 Fetching all teams and applications for search');
+
+  try {
+    const allResults: Array<{ teamSlug: string; appName: string }> = [];
+    let after: string | null = null;
+    let hasMore = true;
+
+    while (hasMore) {
+      const response: TeamsAndApplicationsResponse = await client.request(
+        TEAMS_AND_APPLICATIONS_QUERY,
+        {
+          teamsFirst: 100, // Fetch 100 teams at a time
+          teamsAfter: after,
+          appsFirst: 1000, // Fetch up to 1000 apps per team
+        }
+      );
+
+      if (!response.teams?.nodes) {
+        break;
+      }
+
+      // Flatten the results
+      for (const team of response.teams.nodes) {
+        for (const app of team.applications.nodes) {
+          allResults.push({
+            teamSlug: team.slug,
+            appName: app.name,
+          });
+        }
+      }
+
+      after = response.teams.pageInfo.endCursor;
+      hasMore = response.teams.pageInfo.hasNextPage;
+
+      console.log(
+        `  📦 Processed ${response.teams.nodes.length} teams, total results: ${allResults.length}`
+      );
+    }
+
+    console.log(`✨ Found ${allResults.length} team+app combinations`);
+    return allResults;
+  } catch (error) {
+    console.error('❌ Error fetching teams and applications:', error);
+    throw error;
+  }
 }

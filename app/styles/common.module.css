@@ -402,3 +402,11 @@
   gap: 1rem;
   align-items: flex-end;
 }
+
+/* Panel style */
+.panel {
+  padding: 1.5rem;
+  border: 1px solid var(--a-border-default);
+  border-radius: var(--a-border-radius-medium);
+  background: var(--a-surface-default);
+}

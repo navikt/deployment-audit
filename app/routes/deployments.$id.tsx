@@ -1,4 +1,11 @@
-import { ChatIcon, TrashIcon, ArrowsCirclepathIcon } from '@navikt/aksel-icons';
+import {
+  ArrowsCirclepathIcon,
+  ChatIcon,
+  CheckmarkCircleIcon,
+  MinusCircleIcon,
+  TrashIcon,
+  XMarkOctagonIcon,
+} from '@navikt/aksel-icons';
 import {
   Alert,
   BodyShort,
@@ -13,9 +20,9 @@ import {
 } from '@navikt/ds-react';
 import { useState } from 'react';
 import { Form, Link } from 'react-router';
-import { createComment, deleteComment, getCommentsByDeploymentId } from '../db/comments';
-import { getDeploymentById } from '../db/deployments';
-import { verifyDeploymentFourEyes } from '../lib/sync';
+import { createComment, deleteComment, getCommentsByDeploymentId } from '../db/comments.server';
+import { getDeploymentById } from '../db/deployments.server';
+import { verifyDeploymentFourEyes } from '../lib/sync.server';
 import styles from '../styles/common.module.css';
 import type { Route } from './+types/deployments.$id';
 
@@ -102,7 +109,9 @@ export async function action({ request, params }: Route.ActionArgs) {
       if (error instanceof Error && error.message.includes('rate limit')) {
         return { error: '⚠️ GitHub rate limit nådd. Prøv igjen senere.' };
       }
-      return { error: `Kunne ikke verifisere: ${error instanceof Error ? error.message : 'Ukjent feil'}` };
+      return {
+        error: `Kunne ikke verifisere: ${error instanceof Error ? error.message : 'Ukjent feil'}`,
+      };
     }
   }
 
@@ -168,10 +177,6 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
   const appName = deployment.app_name || deployment.detected_github_repo_name;
   const naisConsoleUrl = `https://console.nav.cloud.nais.io/team/${deployment.team_slug}/${deployment.environment_name}/app/${appName}`;
 
-  const repoMismatch =
-    deployment.detected_github_owner !== deployment.approved_github_owner ||
-    deployment.detected_github_repo_name !== deployment.approved_github_repo_name;
-
   return (
     <div className={styles.pageContainer}>
       <div>
@@ -190,30 +195,15 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
       {actionData?.success && <Alert variant="success">{actionData.success}</Alert>}
       {actionData?.error && <Alert variant="error">{actionData.error}</Alert>}
 
-      {repoMismatch && (
-        <Alert variant="error">
-          <Heading size="small" spacing>
-            ⚠️ Repository mismatch oppdaget
-          </Heading>
-          <BodyShort>
-            Dette deploymentet kom fra et annet repository enn forventet. Dette kan være et
-            sikkerhetsproblem.
-          </BodyShort>
-          <div className={styles.marginTop1}>
-            <Label>Forventet:</Label>
-            <BodyShort>
-              {deployment.approved_github_owner}/{deployment.approved_github_repo_name}
-            </BodyShort>
-            <Label className={styles.marginTop05}>Detektert:</Label>
-            <BodyShort className={styles.textDangerBold}>
-              {deployment.detected_github_owner}/{deployment.detected_github_repo_name}
-            </BodyShort>
-          </div>
-        </Alert>
-      )}
-
       <Alert variant={status.variant}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            gap: '1rem',
+          }}
+        >
           <div style={{ flex: 1 }}>
             <Heading size="small" spacing>
               {status.text}
@@ -267,9 +257,8 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
               href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}`}
               target="_blank"
               rel="noopener noreferrer"
-              className={repoMismatch ? styles.linkDanger : styles.linkExternal}
+              className={styles.linkExternal}
             >
-              {repoMismatch && '⚠️ '}
               {deployment.detected_github_owner}/{deployment.detected_github_repo_name}
             </a>
           </BodyShort>
@@ -346,6 +335,281 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
             ))}
           </div>
         </div>
+      )}
+
+      {/* PR Details section */}
+      {deployment.github_pr_data && (
+        <Panel>
+          <Heading size="small" spacing>
+            Pull Request Informasjon
+          </Heading>
+
+          <div className={styles.detailsGrid}>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <Detail>Tittel</Detail>
+              <BodyShort>
+                <strong>{deployment.github_pr_data.title}</strong>
+              </BodyShort>
+            </div>
+
+            {deployment.github_pr_data.body && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <Detail>Beskrivelse</Detail>
+                <BodyShort style={{ whiteSpace: 'pre-wrap' }}>
+                  {deployment.github_pr_data.body}
+                </BodyShort>
+              </div>
+            )}
+
+            <div>
+              <Detail>Opprettet av</Detail>
+              <BodyShort>
+                <a
+                  href={`https://github.com/${deployment.github_pr_data.creator.username}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {deployment.github_pr_data.creator.username}
+                </a>
+              </BodyShort>
+            </div>
+
+            {deployment.github_pr_data.merger && (
+              <div>
+                <Detail>Merget av</Detail>
+                <BodyShort>
+                  <a
+                    href={`https://github.com/${deployment.github_pr_data.merger.username}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {deployment.github_pr_data.merger.username}
+                  </a>
+                </BodyShort>
+              </div>
+            )}
+
+            <div>
+              <Detail>Opprettet</Detail>
+              <BodyShort>
+                {new Date(deployment.github_pr_data.created_at).toLocaleString('no-NO', {
+                  dateStyle: 'short',
+                  timeStyle: 'short',
+                })}
+              </BodyShort>
+            </div>
+
+            {deployment.github_pr_data.merged_at && (
+              <div>
+                <Detail>Merget</Detail>
+                <BodyShort>
+                  {new Date(deployment.github_pr_data.merged_at).toLocaleString('no-NO', {
+                    dateStyle: 'short',
+                    timeStyle: 'short',
+                  })}
+                </BodyShort>
+              </div>
+            )}
+
+            <div>
+              <Detail>Base branch</Detail>
+              <BodyShort>{deployment.github_pr_data.base_branch}</BodyShort>
+            </div>
+
+            <div>
+              <Detail>Status</Detail>
+              <div className={styles.actionButtons}>
+                {deployment.github_pr_data.draft && (
+                  <Tag variant="warning" size="small">
+                    Draft
+                  </Tag>
+                )}
+                {deployment.github_pr_data.checks_passed === true && (
+                  <Tag variant="success" size="small">
+                    ✓ Checks passed
+                  </Tag>
+                )}
+                {deployment.github_pr_data.checks_passed === false && (
+                  <Tag variant="error" size="small">
+                    ✗ Checks failed
+                  </Tag>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* PR Stats */}
+          <div className={styles.statsGrid} style={{ marginTop: '1rem' }}>
+            <div className={styles.statCard}>
+              <Detail>Commits</Detail>
+              <BodyShort>
+                <strong>{deployment.github_pr_data.commits_count}</strong>
+              </BodyShort>
+            </div>
+            <div className={styles.statCard}>
+              <Detail>Filer endret</Detail>
+              <BodyShort>
+                <strong>{deployment.github_pr_data.changed_files}</strong>
+              </BodyShort>
+            </div>
+            <div className={styles.statCard}>
+              <Detail>Linjer lagt til</Detail>
+              <BodyShort className={styles.textSuccess}>
+                <strong>+{deployment.github_pr_data.additions}</strong>
+              </BodyShort>
+            </div>
+            <div className={styles.statCard}>
+              <Detail>Linjer fjernet</Detail>
+              <BodyShort className={styles.textDanger}>
+                <strong>-{deployment.github_pr_data.deletions}</strong>
+              </BodyShort>
+            </div>
+          </div>
+
+          {/* Labels */}
+          {deployment.github_pr_data.labels && deployment.github_pr_data.labels.length > 0 && (
+            <div style={{ marginTop: '1rem' }}>
+              <Detail>Labels</Detail>
+              <div className={styles.actionButtons}>
+                {deployment.github_pr_data.labels.map((label, idx) => (
+                  <Tag key={idx} variant="neutral" size="small">
+                    {label}
+                  </Tag>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Reviewers */}
+          {deployment.github_pr_data.reviewers &&
+            deployment.github_pr_data.reviewers.length > 0 && (
+              <div style={{ marginTop: '1rem' }}>
+                <Detail>Reviewers</Detail>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {deployment.github_pr_data.reviewers.map((reviewer, idx) => (
+                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      {reviewer.state === 'APPROVED' && (
+                        <span style={{ fontSize: '1.2rem' }}>✅</span>
+                      )}
+                      {reviewer.state === 'CHANGES_REQUESTED' && (
+                        <span style={{ fontSize: '1.2rem' }}>🔴</span>
+                      )}
+                      {reviewer.state === 'COMMENTED' && (
+                        <span style={{ fontSize: '1.2rem' }}>💬</span>
+                      )}
+                      <a
+                        href={`https://github.com/${reviewer.username}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {reviewer.username}
+                      </a>
+                      <span className={styles.textSubtle}>
+                        -{' '}
+                        {new Date(reviewer.submitted_at).toLocaleString('no-NO', {
+                          dateStyle: 'short',
+                          timeStyle: 'short',
+                        })}
+                      </span>
+                      <Tag
+                        variant={
+                          reviewer.state === 'APPROVED'
+                            ? 'success'
+                            : reviewer.state === 'CHANGES_REQUESTED'
+                              ? 'error'
+                              : 'neutral'
+                        }
+                        size="small"
+                      >
+                        {reviewer.state}
+                      </Tag>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+          {/* GitHub Checks */}
+          {deployment.github_pr_data.checks && deployment.github_pr_data.checks.length > 0 && (
+            <div style={{ marginTop: '1rem' }}>
+              <Detail>GitHub Checks ({deployment.github_pr_data.checks.length})</Detail>
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.5rem',
+                  marginTop: '0.5rem',
+                }}
+              >
+                {deployment.github_pr_data.checks.map((check, idx) => {
+                  const isSuccess = check.conclusion === 'success';
+                  const isFailure =
+                    check.conclusion === 'failure' ||
+                    check.conclusion === 'timed_out' ||
+                    check.conclusion === 'action_required';
+                  const isSkipped =
+                    check.conclusion === 'skipped' ||
+                    check.conclusion === 'neutral' ||
+                    check.conclusion === 'cancelled';
+                  const isInProgress = check.status === 'in_progress' || check.status === 'queued';
+
+                  return (
+                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      {isSuccess && (
+                        <CheckmarkCircleIcon
+                          style={{ color: 'var(--a-icon-success)', fontSize: '1.2rem' }}
+                        />
+                      )}
+                      {isFailure && (
+                        <XMarkOctagonIcon
+                          style={{ color: 'var(--a-icon-danger)', fontSize: '1.2rem' }}
+                        />
+                      )}
+                      {isSkipped && (
+                        <MinusCircleIcon
+                          style={{ color: 'var(--a-icon-subtle)', fontSize: '1.2rem' }}
+                        />
+                      )}
+                      {isInProgress && <span style={{ fontSize: '1.2rem' }}>⏳</span>}
+
+                      {check.html_url ? (
+                        <a href={check.html_url} target="_blank" rel="noopener noreferrer">
+                          {check.name}
+                        </a>
+                      ) : (
+                        <span>{check.name}</span>
+                      )}
+
+                      <Tag
+                        variant={
+                          isSuccess
+                            ? 'success'
+                            : isFailure
+                              ? 'error'
+                              : isSkipped
+                                ? 'neutral'
+                                : 'warning'
+                        }
+                        size="small"
+                      >
+                        {check.conclusion || check.status}
+                      </Tag>
+
+                      {check.completed_at && (
+                        <span className={styles.textSubtle}>
+                          {new Date(check.completed_at).toLocaleString('no-NO', {
+                            dateStyle: 'short',
+                            timeStyle: 'short',
+                          })}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </Panel>
       )}
 
       {/* Comments section */}

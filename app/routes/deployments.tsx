@@ -1,8 +1,8 @@
 import { Alert, Button, Checkbox, Detail, Heading, Select, Table, Tag } from '@navikt/ds-react';
 import { Form, Link, useSearchParams } from 'react-router';
-import { type DeploymentWithApp, getAllDeployments, getDeploymentStats } from '../db/deployments';
-import { getAllMonitoredApplications } from '../db/monitored-applications';
-import { getDateRange } from '../lib/nais';
+import { type DeploymentWithApp, getAllDeployments } from '../db/deployments.server';
+import { getAllMonitoredApplications } from '../db/monitored-applications.server';
+import { getDateRange } from '../lib/nais.server';
 import styles from '../styles/common.module.css';
 import type { Route } from './+types/deployments';
 
@@ -182,9 +182,6 @@ export default function Deployments({ loaderData }: Route.ComponentProps) {
           <Table.Body>
             {deployments.map((deployment) => {
               const status = getFourEyesLabel(deployment);
-              const repoMismatch =
-                deployment.detected_github_owner !== deployment.approved_github_owner ||
-                deployment.detected_github_repo_name !== deployment.approved_github_repo_name;
 
               return (
                 <Table.Row key={deployment.id}>
@@ -211,9 +208,8 @@ export default function Deployments({ loaderData }: Route.ComponentProps) {
                       href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className={repoMismatch ? styles.linkDanger : styles.linkExternal}
+                      className={styles.linkExternal}
                     >
-                      {repoMismatch && '⚠️ '}
                       {deployment.detected_github_owner}/{deployment.detected_github_repo_name}
                     </a>
                   </Table.DataCell>

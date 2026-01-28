@@ -4,6 +4,7 @@ export default [
   layout('routes/layout.tsx', [
     index('routes/home.tsx'),
     route('apps', 'routes/apps.tsx'),
+    route('apps/:id', 'routes/apps.$id.tsx'),
     route('apps/discover', 'routes/apps.discover.tsx'),
     route('deployments', 'routes/deployments.tsx'),
     route('deployments/verify', 'routes/deployments.verify.tsx'),

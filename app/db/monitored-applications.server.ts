@@ -1,12 +1,10 @@
-import { pool } from './connection';
+import { pool } from './connection.server';
 
 export interface MonitoredApplication {
   id: number;
   team_slug: string;
   environment_name: string;
   app_name: string;
-  approved_github_owner: string;
-  approved_github_repo_name: string;
   is_active: boolean;
   created_at: Date;
   updated_at: Date;
@@ -19,12 +17,16 @@ export async function getAllMonitoredApplications(): Promise<MonitoredApplicatio
   return result.rows;
 }
 
-export async function getMonitoredApplicationById(id: number): Promise<MonitoredApplication | null> {
+export async function getMonitoredApplicationById(
+  id: number
+): Promise<MonitoredApplication | null> {
   const result = await pool.query('SELECT * FROM monitored_applications WHERE id = $1', [id]);
   return result.rows[0] || null;
 }
 
-export async function getMonitoredApplicationsByTeam(teamSlug: string): Promise<MonitoredApplication[]> {
+export async function getMonitoredApplicationsByTeam(
+  teamSlug: string
+): Promise<MonitoredApplication[]> {
   const result = await pool.query(
     'SELECT * FROM monitored_applications WHERE team_slug = $1 AND is_active = true ORDER BY environment_name, app_name',
     [teamSlug]
@@ -51,26 +53,16 @@ export async function createMonitoredApplication(data: {
   team_slug: string;
   environment_name: string;
   app_name: string;
-  approved_github_owner: string;
-  approved_github_repo_name: string;
 }): Promise<MonitoredApplication> {
   const result = await pool.query(
     `INSERT INTO monitored_applications 
-      (team_slug, environment_name, app_name, approved_github_owner, approved_github_repo_name)
-    VALUES ($1, $2, $3, $4, $5)
+      (team_slug, environment_name, app_name)
+    VALUES ($1, $2, $3)
     ON CONFLICT (team_slug, environment_name, app_name) 
     DO UPDATE SET 
-      approved_github_owner = EXCLUDED.approved_github_owner,
-      approved_github_repo_name = EXCLUDED.approved_github_repo_name,
       updated_at = CURRENT_TIMESTAMP
     RETURNING *`,
-    [
-      data.team_slug,
-      data.environment_name,
-      data.app_name,
-      data.approved_github_owner,
-      data.approved_github_repo_name,
-    ]
+    [data.team_slug, data.environment_name, data.app_name]
   );
   return result.rows[0];
 }
@@ -78,8 +70,6 @@ export async function createMonitoredApplication(data: {
 export async function updateMonitoredApplication(
   id: number,
   data: {
-    approved_github_owner?: string;
-    approved_github_repo_name?: string;
     is_active?: boolean;
   }
 ): Promise<MonitoredApplication> {
@@ -87,14 +77,6 @@ export async function updateMonitoredApplication(
   const values: any[] = [];
   let paramCount = 1;
 
-  if (data.approved_github_owner !== undefined) {
-    updates.push(`approved_github_owner = $${paramCount++}`);
-    values.push(data.approved_github_owner);
-  }
-  if (data.approved_github_repo_name !== undefined) {
-    updates.push(`approved_github_repo_name = $${paramCount++}`);
-    values.push(data.approved_github_repo_name);
-  }
   if (data.is_active !== undefined) {
     updates.push(`is_active = $${paramCount++}`);
     values.push(data.is_active);

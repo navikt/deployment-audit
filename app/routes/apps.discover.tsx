@@ -9,9 +9,11 @@ import {
   Table,
   TextField,
 } from '@navikt/ds-react';
+import { useState } from 'react';
 import { Form, useNavigation } from 'react-router';
-import { createMonitoredApplication } from '../db/monitored-applications';
-import { discoverTeamApplications, getApplicationInfo } from '../lib/nais';
+import { upsertApplicationRepository } from '../db/application-repositories.server';
+import { createMonitoredApplication } from '../db/monitored-applications.server';
+import { fetchAllTeamsAndApplications, getApplicationInfo } from '../lib/nais.server';
 import styles from '../styles/common.module.css';
 import type { Route } from './+types/apps.discover';
 
@@ -19,55 +21,31 @@ export function meta(_args: Route.MetaArgs) {
   return [{ title: 'Oppdag applikasjoner - Pensjon Deployment Audit' }];
 }
 
+export async function loader() {
+  try {
+    // Fetch all teams and applications on page load
+    const allApps = await fetchAllTeamsAndApplications();
+    return { allApps, error: null };
+  } catch (error) {
+    console.error('Loader error:', error);
+    return {
+      allApps: [],
+      error: error instanceof Error ? error.message : 'Kunne ikke laste applikasjoner',
+    };
+  }
+}
+
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const intent = formData.get('intent');
 
-  // Step 1: Discover applications
-  if (intent === 'discover') {
-    const teamSlug = formData.get('team_slug') as string;
-
-    if (!teamSlug?.trim()) {
-      return {
-        error: 'Team slug er påkrevd',
-        discovery: null,
-      };
-    }
-
-    try {
-      const { environments } = await discoverTeamApplications(teamSlug);
-
-      // Convert Map to object for serialization
-      const envData: Record<string, string[]> = {};
-      for (const [envName, apps] of environments.entries()) {
-        envData[envName] = apps;
-      }
-
-      return {
-        error: null,
-        discovery: {
-          teamSlug,
-          environments: envData,
-        },
-      };
-    } catch (error) {
-      console.error('Discovery error:', error);
-      return {
-        error: error instanceof Error ? error.message : 'Kunne ikke finne applikasjoner',
-        discovery: null,
-      };
-    }
-  }
-
-  // Step 2: Add monitored applications
+  // Add selected applications
   if (intent === 'add') {
-    const teamSlug = formData.get('team_slug') as string;
     const selectedApps = formData.getAll('app');
 
     if (!selectedApps.length) {
       return {
         error: 'Velg minst én applikasjon',
-        discovery: null,
       };
     }
 
@@ -75,25 +53,44 @@ export async function action({ request }: Route.ActionArgs) {
       let addedCount = 0;
 
       for (const appKey of selectedApps) {
-        const [envName, appName] = (appKey as string).split('|');
+        const [teamSlug, appName] = (appKey as string).split('|');
 
-        // Get repository info from first deployment
-        const appInfo = await getApplicationInfo(teamSlug, envName, appName);
+        // Discover which environment this app is in (try common ones)
+        const commonEnvs = ['dev-gcp', 'dev-fss', 'prod-gcp', 'prod-fss'];
+        let appInfo = null;
+        let foundEnv = null;
 
-        if (!appInfo?.repository) {
-          console.warn(`No repository found for ${teamSlug}/${envName}/${appName}`);
+        for (const env of commonEnvs) {
+          appInfo = await getApplicationInfo(teamSlug, env, appName);
+          if (appInfo) {
+            foundEnv = env;
+            break;
+          }
+        }
+
+        if (!appInfo || !foundEnv) {
+          console.warn(`Could not find app info for ${teamSlug}/${appName}`);
           continue;
         }
 
-        const [owner, repo] = appInfo.repository.split('/');
-
-        await createMonitoredApplication({
+        // Create monitored application (without repo fields)
+        const monitoredApp = await createMonitoredApplication({
           team_slug: teamSlug,
-          environment_name: envName,
+          environment_name: foundEnv,
           app_name: appName,
-          approved_github_owner: owner,
-          approved_github_repo_name: repo,
         });
+
+        // If we found a repository, add it as active
+        if (appInfo.repository) {
+          const [owner, repo] = appInfo.repository.split('/');
+          await upsertApplicationRepository({
+            monitoredAppId: monitoredApp.id,
+            githubOwner: owner,
+            githubRepoName: repo,
+            status: 'active',
+            approvedBy: 'user',
+          });
+        }
 
         addedCount++;
       }
@@ -101,28 +98,55 @@ export async function action({ request }: Route.ActionArgs) {
       return {
         error: null,
         success: `La til ${addedCount} applikasjon(er) for overvåking`,
-        discovery: null,
       };
     } catch (error) {
       console.error('Add error:', error);
       return {
         error: error instanceof Error ? error.message : 'Kunne ikke legge til applikasjoner',
-        discovery: null,
       };
     }
   }
 
-  return { error: 'Ugyldig handling', discovery: null };
+  return { error: 'Ugyldig handling' };
 }
 
-export default function AppsDiscover({ actionData }: Route.ComponentProps) {
+export default function AppsDiscover({ loaderData, actionData }: Route.ComponentProps) {
   const navigation = useNavigation();
-  const isDiscovering =
-    navigation.state === 'submitting' && navigation.formData?.get('intent') === 'discover';
-  const isAdding =
-    navigation.state === 'submitting' && navigation.formData?.get('intent') === 'add';
+  const isAdding = navigation.state === 'submitting';
 
-  const discovery = actionData?.discovery;
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedApps, setSelectedApps] = useState<Set<string>>(new Set());
+
+  // Filter apps based on search query
+  const filteredApps = loaderData.allApps.filter((app) => {
+    const query = searchQuery.toLowerCase();
+    return app.teamSlug.toLowerCase().includes(query) || app.appName.toLowerCase().includes(query);
+  });
+
+  // Group by team for display
+  const appsByTeam = filteredApps.reduce(
+    (acc, app) => {
+      if (!acc[app.teamSlug]) {
+        acc[app.teamSlug] = [];
+      }
+      acc[app.teamSlug].push(app.appName);
+      return acc;
+    },
+    {} as Record<string, string[]>
+  );
+
+  const toggleApp = (appKey: string) => {
+    const newSelected = new Set(selectedApps);
+    if (newSelected.has(appKey)) {
+      newSelected.delete(appKey);
+    } else {
+      newSelected.add(appKey);
+    }
+    setSelectedApps(newSelected);
+  };
+
+  const totalResults = filteredApps.length;
+  const totalTeams = Object.keys(appsByTeam).length;
 
   return (
     <div className={styles.stackContainerLarge}>
@@ -131,7 +155,8 @@ export default function AppsDiscover({ actionData }: Route.ComponentProps) {
           Oppdag applikasjoner
         </Heading>
         <BodyShort>
-          Søk etter et Nais team for å finne tilgjengelige applikasjoner og miljøer.
+          Søk etter team eller applikasjonsnavn. Søket filtrerer i sanntid blant alle tilgjengelige
+          applikasjoner.
         </BodyShort>
       </div>
 
@@ -142,85 +167,95 @@ export default function AppsDiscover({ actionData }: Route.ComponentProps) {
       )}
 
       {actionData?.error && <Alert variant="error">{actionData.error}</Alert>}
+      {loaderData.error && <Alert variant="error">{loaderData.error}</Alert>}
 
-      <Form method="post">
-        <input type="hidden" name="intent" value="discover" />
-        <div className={styles.searchFormRowAlignEnd}>
+      {!loaderData.error && (
+        <>
           <TextField
-            name="team_slug"
-            label="Team slug"
-            description="F.eks. pensjon-q2, team-rocket"
-            className={styles.searchFormFlex}
-            defaultValue={discovery?.teamSlug}
+            label="Søk etter team eller applikasjon"
+            description={`Viser ${totalResults} applikasjoner fra ${totalTeams} team`}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="F.eks. pensjon, pen, rocket..."
           />
-          <Button type="submit" icon={<MagnifyingGlassIcon aria-hidden />} disabled={isDiscovering}>
-            {isDiscovering ? 'Søker...' : 'Søk'}
-          </Button>
-        </div>
-      </Form>
 
-      {isDiscovering && (
-        <div className={styles.centerContent}>
-          <Loader size="2xlarge" title="Søker etter applikasjoner..." />
-        </div>
-      )}
+          {searchQuery && (
+            <Form method="post">
+              <input type="hidden" name="intent" value="add" />
 
-      {discovery && !isDiscovering && (
-        <Form method="post">
-          <input type="hidden" name="intent" value="add" />
-          <input type="hidden" name="team_slug" value={discovery.teamSlug} />
+              <div className={styles.stackContainer}>
+                <BodyShort>
+                  <strong>{selectedApps.size}</strong> applikasjon(er) valgt
+                </BodyShort>
 
-          <div className={styles.stackContainer}>
-            <div>
-              <Heading size="medium" spacing>
-                Funnet applikasjoner for {discovery.teamSlug}
-              </Heading>
-              <BodyShort>Velg hvilke applikasjoner som skal overvåkes for deployments.</BodyShort>
-            </div>
+                {Object.entries(appsByTeam)
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([teamSlug, apps]) => (
+                    <div key={teamSlug}>
+                      <Heading size="small" spacing>
+                        {teamSlug} ({apps.length} treff)
+                      </Heading>
 
-            {Object.entries(discovery.environments).map(([envName, apps]) => (
-              <div key={envName}>
-                <Heading size="small" spacing>
-                  {envName} ({apps.length} applikasjoner)
-                </Heading>
+                      <Table size="small">
+                        <Table.Header>
+                          <Table.Row>
+                            <Table.HeaderCell scope="col">Velg</Table.HeaderCell>
+                            <Table.HeaderCell scope="col">Applikasjon</Table.HeaderCell>
+                            <Table.HeaderCell scope="col">Team</Table.HeaderCell>
+                          </Table.Row>
+                        </Table.Header>
+                        <Table.Body>
+                          {apps.sort().map((appName) => {
+                            const appKey = `${teamSlug}|${appName}`;
+                            const isSelected = selectedApps.has(appKey);
+                            return (
+                              <Table.Row key={appKey}>
+                                <Table.DataCell>
+                                  <Checkbox
+                                    name="app"
+                                    value={appKey}
+                                    checked={isSelected}
+                                    onChange={() => toggleApp(appKey)}
+                                    hideLabel
+                                  >
+                                    Velg {appName}
+                                  </Checkbox>
+                                </Table.DataCell>
+                                <Table.DataCell>
+                                  <strong>{appName}</strong>
+                                </Table.DataCell>
+                                <Table.DataCell>{teamSlug}</Table.DataCell>
+                              </Table.Row>
+                            );
+                          })}
+                        </Table.Body>
+                      </Table>
+                    </div>
+                  ))}
 
-                <Table size="small">
-                  <Table.Header>
-                    <Table.Row>
-                      <Table.HeaderCell scope="col">Velg</Table.HeaderCell>
-                      <Table.HeaderCell scope="col">Applikasjon</Table.HeaderCell>
-                      <Table.HeaderCell scope="col">Miljø</Table.HeaderCell>
-                    </Table.Row>
-                  </Table.Header>
-                  <Table.Body>
-                    {apps.map((appName) => (
-                      <Table.Row key={`${envName}|${appName}`}>
-                        <Table.DataCell>
-                          <Checkbox name="app" value={`${envName}|${appName}`} hideLabel>
-                            Velg {appName}
-                          </Checkbox>
-                        </Table.DataCell>
-                        <Table.DataCell>{appName}</Table.DataCell>
-                        <Table.DataCell>{envName}</Table.DataCell>
-                      </Table.Row>
-                    ))}
-                  </Table.Body>
-                </Table>
+                {selectedApps.size > 0 && (
+                  <div>
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      icon={<PlusIcon aria-hidden />}
+                      disabled={isAdding}
+                    >
+                      {isAdding ? 'Legger til...' : `Legg til ${selectedApps.size} applikasjon(er)`}
+                    </Button>
+                  </div>
+                )}
               </div>
-            ))}
+            </Form>
+          )}
 
-            <div>
-              <Button
-                type="submit"
-                variant="primary"
-                icon={<PlusIcon aria-hidden />}
-                disabled={isAdding}
-              >
-                {isAdding ? 'Legger til...' : 'Legg til valgte applikasjoner'}
-              </Button>
-            </div>
-          </div>
-        </Form>
+          {!searchQuery && (
+            <Alert variant="info">
+              Skriv inn et søkeord for å begynne. Søket filtrerer automatisk blant{' '}
+              {loaderData.allApps.length} tilgjengelige applikasjoner.
+            </Alert>
+          )}
+        </>
       )}
     </div>
   );

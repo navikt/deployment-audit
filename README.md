@@ -96,14 +96,52 @@ Applikasjonen deler opp Nais og GitHub-kall for å unngå rate limits:
 
 **Steg 2: Verifiser med GitHub** (bruker rate limit)
 - Verifiserer PR-godkjenninger
+- Henter full PR-metadata:
+  - PR creator, reviewers (med godkjenningsstatus), og merger
+  - PR tittel, beskrivelse, labels
+  - Stats: commits, filer endret, linjer lagt til/fjernet
+  - CI/CD status (checks passed/failed)
+  - Draft status og base branch
 - Oppdaterer four-eyes status
 - Kan kjøres senere/i batch
-- 2-3 GitHub requests per deployment
+- 3-4 GitHub requests per deployment
 
 Dette gir fleksibilitet til å:
 - Hente alle deployments raskt
 - Verifisere i batch når rate limit tillater
 - Re-kjøre verifisering uten ny Nais-henting
+
+### PR-informasjon
+
+Når en deployment blir verifisert mot GitHub, lagres omfattende PR-metadata i `github_pr_data` (JSONB):
+
+**Oversikt:**
+- PR tittel, beskrivelse, labels
+- Opprettet og merget tidspunkt
+- Base branch og draft-status
+
+**Personer:**
+- **Creator**: Hvem som opprettet PR-en
+- **Reviewers**: Alle som har reviewet, med:
+  - State: APPROVED ✅, CHANGES_REQUESTED 🔴, eller COMMENTED 💬
+  - Tidspunkt for review
+- **Merger**: Hvem som merget PR-en
+
+**Stats:**
+- Antall commits
+- Antall filer endret
+- Linjer lagt til (+)
+- Linjer fjernet (-)
+
+**CI/CD:**
+- Checks status (passed/failed/skipped)
+- Detaljert liste over alle checks som ble kjørt:
+  - Check navn (med lenke til GitHub)
+  - Status: success ✓, failure ✗, skipped/cancelled ⊝, in_progress ⏳
+  - Conclusion og completion tidspunkt
+  - Visuell indikator med ikoner og farger
+
+Dette gjør det enkelt å se hele reviewprosessen og CI/CD-status for hvert deployment direkte i applikasjonen.
 
 ## 🧪 Testing
 

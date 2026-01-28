@@ -8,10 +8,6 @@ CREATE TABLE IF NOT EXISTS monitored_applications (
   environment_name VARCHAR(255) NOT NULL,
   app_name VARCHAR(255) NOT NULL,
   
-  -- Approved/expected repository
-  approved_github_owner VARCHAR(255) NOT NULL DEFAULT 'navikt',
-  approved_github_repo_name VARCHAR(255) NOT NULL,
-  
   -- Metadata
   is_active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -22,6 +18,39 @@ CREATE TABLE IF NOT EXISTS monitored_applications (
 
 CREATE INDEX IF NOT EXISTS idx_monitored_apps_team ON monitored_applications(team_slug);
 CREATE INDEX IF NOT EXISTS idx_monitored_apps_active ON monitored_applications(is_active);
+
+-- Application repositories (many-to-one with monitored_applications)
+-- Handles repository changes over time (renames, migrations, monorepo moves)
+CREATE TABLE IF NOT EXISTS application_repositories (
+  id SERIAL PRIMARY KEY,
+  monitored_app_id INTEGER REFERENCES monitored_applications(id) ON DELETE CASCADE,
+  
+  -- Repository identity
+  github_owner VARCHAR(255) NOT NULL DEFAULT 'navikt',
+  github_repo_name VARCHAR(255) NOT NULL,
+  
+  -- Status: 'active' (current), 'historical' (old but valid), 'pending_approval' (needs review)
+  status VARCHAR(50) NOT NULL DEFAULT 'pending_approval',
+  
+  -- Repository redirect (for renamed repos)
+  -- If set, this repo name redirects to another name
+  -- Example: old name 'pensjon-old' redirects to new name 'pensjon-new'
+  redirects_to_owner VARCHAR(255),
+  redirects_to_repo VARCHAR(255),
+  
+  -- Metadata
+  notes TEXT,
+  approved_at TIMESTAMP WITH TIME ZONE,
+  approved_by VARCHAR(255),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  
+  UNIQUE(monitored_app_id, github_owner, github_repo_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_app_repos_app ON application_repositories(monitored_app_id);
+CREATE INDEX IF NOT EXISTS idx_app_repos_status ON application_repositories(status);
+CREATE INDEX IF NOT EXISTS idx_app_repos_repo ON application_repositories(github_owner, github_repo_name);
+
 
 -- Deployments from Nais
 CREATE TABLE IF NOT EXISTS deployments (
@@ -47,6 +76,27 @@ CREATE TABLE IF NOT EXISTS deployments (
   github_pr_number INTEGER,
   github_pr_url TEXT,
   
+  -- PR metadata (JSONB for flexibility)
+  github_pr_data JSONB,
+  -- Structure: {
+  --   title: string,
+  --   body: string,
+  --   labels: string[],
+  --   created_at: string,
+  --   merged_at: string,
+  --   base_branch: string,
+  --   commits_count: number,
+  --   changed_files: number,
+  --   additions: number,
+  --   deletions: number,
+  --   draft: boolean,
+  --   creator: { username: string, avatar_url: string },
+  --   merger: { username: string, avatar_url: string },
+  --   reviewers: [{ username: string, avatar_url: string, state: string, submitted_at: string }],
+  --   checks_passed: boolean,
+  --   checks: [{ name: string, status: string, conclusion: string, started_at: string, completed_at: string, html_url: string }]
+  -- }
+  
   -- Kubernetes resources (JSONB for flexibility)
   resources JSONB,
   
@@ -66,7 +116,10 @@ CREATE TABLE IF NOT EXISTS repository_alerts (
   deployment_id INTEGER REFERENCES deployments(id) ON DELETE CASCADE,
   
   alert_type VARCHAR(50) NOT NULL DEFAULT 'repository_changed',
-  -- Future: could have other alert types like 'unauthorized_deployer', 'suspicious_timing', etc.
+  -- Alert types:
+  -- 'repository_mismatch': Deployment from unknown/unapproved repository
+  -- 'historical_repository': Deployment from historical (non-active) repository
+  -- 'pending_approval': Deployment from repository pending approval
   
   expected_github_owner VARCHAR(255) NOT NULL,
   expected_github_repo_name VARCHAR(255) NOT NULL,

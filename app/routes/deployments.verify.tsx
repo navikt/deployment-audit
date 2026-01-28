@@ -1,8 +1,8 @@
 import { CheckmarkCircleIcon } from '@navikt/aksel-icons';
 import { Alert, BodyShort, Button, Heading, Loader, TextField } from '@navikt/ds-react';
 import { Form, useNavigation } from 'react-router';
-import { getAllDeployments } from '../db/deployments';
-import { verifyDeploymentsFourEyes } from '../lib/sync';
+import { getAllDeployments } from '../db/deployments.server';
+import { verifyDeploymentsFourEyes } from '../lib/sync.server';
 import styles from '../styles/common.module.css';
 import type { Route } from './+types/deployments.verify';
 
@@ -10,9 +10,14 @@ export function meta(_args: Route.MetaArgs) {
   return [{ title: 'Verifiser deployments - Pensjon Deployment Audit' }];
 }
 
-export async function loader() {
+export async function loader({ request }: Route.LoaderArgs) {
+  const url = new URL(request.url);
+  const appId = url.searchParams.get('app');
+
   // Get stats on unverified deployments
-  const allDeployments = await getAllDeployments();
+  const allDeployments = await getAllDeployments({
+    monitored_app_id: appId ? parseInt(appId, 10) : undefined,
+  });
 
   const pending = allDeployments.filter((d) => d.four_eyes_status === 'pending').length;
   const missing = allDeployments.filter((d) => d.four_eyes_status === 'missing').length;
@@ -20,6 +25,7 @@ export async function loader() {
   const needsVerification = pending + missing + error;
 
   return {
+    appId: appId ? parseInt(appId, 10) : null,
     stats: {
       total: allDeployments.length,
       needsVerification,
@@ -33,11 +39,15 @@ export async function loader() {
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const limit = Number(formData.get('limit')) || 50;
+  const appId = formData.get('app_id');
 
   try {
     console.log(`🔍 Starting batch verification (limit: ${limit})`);
 
-    const result = await verifyDeploymentsFourEyes({ limit });
+    const result = await verifyDeploymentsFourEyes({
+      limit,
+      monitored_app_id: appId ? parseInt(appId as string, 10) : undefined,
+    });
 
     return {
       success: `✅ Verifisert ${result.verified} deployments. ${result.failed > 0 ? `❌ ${result.failed} feilet.` : ''} ${result.skipped > 0 ? `⏭️ ${result.skipped} hoppet over.` : ''}`,
@@ -64,7 +74,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function DeploymentsVerify({ loaderData, actionData }: Route.ComponentProps) {
-  const { stats } = loaderData;
+  const { appId, stats } = loaderData;
   const navigation = useNavigation();
   const isVerifying = navigation.state === 'submitting';
 
@@ -72,7 +82,7 @@ export default function DeploymentsVerify({ loaderData, actionData }: Route.Comp
     <div className={styles.pageContainer}>
       <div>
         <Heading size="large" spacing>
-          Batch GitHub-verifisering
+          Batch GitHub-verifisering{appId ? ' for applikasjon' : ''}
         </Heading>
         <BodyShort>
           Verifiser four-eyes status for flere deployments samtidig. Dette kaller GitHub API og
@@ -144,6 +154,7 @@ export default function DeploymentsVerify({ loaderData, actionData }: Route.Comp
 
       <Form method="post">
         <div className={styles.pageContainer}>
+          {appId && <input type="hidden" name="app_id" value={appId} />}
           <TextField
             name="limit"
             label="Antall deployments å verifisere"

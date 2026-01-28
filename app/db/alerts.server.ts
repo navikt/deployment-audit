@@ -1,4 +1,4 @@
-import { pool } from './connection';
+import { pool } from './connection.server';
 
 export interface RepositoryAlert {
   id: number;
@@ -20,8 +20,6 @@ export interface RepositoryAlertWithContext extends RepositoryAlert {
   team_slug: string;
   environment_name: string;
   app_name: string;
-  approved_github_owner: string;
-  approved_github_repo_name: string;
   deployment_nais_id: string;
   deployment_created_at: Date;
   deployer_username: string;
@@ -35,8 +33,6 @@ export async function getAllUnresolvedAlerts(): Promise<RepositoryAlertWithConte
       ma.team_slug,
       ma.environment_name,
       ma.app_name,
-      ma.approved_github_owner,
-      ma.approved_github_repo_name,
       d.nais_deployment_id as deployment_nais_id,
       d.created_at as deployment_created_at,
       d.deployer_username,
@@ -54,7 +50,9 @@ export async function getAllUnresolvedAlerts(): Promise<RepositoryAlertWithConte
 export const getUnresolvedAlertsWithContext = getAllUnresolvedAlerts;
 export const getUnresolvedAlerts = getAllUnresolvedAlerts;
 
-export async function getAlertsByMonitoredApp(monitoredAppId: number): Promise<RepositoryAlertWithContext[]> {
+export async function getAlertsByMonitoredApp(
+  monitoredAppId: number
+): Promise<RepositoryAlertWithContext[]> {
   const result = await pool.query(
     `SELECT 
       ra.*,
@@ -98,6 +96,9 @@ export async function createRepositoryAlert(data: {
   deploymentNaisId: string;
   detectedGithubOwner: string;
   detectedGithubRepoName: string;
+  expectedGithubOwner?: string;
+  expectedGithubRepoName?: string;
+  alertType?: string;
 }): Promise<RepositoryAlert> {
   // First, find the deployment ID from nais_deployment_id
   const depResult = await pool.query(
@@ -111,17 +112,10 @@ export async function createRepositoryAlert(data: {
 
   const deployment = depResult.rows[0];
 
-  // Get the monitored app to find expected repo
-  const appResult = await pool.query(
-    'SELECT approved_github_owner, approved_github_repo_name FROM monitored_applications WHERE id = $1',
-    [deployment.monitored_app_id]
-  );
-
-  if (appResult.rows.length === 0) {
-    throw new Error(`Monitored application not found with id: ${deployment.monitored_app_id}`);
-  }
-
-  const app = appResult.rows[0];
+  // Use provided expected repo or default to detected (for pending/historical alerts)
+  const expectedOwner = data.expectedGithubOwner || data.detectedGithubOwner;
+  const expectedRepoName = data.expectedGithubRepoName || data.detectedGithubRepoName;
+  const alertType = data.alertType || 'repository_mismatch';
 
   const result = await pool.query(
     `INSERT INTO repository_alerts 
@@ -132,9 +126,9 @@ export async function createRepositoryAlert(data: {
     [
       deployment.monitored_app_id,
       deployment.id,
-      'repository_changed',
-      app.approved_github_owner,
-      app.approved_github_repo_name,
+      alertType,
+      expectedOwner,
+      expectedRepoName,
       data.detectedGithubOwner,
       data.detectedGithubRepoName,
     ]
@@ -187,4 +181,27 @@ export async function getAlertStats(): Promise<{
     unresolved: parseInt(result.rows[0].unresolved),
     resolved: parseInt(result.rows[0].resolved),
   };
+}
+
+export async function getUnresolvedAlertsByApp(
+  monitoredAppId: number
+): Promise<RepositoryAlertWithContext[]> {
+  const result = await pool.query(
+    `SELECT 
+      ra.*,
+      ma.team_slug,
+      ma.environment_name,
+      ma.app_name,
+      d.nais_deployment_id as deployment_nais_id,
+      d.created_at as deployment_created_at,
+      d.deployer_username,
+      d.commit_sha
+    FROM repository_alerts ra
+    JOIN monitored_applications ma ON ra.monitored_app_id = ma.id
+    JOIN deployments d ON ra.deployment_id = d.id
+    WHERE ra.resolved = false AND ra.monitored_app_id = $1
+    ORDER BY ra.created_at DESC`,
+    [monitoredAppId]
+  );
+  return result.rows;
 }

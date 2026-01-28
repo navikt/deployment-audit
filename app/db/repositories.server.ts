@@ -1,4 +1,4 @@
-import { query } from './connection';
+import { query } from './connection.server';
 
 export interface Repository {
   id: number;

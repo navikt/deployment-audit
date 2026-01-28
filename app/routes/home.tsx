@@ -7,9 +7,9 @@ import {
 } from '@navikt/aksel-icons';
 import { Alert, BodyShort, Heading, LinkPanel } from '@navikt/ds-react';
 import { Link } from 'react-router';
-import { getUnresolvedAlerts } from '../db/alerts';
-import { getAllDeployments, getDeploymentStats } from '../db/deployments';
-import { getAllMonitoredApplications } from '../db/monitored-applications';
+import { getUnresolvedAlerts } from '../db/alerts.server';
+import { getAllDeployments, getDeploymentStats } from '../db/deployments.server';
+import { getAllMonitoredApplications } from '../db/monitored-applications.server';
 import styles from '../styles/common.module.css';
 import type { Route } from './+types/home';
 

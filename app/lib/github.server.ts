@@ -214,3 +214,144 @@ export async function verifyPullRequestFourEyes(
     return { hasFourEyes: false, reason: 'Error checking reviews' };
   }
 }
+
+/**
+ * Get detailed PR information including metadata, reviewers, and checks
+ */
+export async function getDetailedPullRequestInfo(
+  owner: string,
+  repo: string,
+  pull_number: number
+): Promise<{
+  title: string;
+  body: string | null;
+  labels: string[];
+  created_at: string;
+  merged_at: string | null;
+  base_branch: string;
+  commits_count: number;
+  changed_files: number;
+  additions: number;
+  deletions: number;
+  draft: boolean;
+  creator: { username: string; avatar_url: string };
+  merger: { username: string; avatar_url: string } | null;
+  reviewers: Array<{
+    username: string;
+    avatar_url: string;
+    state: string;
+    submitted_at: string;
+  }>;
+  checks_passed: boolean | null;
+} | null> {
+  const client = getGitHubClient();
+
+  try {
+    // Fetch PR details
+    const prResponse = await client.pulls.get({
+      owner,
+      repo,
+      pull_number,
+    });
+
+    const pr = prResponse.data;
+
+    // Fetch reviews
+    const reviewsResponse = await client.pulls.listReviews({
+      owner,
+      repo,
+      pull_number,
+    });
+
+    // Group reviews by user (latest review per user)
+    const reviewsByUser = new Map<
+      string,
+      { username: string; avatar_url: string; state: string; submitted_at: string }
+    >();
+
+    for (const review of reviewsResponse.data) {
+      if (review.user && review.submitted_at) {
+        const existing = reviewsByUser.get(review.user.login);
+        // Keep the latest review from each user
+        if (!existing || new Date(review.submitted_at) > new Date(existing.submitted_at)) {
+          reviewsByUser.set(review.user.login, {
+            username: review.user.login,
+            avatar_url: review.user.avatar_url,
+            state: review.state,
+            submitted_at: review.submitted_at,
+          });
+        }
+      }
+    }
+
+    // Fetch check runs details
+    let checks_passed: boolean | null = null;
+    const checks: Array<{
+      name: string;
+      status: string;
+      conclusion: string | null;
+      started_at: string | null;
+      completed_at: string | null;
+      html_url: string | null;
+    }> = [];
+
+    try {
+      const checksResponse = await client.checks.listForRef({
+        owner,
+        repo,
+        ref: pr.head.sha,
+      });
+
+      if (checksResponse.data.total_count > 0) {
+        // All checks must have conclusion 'success' or 'skipped'
+        checks_passed = checksResponse.data.check_runs.every(
+          (check) => check.conclusion === 'success' || check.conclusion === 'skipped'
+        );
+
+        // Store detailed check info
+        for (const check of checksResponse.data.check_runs) {
+          checks.push({
+            name: check.name,
+            status: check.status,
+            conclusion: check.conclusion,
+            started_at: check.started_at,
+            completed_at: check.completed_at,
+            html_url: check.html_url,
+          });
+        }
+      }
+    } catch (error) {
+      console.warn('Could not fetch check runs:', error);
+    }
+
+    return {
+      title: pr.title,
+      body: pr.body,
+      labels: pr.labels.map((label) => (typeof label === 'string' ? label : label.name || '')),
+      created_at: pr.created_at,
+      merged_at: pr.merged_at,
+      base_branch: pr.base.ref,
+      commits_count: pr.commits,
+      changed_files: pr.changed_files,
+      additions: pr.additions,
+      deletions: pr.deletions,
+      draft: pr.draft || false,
+      creator: {
+        username: pr.user?.login || 'unknown',
+        avatar_url: pr.user?.avatar_url || '',
+      },
+      merger: pr.merged_by
+        ? {
+            username: pr.merged_by.login,
+            avatar_url: pr.merged_by.avatar_url,
+          }
+        : null,
+      reviewers: Array.from(reviewsByUser.values()),
+      checks_passed,
+      checks,
+    };
+  } catch (error) {
+    console.error('Error fetching detailed PR info:', error);
+    return null;
+  }
+}
