@@ -1,179 +1,216 @@
-import { createDeployment, getDeploymentByNaisId } from '../db/deployments';
-import type { Repository } from '../db/repositories';
-import { getPullRequestForCommit, verifyPullRequestFourEyes } from './github';
-import { fetchDeployments } from './nais';
+import {
+  getMonitoredApplication,
+  updateMonitoredApplicationRepository,
+} from '~/db/monitored-applications';
+import {
+  createDeployment,
+  getDeploymentByNaisId,
+  updateDeploymentFourEyes,
+  type CreateDeploymentParams,
+} from '~/db/deployments';
+import { createRepositoryAlert } from '~/db/alerts';
+import { fetchApplicationDeployments } from '~/lib/nais';
+import { getCommit, getPullRequestForCommit, verifyPullRequestFourEyes } from '~/lib/github';
 
-export interface SyncResult {
-  success: boolean;
-  deploymentsProcessed: number;
-  deploymentsCreated: number;
-  deploymentsUpdated: number;
-  errors: string[];
+/**
+ * Sync deployments for a monitored application
+ * Validates repository and creates alerts on mismatch
+ */
+export async function syncDeploymentsForApplication(
+  teamSlug: string,
+  environmentName: string,
+  appName: string
+): Promise<{
+  newCount: number;
+  updatedCount: number;
+  alertsCreated: number;
+  totalProcessed: number;
+}> {
+  console.log('🔄 Starting sync for application:', {
+    team: teamSlug,
+    environment: environmentName,
+    app: appName,
+  });
+
+  // Get the monitored application
+  const monitoredApp = await getMonitoredApplication(teamSlug, environmentName, appName);
+  if (!monitoredApp) {
+    throw new Error(
+      `Application not found in monitored applications: ${teamSlug}/${environmentName}/${appName}`
+    );
+  }
+
+  // Fetch deployments from Nais
+  const naisDeployments = await fetchApplicationDeployments(teamSlug, environmentName, appName);
+
+  console.log(`📦 Processing ${naisDeployments.length} deployments from Nais`);
+
+  let newCount = 0;
+  let updatedCount = 0;
+  let alertsCreated = 0;
+  let totalProcessed = 0;
+
+  for (const naisDep of naisDeployments) {
+    totalProcessed++;
+
+    // Extract GitHub owner/repo from repository field
+    // Format: "navikt/repo-name" or "owner/repo-name"
+    const repoParts = naisDep.repository.split('/');
+    if (repoParts.length !== 2) {
+      console.warn(`⚠️  Invalid repository format: ${naisDep.repository}`);
+      continue;
+    }
+
+    const [detectedOwner, detectedRepoName] = repoParts;
+
+    // Check if deployment already exists
+    const existingDep = await getDeploymentByNaisId(naisDep.id);
+
+    if (existingDep) {
+      // Skip if already approved - no need to re-check
+      if (existingDep.four_eyes_status === 'approved_pr') {
+        console.log(`⏭️  Skipping already approved deployment: ${naisDep.id}`);
+        continue;
+      }
+
+      console.log(`📝 Updating deployment: ${naisDep.id}`);
+      // Re-verify four-eyes status
+      await verifyAndUpdateFourEyes(existingDep.id, naisDep.commitSha, naisDep.repository);
+      updatedCount++;
+      continue;
+    }
+
+    // New deployment - check for repository mismatch
+    const repositoryMismatch =
+      monitoredApp.approved_github_owner !== detectedOwner ||
+      monitoredApp.approved_github_repo_name !== detectedRepoName;
+
+    if (repositoryMismatch) {
+      console.warn(`🚨 Repository mismatch detected for deployment ${naisDep.id}:`, {
+        approved: `${monitoredApp.approved_github_owner}/${monitoredApp.approved_github_repo_name}`,
+        detected: `${detectedOwner}/${detectedRepoName}`,
+      });
+
+      // Create alert
+      await createRepositoryAlert({
+        monitoredApplicationId: monitoredApp.id,
+        deploymentNaisId: naisDep.id,
+        detectedGithubOwner: detectedOwner,
+        detectedGithubRepoName: detectedRepoName,
+      });
+
+      alertsCreated++;
+    }
+
+    // If this is the first deployment for this app, auto-update detected repo
+    // (unless there's already a mismatch alert)
+    if (!monitoredApp.detected_github_owner && !repositoryMismatch) {
+      console.log(`📝 Auto-updating detected repository for first deployment`);
+      await updateMonitoredApplicationRepository(
+        monitoredApp.id,
+        detectedOwner,
+        detectedRepoName
+      );
+    }
+
+    // Create deployment record
+    console.log(`➕ Creating new deployment: ${naisDep.id}`);
+
+    const deploymentParams: CreateDeploymentParams = {
+      monitoredApplicationId: monitoredApp.id,
+      naisDeploymentId: naisDep.id,
+      createdAt: new Date(naisDep.createdAt),
+      commitSha: naisDep.commitSha,
+      deployerUsername: naisDep.deployerUsername,
+      triggerUrl: naisDep.triggerUrl,
+      detectedGithubOwner: detectedOwner,
+      detectedGithubRepoName: detectedRepoName,
+      resources: naisDep.resources.nodes,
+    };
+
+    const newDeployment = await createDeployment(deploymentParams);
+    newCount++;
+
+    // Verify four-eyes status
+    await verifyAndUpdateFourEyes(
+      newDeployment.id,
+      naisDep.commitSha,
+      naisDep.repository
+    );
+  }
+
+  console.log(`✅ Sync complete:`, {
+    newCount,
+    updatedCount,
+    alertsCreated,
+    totalProcessed,
+  });
+
+  return {
+    newCount,
+    updatedCount,
+    alertsCreated,
+    totalProcessed,
+  };
 }
 
 /**
- * Synchronize deployments for a repository from Nais GraphQL API
- * and verify four-eyes status using GitHub API
+ * Verify and update four-eyes status for a deployment
  */
-export async function syncDeploymentsForRepository(
-  repo: Repository
-): Promise<SyncResult> {
-  console.log('🔄 Starting sync for repository:', {
-    repo: `${repo.github_owner}/${repo.github_repo_name}`,
-    team: repo.nais_team_slug,
-    environment: repo.nais_environment_name,
-  });
-
-  const result: SyncResult = {
-    success: true,
-    deploymentsProcessed: 0,
-    deploymentsCreated: 0,
-    deploymentsUpdated: 0,
-    errors: [],
-  };
-
-  try {
-    // Fetch all deployments from Nais (no date filtering)
-    console.log('📡 Fetching deployments from Nais...');
-    const naisDeployments = await fetchDeployments(repo.nais_team_slug);
-    console.log(`📦 Received ${naisDeployments.length} total deployments from Nais`);
-
-    if (naisDeployments.length > 0) {
-      console.log('Sample deployment:', naisDeployments[0]);
-    }
-
-    // Filter to only deployments for this specific repository and environment
-    const relevantDeployments = naisDeployments.filter((deployment) => {
-      const repoMatch = deployment.repository === `${repo.github_owner}/${repo.github_repo_name}`;
-      const envMatch = deployment.environmentName === 'prod-gcp' || deployment.environmentName === 'prod-fss';
-      //=== repo.nais_environment_name;
-      
-      if (!repoMatch || !envMatch) {
-        console.log('⏭️  Skipping deployment:', {
-          deploymentRepo: deployment.repository,
-          expectedRepo: `${repo.github_owner}/${repo.github_repo_name}`,
-          repoMatch,
-          deploymentEnv: deployment.environmentName,
-          expectedEnv: repo.nais_environment_name,
-          envMatch,
-        });
-      }
-      
-      return repoMatch && envMatch;
-    });
-
-    console.log(`✅ Found ${relevantDeployments.length} relevant deployments after filtering`);
-    result.deploymentsProcessed = relevantDeployments.length;
-
-    // Process each deployment
-    for (let i = 0; i < relevantDeployments.length; i++) {
-      const naisDeployment = relevantDeployments[i];
-      console.log(`\n🔧 Processing deployment ${i + 1}/${relevantDeployments.length}:`, {
-        id: naisDeployment.id,
-        commit: naisDeployment.commitSha.substring(0, 7),
-        deployer: naisDeployment.deployerUsername,
-        createdAt: naisDeployment.createdAt,
-      });
-
-      try {
-        // Check if deployment already exists
-        const existingDeployment = await getDeploymentByNaisId(naisDeployment.id);
-        console.log(`  ${existingDeployment ? '🔄 Updating existing' : '➕ Creating new'} deployment`);
-
-        // Skip GitHub API calls if deployment already has approved four-eyes
-        if (existingDeployment && existingDeployment.four_eyes_status === 'approved_pr') {
-          console.log('  ⏭️  Skipping GitHub check - already approved');
-          result.deploymentsUpdated++;
-          continue;
-        }
-
-        // Get PR info from GitHub
-        let hasFourEyes = false;
-        let fourEyesStatus = 'unknown';
-        let prNumber: number | undefined;
-        let prUrl: string | undefined;
-
-        try {
-          console.log(`  🔍 Checking GitHub for commit ${naisDeployment.commitSha.substring(0, 7)}...`);
-          const pr = await getPullRequestForCommit(
-            repo.github_owner,
-            repo.github_repo_name,
-            naisDeployment.commitSha
-          );
-
-          if (pr?.merged_at) {
-            console.log(`  📋 Found PR #${pr.number}: ${pr.title}`);
-            // This commit was merged via PR
-            prNumber = pr.number;
-            prUrl = pr.html_url;
-
-            // Verify four-eyes on the PR
-            console.log(`  👀 Verifying four-eyes on PR #${pr.number}...`);
-            const verification = await verifyPullRequestFourEyes(
-              repo.github_owner,
-              repo.github_repo_name,
-              pr.number
-            );
-
-            console.log(`  ${verification.hasFourEyes ? '✅' : '❌'} Four-eyes: ${verification.reason}`);
-            hasFourEyes = verification.hasFourEyes;
-            fourEyesStatus = verification.hasFourEyes ? 'approved_pr' : 'pr_not_approved';
-          } else {
-            console.log('  ⚠️  No PR found - direct push to branch');
-            // Direct push to main/branch
-            fourEyesStatus = 'direct_push';
-            hasFourEyes = false;
-          }
-        } catch (error) {
-          console.error(`  ❌ Error checking GitHub for commit ${naisDeployment.commitSha}:`, error);
-          fourEyesStatus = 'error';
-          result.errors.push(`Failed to check GitHub for commit ${naisDeployment.commitSha}`);
-        }
-
-        // Create or update deployment in database
-        console.log('  💾 Saving to database...');
-        await createDeployment({
-          repo_id: repo.id,
-          nais_deployment_id: naisDeployment.id,
-          created_at: new Date(naisDeployment.createdAt),
-          team_slug: naisDeployment.teamSlug,
-          environment_name: naisDeployment.environmentName,
-          repository: naisDeployment.repository,
-          deployer_username: naisDeployment.deployerUsername,
-          commit_sha: naisDeployment.commitSha,
-          trigger_url: naisDeployment.triggerUrl,
-          has_four_eyes: hasFourEyes,
-          four_eyes_status: fourEyesStatus,
-          github_pr_number: prNumber,
-          github_pr_url: prUrl,
-        });
-
-        if (existingDeployment) {
-          result.deploymentsUpdated++;
-        } else {
-          result.deploymentsCreated++;
-        }
-        console.log('  ✅ Deployment saved successfully');
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-        console.error(`  ❌ Failed to process deployment:`, error);
-        result.errors.push(`Failed to process deployment ${naisDeployment.id}: ${errorMsg}`);
-      }
-    }
-
-    result.success = result.errors.length === 0;
-    console.log('\n✨ Sync completed:', {
-      processed: result.deploymentsProcessed,
-      created: result.deploymentsCreated,
-      updated: result.deploymentsUpdated,
-      errors: result.errors.length,
-    });
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-    console.error('❌ Fatal error during sync:', error);
-    result.success = false;
-    result.errors.push(`Failed to sync deployments: ${errorMsg}`);
+async function verifyAndUpdateFourEyes(
+  deploymentId: number,
+  commitSha: string,
+  repository: string
+): Promise<void> {
+  const repoParts = repository.split('/');
+  if (repoParts.length !== 2) {
+    console.warn(`⚠️  Invalid repository format for four-eyes check: ${repository}`);
+    return;
   }
 
-  return result;
+  const [owner, repo] = repoParts;
+
+  try {
+    // Get commit info
+    const commitInfo = await getCommit(owner, repo, commitSha);
+
+    // Check if commit is part of a PR
+    const prInfo = await getPullRequestForCommit(owner, repo, commitSha);
+
+    if (!prInfo) {
+      // Direct push to main
+      console.log(`📌 Direct push detected for deployment ${deploymentId}`);
+      await updateDeploymentFourEyes(deploymentId, {
+        hasFourEyes: false,
+        fourEyesStatus: 'direct_push',
+        githubPrNumber: null,
+        githubPrUrl: null,
+      });
+      return;
+    }
+
+    // Check if PR has approval after last commit
+    const lastCommitDate = new Date(commitInfo.commit.committer.date);
+    const hasApproval = await verifyPullRequestFourEyes(owner, repo, prInfo.number, lastCommitDate);
+
+    console.log(
+      `${hasApproval ? '✅' : '❌'} PR #${prInfo.number} ${hasApproval ? 'has' : 'lacks'} approval after last commit`
+    );
+
+    await updateDeploymentFourEyes(deploymentId, {
+      hasFourEyes: hasApproval,
+      fourEyesStatus: hasApproval ? 'approved_pr' : 'missing',
+      githubPrNumber: prInfo.number,
+      githubPrUrl: prInfo.html_url,
+    });
+  } catch (error) {
+    console.error(`❌ Error verifying four-eyes for deployment ${deploymentId}:`, error);
+    // On error, mark as missing to be safe
+    await updateDeploymentFourEyes(deploymentId, {
+      hasFourEyes: false,
+      fourEyesStatus: 'missing',
+      githubPrNumber: null,
+      githubPrUrl: null,
+    });
+  }
 }

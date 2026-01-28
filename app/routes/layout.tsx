@@ -1,7 +1,7 @@
 import { InternalHeader, Spacer, Theme } from '@navikt/ds-react';
 import { Link, Outlet, useLocation } from 'react-router';
 
-export default function LayoutV2() {
+export default function Layout() {
   const location = useLocation();
 
   const isActive = (path: string) => {

@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 
 /**
- * Test script for V2 Nais API and sync logic
+ * Test script for Nais API client
  * 
  * Usage:
- *   npm run test-v2-discovery -- <team-slug>
- *   npm run test-v2-fetch -- <team> <env> <app>
+ *   npm run test:nais-discovery -- <team-slug>
+ *   npm run test:nais-fetch -- <team> <env> <app>
  * 
  * Example:
- *   npm run test-v2-discovery -- pensjon-q2
- *   npm run test-v2-fetch -- pensjon-q2 dev-fss pensjon-pen-q2
+ *   npm run test:nais-discovery -- pensjon-q2
+ *   npm run test:nais-fetch -- pensjon-q2 dev-fss pensjon-pen-q2
  */
 
-import { discoverTeamApplications, fetchApplicationDeployments, getApplicationInfo } from '../app/lib/nais-v2';
+import { discoverTeamApplications, fetchApplicationDeployments, getApplicationInfo } from '../app/lib/nais';
 
 const command = process.argv[2];
 const args = process.argv.slice(3);
@@ -93,14 +93,14 @@ async function testFetch(teamSlug: string, envName: string, appName: string) {
 async function main() {
   if (command === 'discovery') {
     if (args.length < 1) {
-      console.error('Usage: npm run test-v2-discovery -- <team-slug>');
+      console.error('Usage: npm run test:nais-discovery -- <team-slug>');
       process.exit(1);
     }
     await testDiscovery(args[0]);
     
   } else if (command === 'fetch') {
     if (args.length < 3) {
-      console.error('Usage: npm run test-v2-fetch -- <team> <env> <app>');
+      console.error('Usage: npm run test:nais-fetch -- <team> <env> <app>');
       process.exit(1);
     }
     await testFetch(args[0], args[1], args[2]);

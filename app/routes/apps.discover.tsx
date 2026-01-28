@@ -10,7 +10,7 @@ import {
   Checkbox,
 } from '@navikt/ds-react';
 import { MagnifyingGlassIcon, PlusIcon } from '@navikt/aksel-icons';
-import { discoverTeamApplications, getApplicationInfo } from '../lib/nais-v2';
+import { discoverTeamApplications, getApplicationInfo } from '../lib/nais';
 import { createMonitoredApplication } from '../db/monitored-applications';
 import type { Route } from './+types/apps.discover';
 

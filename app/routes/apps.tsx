@@ -2,7 +2,7 @@ import { Link, Form } from 'react-router';
 import { Alert, BodyShort, Button, Heading, Table } from '@navikt/ds-react';
 import { TrashIcon, ArrowsCirclepathIcon } from '@navikt/aksel-icons';
 import { getAllMonitoredApplications } from '../db/monitored-applications';
-import { syncDeploymentsForApplication } from '../lib/sync-v2';
+import { syncDeploymentsForApplication } from '../lib/sync';
 import type { Route } from './+types/apps';
 
 export function meta(_args: Route.MetaArgs) {
