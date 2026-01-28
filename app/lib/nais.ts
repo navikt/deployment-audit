@@ -50,7 +50,7 @@ export interface TeamResponse {
 }
 
 const DEPLOYMENTS_QUERY = `
-  query($team: Slug!, $appsFirst: Int!, $appsAfter: String, $depsFirst: Int!, $depsAfter: String) {
+  query($team: Slug!, $appsFirst: Int!, $appsAfter: Cursor, $depsFirst: Int!, $depsAfter: Cursor) {
     team(slug: $team) {
       applications(first: $appsFirst, after: $appsAfter) {
         pageInfo {
