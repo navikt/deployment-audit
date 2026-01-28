@@ -52,6 +52,8 @@ function getFourEyesLabel(deployment: DeploymentWithApp): {
   switch (deployment.four_eyes_status) {
     case 'approved_pr':
       return { text: 'Godkjent PR', variant: 'success' };
+    case 'legacy':
+      return { text: 'Legacy (før 2025)', variant: 'success' };
     case 'direct_push':
       return { text: 'Direct push', variant: 'warning' };
     case 'missing':

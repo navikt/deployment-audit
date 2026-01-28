@@ -2,10 +2,10 @@
 
 /**
  * Initialize database schema
- * 
+ *
  * This will DROP all existing tables and create new tables.
  * Use this for a fresh database setup.
- * 
+ *
  * Usage: npm run db:init
  */
 
@@ -58,7 +58,6 @@ async function initDatabase() {
       console.log(`   ✓ ${row.table_name}`);
     }
     console.log();
-
   } catch (error) {
     console.error('❌ Error initializing database:', error);
     throw error;

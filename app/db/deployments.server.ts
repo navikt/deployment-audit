@@ -190,11 +190,14 @@ export async function getDeploymentsByMonitoredApp(
 }
 
 export async function createDeployment(data: CreateDeploymentParams): Promise<Deployment> {
+  // Check if this is a legacy deployment (before 2025-01-01) without commit SHA
+  const isLegacyDeployment = data.createdAt < new Date('2025-01-01') && !data.commitSha;
+  
   const result = await pool.query(
     `INSERT INTO deployments 
       (monitored_app_id, nais_deployment_id, created_at, deployer_username, commit_sha, trigger_url,
-       detected_github_owner, detected_github_repo_name, resources)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       detected_github_owner, detected_github_repo_name, resources, has_four_eyes, four_eyes_status)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
     ON CONFLICT (nais_deployment_id) 
     DO UPDATE SET
       resources = EXCLUDED.resources,
@@ -210,6 +213,8 @@ export async function createDeployment(data: CreateDeploymentParams): Promise<De
       data.detectedGithubOwner,
       data.detectedGithubRepoName,
       data.resources ? JSON.stringify(data.resources) : null,
+      isLegacyDeployment, // has_four_eyes = true for legacy
+      isLegacyDeployment ? 'legacy' : 'pending', // four_eyes_status
     ]
   );
   return result.rows[0];

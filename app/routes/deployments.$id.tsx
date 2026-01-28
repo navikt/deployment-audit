@@ -138,6 +138,12 @@ function getFourEyesStatus(deployment: any): {
         variant: 'success',
         description: 'Dette deploymentet har blitt godkjent via en approved PR.',
       };
+    case 'legacy':
+      return {
+        text: 'Legacy (før 2025)',
+        variant: 'success',
+        description: 'Dette deploymentet er fra før 1. januar 2025 og anses som godkjent.',
+      };
     case 'direct_push':
       return {
         text: 'Direct push',
