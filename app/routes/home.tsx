@@ -1,9 +1,15 @@
-import { MagnifyingGlassIcon, RocketIcon, TableIcon, BellIcon } from '@navikt/aksel-icons';
+import {
+  MagnifyingGlassIcon,
+  RocketIcon,
+  TableIcon,
+  BellIcon,
+  CheckmarkCircleIcon,
+} from '@navikt/aksel-icons';
 import { Alert, BodyShort, Heading, LinkPanel } from '@navikt/ds-react';
 import { Link } from 'react-router';
 import { getAllMonitoredApplications } from '../db/monitored-applications';
 import { getUnresolvedAlerts } from '../db/alerts';
-import { getDeploymentStats } from '../db/deployments';
+import { getDeploymentStats, getAllDeployments } from '../db/deployments';
 import type { Route } from './+types/home';
 
 export function meta(_args: Route.MetaArgs) {
@@ -15,19 +21,26 @@ export function meta(_args: Route.MetaArgs) {
 
 export async function loader() {
   try {
-    const [stats, apps, alerts] = await Promise.all([
+    const [stats, apps, alerts, allDeployments] = await Promise.all([
       getDeploymentStats(),
       getAllMonitoredApplications(),
       getUnresolvedAlerts(),
+      getAllDeployments(),
     ]);
-    return { stats, apps, alerts };
+
+    // Count pending verifications
+    const pendingCount = allDeployments.filter(
+      (d) => d.four_eyes_status === 'pending' || d.four_eyes_status === 'error',
+    ).length;
+
+    return { stats, apps, alerts, pendingCount };
   } catch (_error) {
-    return { stats: null, apps: [], alerts: [] };
+    return { stats: null, apps: [], alerts: [], pendingCount: 0 };
   }
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { stats, apps, alerts } = loaderData;
+  const { stats, apps, alerts, pendingCount } = loaderData;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -46,6 +59,14 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <Alert variant="error">
           🚨 <strong>{alerts.length} repository-varsler</strong> krever oppmerksomhet.{' '}
           <Link to="/alerts">Se varsler</Link>
+        </Alert>
+      )}
+
+      {/* Pending Verifications */}
+      {pendingCount > 0 && (
+        <Alert variant="info">
+          ℹ️ <strong>{pendingCount} deployments</strong> venter på GitHub-verifisering.{' '}
+          <Link to="/deployments/verify">Kjør verifisering</Link>
         </Alert>
       )}
 
@@ -134,7 +155,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       )}
 
       {/* Navigation Panels */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>
+      <div
+        style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}
+      >
         <LinkPanel as={Link} to="/apps/discover">
           <LinkPanel.Title>
             <MagnifyingGlassIcon aria-hidden />
@@ -159,6 +182,16 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             Deployments
           </LinkPanel.Title>
           <LinkPanel.Description>Se alle deployments med four-eyes status</LinkPanel.Description>
+        </LinkPanel>
+
+        <LinkPanel as={Link} to="/deployments/verify">
+          <LinkPanel.Title>
+            <CheckmarkCircleIcon aria-hidden />
+            Verifiser deployments {pendingCount > 0 && `(${pendingCount})`}
+          </LinkPanel.Title>
+          <LinkPanel.Description>
+            Kjør GitHub-verifisering av four-eyes status
+          </LinkPanel.Description>
         </LinkPanel>
 
         <LinkPanel as={Link} to="/alerts">

@@ -63,10 +63,47 @@ npm run dev
 
 ## 📖 Bruk
 
-1. **Oppdag applikasjoner**: Søk etter team og velg hvilke apps som skal overvåkes
-2. **Synkroniser**: Hent deployments automatisk fra Nais
-3. **Verifiser**: Se four-eyes status for hver deployment
-4. **Håndter varsler**: Løs repository-mismatch varsler
+### Grunnleggende arbeidsflyt
+
+1. **Oppdag applikasjoner**: 
+   - Gå til "Oppdag applikasjoner"
+   - Søk etter team (f.eks. "pensjon-q2")
+   - Velg hvilke apps som skal overvåkes
+
+2. **Hent deployments fra Nais**:
+   - Gå til "Overvåkede applikasjoner"
+   - Klikk "Hent" for å synkronisere fra Nais (ingen GitHub-kall)
+   - Deployments lagres med status "pending"
+
+3. **Verifiser four-eyes med GitHub**:
+   - Gå til "Verifiser deployments" 
+   - Kjør batch-verifisering (bruker GitHub rate limit)
+   - Max 50-100 deployments per batch anbefales
+
+4. **Håndter varsler**: 
+   - Se repository-mismatch varsler
+   - Løs varsler med notater
+
+### To-stegs synkronisering
+
+Applikasjonen deler opp Nais og GitHub-kall for å unngå rate limits:
+
+**Steg 1: Hent fra Nais** (ingen rate limit)
+- Henter alle deployments fra Nais GraphQL API
+- Lagrer til database med status "pending"
+- Detekterer repository fra deployment-data
+- Oppretter varsel hvis repository-mismatch
+
+**Steg 2: Verifiser med GitHub** (bruker rate limit)
+- Verifiserer PR-godkjenninger
+- Oppdaterer four-eyes status
+- Kan kjøres senere/i batch
+- 2-3 GitHub requests per deployment
+
+Dette gir fleksibilitet til å:
+- Hente alle deployments raskt
+- Verifisere i batch når rate limit tillater
+- Re-kjøre verifisering uten ny Nais-henting
 
 ## 🧪 Testing
 
