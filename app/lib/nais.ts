@@ -27,10 +27,16 @@ export interface NaisDeployment {
   triggerUrl: string;
 }
 
+export interface PageInfo {
+  hasNextPage: boolean;
+  endCursor?: string;
+}
+
 export interface NaisApplication {
   name: string;
   deployments: {
     nodes: NaisDeployment[];
+    pageInfo: PageInfo;
   };
 }
 
@@ -38,17 +44,26 @@ export interface TeamResponse {
   team: {
     applications: {
       nodes: NaisApplication[];
+      pageInfo: PageInfo;
     };
   };
 }
 
 const DEPLOYMENTS_QUERY = `
-  query($team: Slug!, $appsFirst: Int!, $depsFirst: Int!) {
+  query($team: Slug!, $appsFirst: Int!, $appsAfter: String, $depsFirst: Int!, $depsAfter: String) {
     team(slug: $team) {
-      applications(first: $appsFirst) {
+      applications(first: $appsFirst, after: $appsAfter) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
         nodes {
           name
-          deployments(first: $depsFirst) {
+          deployments(first: $depsFirst, after: $depsAfter) {
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
             nodes {
               id
               createdAt
@@ -79,40 +94,92 @@ export async function fetchDeployments(
     deploymentsFirst,
   });
 
+  const allDeployments: NaisDeployment[] = [];
+  let appsAfter: string | undefined = undefined;
+  let appsPageCount = 0;
+  let hasMoreApps = true;
+
   try {
-    const data = await client.request<TeamResponse>(DEPLOYMENTS_QUERY, {
-      team: teamSlug,
-      appsFirst,
-      depsFirst: deploymentsFirst,
-    });
+    // Paginate through applications
+    while (hasMoreApps) {
+      appsPageCount++;
+      console.log(
+        `📄 Fetching applications page ${appsPageCount}${appsAfter ? ` (cursor: ${appsAfter})` : ''}`
+      );
 
-    console.log('✅ Nais API response received');
+      const response: TeamResponse = await client.request<TeamResponse>(DEPLOYMENTS_QUERY, {
+        team: teamSlug,
+        appsFirst,
+        appsAfter,
+        depsFirst: deploymentsFirst,
+        depsAfter: undefined, // We'll handle deployment pagination per app
+      });
 
-    if (!data.team) {
-      console.warn('⚠️  No team data in response - team might not exist or no access');
-      return [];
-    }
-
-    if (!data.team.applications) {
-      console.warn('⚠️  No applications data in response');
-      return [];
-    }
-
-    console.log(`📦 Found ${data.team.applications.nodes.length} applications`);
-
-    // Flatten all deployments from all applications
-    const allDeployments: NaisDeployment[] = [];
-
-    for (const app of data.team.applications.nodes) {
-      const deploymentCount = app.deployments?.nodes?.length || 0;
-      console.log(`  - ${app.name}: ${deploymentCount} deployments`);
-
-      if (app.deployments?.nodes) {
-        allDeployments.push(...app.deployments.nodes);
+      if (!response.team) {
+        console.warn('⚠️  No team data in response - team might not exist or no access');
+        break;
       }
+
+      if (!response.team.applications) {
+        console.warn('⚠️  No applications data in response');
+        break;
+      }
+
+      console.log(
+        `📦 Found ${response.team.applications.nodes.length} applications on page ${appsPageCount}`
+      );
+
+      // For each application, paginate through its deployments
+      for (const app of response.team.applications.nodes) {
+        const appDeployments: NaisDeployment[] = [];
+
+        // First page of deployments (already fetched)
+        if (app.deployments?.nodes) {
+          appDeployments.push(...app.deployments.nodes);
+        }
+
+        // Paginate through remaining deployment pages if needed
+        let depsAfter = app.deployments?.pageInfo?.endCursor;
+        let depsPageCount = 1;
+
+        while (app.deployments?.pageInfo?.hasNextPage && depsAfter) {
+          depsPageCount++;
+          console.log(
+            `  📄 Fetching more deployments for ${app.name} (page ${depsPageCount})`
+          );
+
+          const depsResponse = await client.request<TeamResponse>(DEPLOYMENTS_QUERY, {
+            team: teamSlug,
+            appsFirst: 1, // Only fetch this specific app
+            appsAfter: undefined,
+            depsFirst: deploymentsFirst,
+            depsAfter: depsAfter,
+          });
+
+          // Find the matching app in the response
+          const appData = depsResponse?.team?.applications?.nodes?.[0];
+          if (appData?.deployments?.nodes) {
+            appDeployments.push(...appData.deployments.nodes);
+          }
+
+          depsAfter = appData?.deployments?.pageInfo?.endCursor;
+          if (!appData?.deployments?.pageInfo?.hasNextPage) {
+            break;
+          }
+        }
+
+        console.log(`  - ${app.name}: ${appDeployments.length} deployments (${depsPageCount} page(s))`);
+        allDeployments.push(...appDeployments);
+      }
+
+      // Check if there are more applications pages
+      appsAfter = response.team.applications.pageInfo?.endCursor;
+      hasMoreApps = response.team.applications.pageInfo?.hasNextPage || false;
     }
 
-    console.log(`✨ Total deployments fetched: ${allDeployments.length}`);
+    console.log(
+      `✨ Total deployments fetched: ${allDeployments.length} (from ${appsPageCount} app page(s))`
+    );
     return allDeployments;
   } catch (error) {
     console.error('❌ Error fetching deployments from Nais:', error);
