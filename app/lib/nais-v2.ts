@@ -74,21 +74,23 @@ export interface TeamEnvironmentResponse {
   };
 }
 
-export interface EnvironmentApplication {
+export interface ApplicationWithEnv {
   name: string;
-}
-
-export interface Environment {
-  name: string;
-  applications: {
-    nodes: EnvironmentApplication[];
+  teamEnvironment: {
+    environment: {
+      name: string;
+    };
   };
 }
 
-export interface TeamEnvironmentsResponse {
+export interface TeamApplicationsResponse {
   team: {
-    environments: {
-      nodes: Environment[];
+    applications: {
+      pageInfo: {
+        hasNextPage: boolean;
+        endCursor: string;
+      };
+      nodes: ApplicationWithEnv[];
     };
   };
 }
@@ -143,14 +145,19 @@ const APP_DEPLOYMENTS_QUERY = `
 `;
 
 // Query for discovering available environments and applications in a team
+// Note: We query team.applications to get all apps, then check their environments
 const TEAM_ENVIRONMENTS_QUERY = `
-  query TeamEnvironments($team: Slug!) {
+  query TeamEnvironments($team: Slug!, $first: Int!) {
     team(slug: $team) {
-      environments {
+      applications(first: $first) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
         nodes {
           name
-          applications {
-            nodes {
+          teamEnvironment {
+            environment {
               name
             }
           }
@@ -254,24 +261,49 @@ export async function discoverTeamApplications(teamSlug: string): Promise<{
   console.log('🔍 Discovering applications for team:', teamSlug);
 
   try {
-    const response: TeamEnvironmentsResponse = await client.request(TEAM_ENVIRONMENTS_QUERY, {
-      team: teamSlug,
-    });
+    // Fetch all applications with pagination
+    const allApps: ApplicationWithEnv[] = [];
+    let after: string | undefined = undefined;
+    let hasMore = true;
 
-    if (!response.team?.environments) {
-      console.warn('⚠️  No environments found for team');
-      return { environments: new Map() };
+    while (hasMore) {
+      const response: TeamApplicationsResponse = await client.request(
+        TEAM_ENVIRONMENTS_QUERY,
+        {
+          team: teamSlug,
+          first: 1000,
+          after: after,
+        }
+      );
+
+      if (!response.team?.applications) {
+        console.warn('⚠️  No applications found for team');
+        break;
+      }
+
+      allApps.push(...response.team.applications.nodes);
+      after = response.team.applications.pageInfo.endCursor;
+      hasMore = response.team.applications.pageInfo.hasNextPage;
     }
 
+    // Group by environment
     const environments = new Map<string, string[]>();
 
-    for (const env of response.team.environments.nodes) {
-      const appNames = env.applications.nodes.map((app) => app.name);
-      environments.set(env.name, appNames);
-      console.log(`  📁 ${env.name}: ${appNames.length} applications`);
+    for (const app of allApps) {
+      const envName = app.teamEnvironment.environment.name;
+      const existing = environments.get(envName) || [];
+      existing.push(app.name);
+      environments.set(envName, existing);
     }
 
-    console.log(`✨ Found ${environments.size} environments with applications`);
+    // Log summary
+    for (const [envName, appNames] of environments.entries()) {
+      console.log(`  📁 ${envName}: ${appNames.length} applications`);
+    }
+
+    console.log(
+      `✨ Found ${environments.size} environments with ${allApps.length} total applications`
+    );
     return { environments };
   } catch (error) {
     console.error('❌ Error discovering applications:', error);
