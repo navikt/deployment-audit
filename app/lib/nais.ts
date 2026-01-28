@@ -84,7 +84,7 @@ const DEPLOYMENTS_QUERY = `
 export async function fetchDeployments(
   teamSlug: string,
   appsFirst: number = 100,
-  deploymentsFirst: number = 100
+  deploymentsFirst: number = 1000 // Increased from 100 to fetch more deployments per page
 ): Promise<NaisDeployment[]> {
   const client = getNaisClient();
 
