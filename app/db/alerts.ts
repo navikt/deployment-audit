@@ -20,6 +20,9 @@ export interface RepositoryAlertWithContext extends RepositoryAlert {
   team_slug: string;
   environment_name: string;
   app_name: string;
+  approved_github_owner: string;
+  approved_github_repo_name: string;
+  deployment_nais_id: string;
   deployment_created_at: Date;
   deployer_username: string;
   commit_sha: string;
@@ -32,6 +35,9 @@ export async function getAllUnresolvedAlerts(): Promise<RepositoryAlertWithConte
       ma.team_slug,
       ma.environment_name,
       ma.app_name,
+      ma.approved_github_owner,
+      ma.approved_github_repo_name,
+      d.nais_deployment_id as deployment_nais_id,
       d.created_at as deployment_created_at,
       d.deployer_username,
       d.commit_sha
@@ -43,6 +49,10 @@ export async function getAllUnresolvedAlerts(): Promise<RepositoryAlertWithConte
   );
   return result.rows;
 }
+
+// Alias for convenience
+export const getUnresolvedAlertsWithContext = getAllUnresolvedAlerts;
+export const getUnresolvedAlerts = getAllUnresolvedAlerts;
 
 export async function getAlertsByMonitoredApp(monitoredAppId: number): Promise<RepositoryAlertWithContext[]> {
   const result = await pool.query(
@@ -84,27 +94,49 @@ export async function getAlertById(id: number): Promise<RepositoryAlertWithConte
 }
 
 export async function createRepositoryAlert(data: {
-  monitored_app_id: number;
-  deployment_id: number;
-  alert_type: string;
-  expected_github_owner: string;
-  expected_github_repo_name: string;
-  detected_github_owner: string;
-  detected_github_repo_name: string;
+  monitoredApplicationId: number;
+  deploymentNaisId: string;
+  detectedGithubOwner: string;
+  detectedGithubRepoName: string;
 }): Promise<RepositoryAlert> {
+  // First, find the deployment ID from nais_deployment_id
+  const depResult = await pool.query(
+    'SELECT id, monitored_app_id FROM deployments WHERE nais_deployment_id = $1',
+    [data.deploymentNaisId]
+  );
+
+  if (depResult.rows.length === 0) {
+    throw new Error(`Deployment not found with nais_deployment_id: ${data.deploymentNaisId}`);
+  }
+
+  const deployment = depResult.rows[0];
+
+  // Get the monitored app to find expected repo
+  const appResult = await pool.query(
+    'SELECT approved_github_owner, approved_github_repo_name FROM monitored_applications WHERE id = $1',
+    [deployment.monitored_app_id]
+  );
+
+  if (appResult.rows.length === 0) {
+    throw new Error(`Monitored application not found with id: ${deployment.monitored_app_id}`);
+  }
+
+  const app = appResult.rows[0];
+
   const result = await pool.query(
     `INSERT INTO repository_alerts 
       (monitored_app_id, deployment_id, alert_type, expected_github_owner, expected_github_repo_name, detected_github_owner, detected_github_repo_name)
     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    ON CONFLICT DO NOTHING
     RETURNING *`,
     [
-      data.monitored_app_id,
-      data.deployment_id,
-      data.alert_type,
-      data.expected_github_owner,
-      data.expected_github_repo_name,
-      data.detected_github_owner,
-      data.detected_github_repo_name,
+      deployment.monitored_app_id,
+      deployment.id,
+      'repository_changed',
+      app.approved_github_owner,
+      app.approved_github_repo_name,
+      data.detectedGithubOwner,
+      data.detectedGithubRepoName,
     ]
   );
   return result.rows[0];
@@ -128,6 +160,14 @@ export async function resolveAlert(
   }
 
   return result.rows[0];
+}
+
+// Simpler version without requiring resolved_by
+export async function resolveRepositoryAlert(
+  id: number,
+  resolutionNote: string
+): Promise<RepositoryAlert> {
+  return resolveAlert(id, 'web-user', resolutionNote);
 }
 
 export async function getAlertStats(): Promise<{
