@@ -35,18 +35,32 @@ export async function getPullRequestForCommit(
   const client = getGitHubClient();
 
   try {
+    console.log(`🔎 Searching for PRs associated with commit ${sha} in ${owner}/${repo}`);
+
     const response = await client.repos.listPullRequestsAssociatedWithCommit({
       owner,
       repo,
       commit_sha: sha,
     });
 
+    console.log(`📊 Found ${response.data.length} PR(s) associated with commit ${sha}`);
+
     if (response.data.length === 0) {
+      console.log(`❌ No PRs found for commit ${sha}`);
       return null;
     }
 
+    // Log all PRs found
+    response.data.forEach((pr, index) => {
+      console.log(
+        `   PR ${index + 1}: #${pr.number} - ${pr.title} (${pr.state}, merged: ${pr.merged_at ? 'yes' : 'no'})`
+      );
+    });
+
     // Return the first (most relevant) PR
     const pr = response.data[0];
+    console.log(`✅ Using PR #${pr.number} for verification`);
+
     return {
       number: pr.number,
       title: pr.title,
@@ -55,7 +69,13 @@ export async function getPullRequestForCommit(
       state: pr.state,
     };
   } catch (error) {
-    console.error('Error fetching PR for commit:', error);
+    console.error(`❌ Error fetching PR for commit ${sha}:`, error);
+
+    // Re-throw rate limit errors so they can be handled properly upstream
+    if (error instanceof Error && error.message.includes('rate limit')) {
+      throw error;
+    }
+
     return null;
   }
 }
@@ -90,8 +110,16 @@ export interface PullRequestCommit {
   commit: {
     author: {
       date: string;
+      name?: string;
     };
+    message: string;
   };
+  author?: {
+    login: string;
+  } | null;
+  parents: Array<{
+    sha: string;
+  }>;
 }
 
 export async function getPullRequestCommits(
@@ -112,9 +140,39 @@ export async function getPullRequestCommits(
 }
 
 /**
+ * Check if a commit is a merge commit from main/master branch
+ */
+function isMergeFromMainBranch(commit: PullRequestCommit): boolean {
+  // A merge commit has 2+ parents
+  if (commit.parents.length < 2) {
+    return false;
+  }
+
+  const message = commit.commit.message.toLowerCase();
+
+  // Check for common merge commit patterns from main/master
+  // Examples:
+  // - "Merge branch 'main' into feature-branch"
+  // - "Merge remote-tracking branch 'origin/main' into feature"
+  // - "Merge branch 'master' into ..."
+  const mainBranchPatterns = [
+    /merge\s+branch\s+['"]main['"]/i,
+    /merge\s+branch\s+['"]master['"]/i,
+    /merge\s+remote-tracking\s+branch\s+['"]origin\/main['"]/i,
+    /merge\s+remote-tracking\s+branch\s+['"]origin\/master['"]/i,
+    /merge\s+branch\s+['"]origin\/main['"]/i,
+    /merge\s+branch\s+['"]origin\/master['"]/i,
+  ];
+
+  return mainBranchPatterns.some((pattern) => pattern.test(message));
+}
+
+/**
  * Verifies if a PR has "four eyes" (two sets of eyes):
  * - At least one APPROVED review
- * - The approval came after the last commit in the PR
+ * - The approval came after the last commit in the PR, OR
+ * - The approval came before the last commit, but all commits after approval are merges from main/master, OR
+ * - Special case for Dependabot: commits by dependabot[bot] after approval are allowed
  */
 export async function verifyPullRequestFourEyes(
   owner: string,
@@ -122,18 +180,43 @@ export async function verifyPullRequestFourEyes(
   pull_number: number
 ): Promise<{ hasFourEyes: boolean; reason: string }> {
   try {
+    console.log(`🔍 Verifying four-eyes for PR #${pull_number} in ${owner}/${repo}`);
+
+    const client = getGitHubClient();
+
+    // Fetch PR details to check creator
+    const prResponse = await client.pulls.get({
+      owner,
+      repo,
+      pull_number,
+    });
+
+    const prCreator = prResponse.data.user?.login || '';
+    const isDependabotPR = prCreator === 'dependabot[bot]' || prCreator.includes('dependabot');
+
+    console.log(`   🤖 PR creator: ${prCreator} (Dependabot: ${isDependabotPR})`);
+
     const [reviews, commits] = await Promise.all([
       getPullRequestReviews(owner, repo, pull_number),
       getPullRequestCommits(owner, repo, pull_number),
     ]);
 
+    console.log(`   📝 Found ${reviews.length} review(s) and ${commits.length} commit(s)`);
+
     if (commits.length === 0) {
+      console.log(`   ❌ No commits found in PR`);
       return { hasFourEyes: false, reason: 'No commits found in PR' };
     }
 
     // Get the timestamp of the last commit
     const lastCommit = commits[commits.length - 1];
     const lastCommitDate = new Date(lastCommit.commit.author.date);
+    console.log(
+      `   📅 Last commit: ${lastCommit.sha.substring(0, 7)} at ${lastCommitDate.toISOString()}`
+    );
+    console.log(
+      `   📝 Last commit message: ${lastCommit.commit.message.split('\n')[0].substring(0, 80)}`
+    );
 
     // Find approved reviews that came after the last commit
     const approvedReviewsAfterLastCommit = reviews.filter((review) => {
@@ -144,23 +227,117 @@ export async function verifyPullRequestFourEyes(
       return reviewDate > lastCommitDate;
     });
 
+    console.log(
+      `   ✅ ${approvedReviewsAfterLastCommit.length} approved review(s) after last commit`
+    );
+
     if (approvedReviewsAfterLastCommit.length > 0) {
-      return {
+      const result = {
         hasFourEyes: true,
         reason: `Approved by ${approvedReviewsAfterLastCommit[0].user?.login || 'unknown'} after last commit`,
       };
+      console.log(`   ✅ Result: ${result.reason}`);
+      return result;
     }
 
     // Check if there are any approved reviews (even before last commit)
     const approvedReviews = reviews.filter((r) => r.state === 'APPROVED');
+    console.log(`   ✅ ${approvedReviews.length} total approved review(s) found`);
+
     if (approvedReviews.length === 0) {
+      console.log(`   ❌ No approved reviews found`);
       return { hasFourEyes: false, reason: 'No approved reviews found' };
     }
 
-    return {
+    // Find the most recent approved review
+    const mostRecentApproval = approvedReviews.reduce((latest, current) => {
+      const currentDate = new Date(current.submitted_at || 0);
+      const latestDate = new Date(latest.submitted_at || 0);
+      return currentDate > latestDate ? current : latest;
+    });
+
+    const approvalDate = new Date(mostRecentApproval.submitted_at || 0);
+    console.log(
+      `   📅 Most recent approval: ${mostRecentApproval.user?.login || 'unknown'} at ${approvalDate.toISOString()}`
+    );
+
+    // Get all commits that came after the approval
+    const commitsAfterApproval = commits.filter((commit) => {
+      const commitDate = new Date(commit.commit.author.date);
+      return commitDate > approvalDate;
+    });
+
+    console.log(`   📊 ${commitsAfterApproval.length} commit(s) after most recent approval`);
+
+    if (commitsAfterApproval.length === 0) {
+      // This shouldn't happen since we already checked approvedReviewsAfterLastCommit
+      console.log(`   ✅ Approval was after last commit`);
+      return {
+        hasFourEyes: true,
+        reason: `Approved by ${mostRecentApproval.user?.login || 'unknown'} after last commit`,
+      };
+    }
+
+    // Log commits after approval
+    commitsAfterApproval.forEach((commit, index) => {
+      const isMainMerge = isMergeFromMainBranch(commit);
+      const commitAuthor = commit.author?.login || commit.commit.author?.name || 'unknown';
+      const message = commit.commit.message.split('\n')[0].substring(0, 80);
+      console.log(
+        `   📝 Commit ${index + 1} after approval: ${commit.sha.substring(0, 7)} by ${commitAuthor} - ${message} (${commit.parents.length} parent(s), main merge: ${isMainMerge})`
+      );
+    });
+
+    // Special case for Dependabot PRs: Allow commits by dependabot after approval
+    if (isDependabotPR) {
+      const allCommitsAreBotOrMainMerge = commitsAfterApproval.every((commit) => {
+        const commitAuthor = commit.author?.login || commit.commit.author?.name || '';
+        const isDependabotCommit =
+          commitAuthor === 'dependabot[bot]' || commitAuthor.includes('dependabot');
+        const isMainMerge = isMergeFromMainBranch(commit);
+        return isDependabotCommit || isMainMerge;
+      });
+
+      console.log(
+        `   🤖 All commits after approval are by Dependabot or main merges: ${allCommitsAreBotOrMainMerge}`
+      );
+
+      if (allCommitsAreBotOrMainMerge) {
+        const result = {
+          hasFourEyes: true,
+          reason: `Approved by ${mostRecentApproval.user?.login || 'unknown'}, Dependabot PR with bot commits after approval`,
+        };
+        console.log(`   ✅ Result: ${result.reason}`);
+        return result;
+      }
+    }
+
+    // Check if ALL commits after approval are merges from main/master
+    const allCommitsAreMainMerges = commitsAfterApproval.every((commit) =>
+      isMergeFromMainBranch(commit)
+    );
+
+    console.log(
+      `   🔀 All commits after approval are main/master merges: ${allCommitsAreMainMerges}`
+    );
+
+    if (allCommitsAreMainMerges) {
+      const result = {
+        hasFourEyes: true,
+        reason: `Approved by ${mostRecentApproval.user?.login || 'unknown'}, only main/master merges after approval`,
+      };
+      console.log(`   ✅ Result: ${result.reason}`);
+      return result;
+    }
+
+    // There are commits after approval that are not merges from main
+    const result = {
       hasFourEyes: false,
-      reason: 'Approved review exists but came before the last commit',
+      reason:
+        'Approved review exists but came before the last commit (non-merge commits after approval)',
     };
+    console.log(`   ❌ Result: ${result.reason}`);
+    return result;
   } catch (error) {
     console.error('Error verifying PR four eyes:', error);
     return { hasFourEyes: false, reason: 'Error checking reviews' };
@@ -255,6 +432,25 @@ export async function getDetailedPullRequestInfo(
       console.warn('Could not fetch check runs:', error);
     }
 
+    // Fetch commits
+    const commitsResponse = await client.pulls.listCommits({
+      owner,
+      repo,
+      pull_number,
+      per_page: 100,
+    });
+
+    const commits = commitsResponse.data.map((commit) => ({
+      sha: commit.sha,
+      message: commit.commit.message,
+      author: {
+        username: commit.author?.login || commit.commit.author?.name || 'unknown',
+        avatar_url: commit.author?.avatar_url || '',
+      },
+      date: commit.commit.author?.date || '',
+      html_url: commit.html_url,
+    }));
+
     return {
       title: pr.title,
       body: pr.body,
@@ -280,6 +476,7 @@ export async function getDetailedPullRequestInfo(
       reviewers: Array.from(reviewsByUser.values()),
       checks_passed,
       checks,
+      commits,
     };
   } catch (error) {
     console.error('Error fetching detailed PR info:', error);

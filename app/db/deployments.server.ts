@@ -54,6 +54,16 @@ export interface GitHubPRData {
     completed_at: string | null;
     html_url: string | null;
   }>;
+  commits: Array<{
+    sha: string;
+    message: string;
+    author: {
+      username: string;
+      avatar_url: string;
+    };
+    date: string;
+    html_url: string;
+  }>;
 }
 
 export interface DeploymentWithApp extends Deployment {
@@ -190,8 +200,10 @@ export async function getDeploymentsByMonitoredApp(
 }
 
 export async function createDeployment(data: CreateDeploymentParams): Promise<Deployment> {
-  // Check if this is a legacy deployment (before 2025-01-01) without commit SHA
-  const isLegacyDeployment = data.createdAt < new Date('2025-01-01') && !data.commitSha;
+  // Check if this is a legacy deployment (older than 1 year) without commit SHA
+  const oneYearAgo = new Date();
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+  const isLegacyDeployment = data.createdAt < oneYearAgo && !data.commitSha;
 
   const result = await pool.query(
     `INSERT INTO deployments 

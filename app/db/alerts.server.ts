@@ -206,20 +206,46 @@ export async function getUnresolvedAlertsByApp(
   return result.rows;
 }
 
-export async function resolveAlertsForLegacyDeployments(): Promise<number> {
-  const result = await pool.query(
+export async function resolveAlertsForLegacyDeployments(): Promise<{
+  deploymentsUpdated: number;
+  alertsResolved: number;
+}> {
+  // Calculate one year ago
+  const oneYearAgo = new Date();
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+  // First, update deployments that should now be considered legacy
+  const deploymentResult = await pool.query(
+    `UPDATE deployments
+     SET 
+       has_four_eyes = true,
+       four_eyes_status = 'legacy'
+     WHERE created_at < $1
+       AND commit_sha IS NULL
+       AND four_eyes_status != 'legacy'
+     RETURNING id`,
+    [oneYearAgo]
+  );
+
+  // Then resolve any alerts for these legacy deployments
+  const alertResult = await pool.query(
     `UPDATE repository_alerts ra
      SET 
        resolved = true,
        resolved_at = CURRENT_TIMESTAMP,
        resolved_by = 'system',
-       resolution_note = 'Legacy deployment (før 2025-01-01, mangler commit SHA) - automatisk løst'
+       resolution_note = 'Legacy deployment (eldre enn 1 år, mangler commit SHA) - automatisk løst'
      FROM deployments d
      WHERE ra.deployment_id = d.id
        AND ra.resolved = false
-       AND d.created_at < '2025-01-01'
+       AND d.created_at < $1
        AND d.commit_sha IS NULL
-     RETURNING ra.id`
+     RETURNING ra.id`,
+    [oneYearAgo]
   );
-  return result.rowCount || 0;
+
+  return {
+    deploymentsUpdated: deploymentResult.rowCount || 0,
+    alertsResolved: alertResult.rowCount || 0,
+  };
 }

@@ -71,7 +71,7 @@ export async function action({ request }: Route.ActionArgs) {
     try {
       const result = await verifyDeploymentsFourEyes({
         monitored_app_id: monitoredAppId,
-        limit: 100, // Verify max 100 deployments at a time
+        limit: 1000, // Verify max 1000 deployments at a time
       });
 
       return {
@@ -94,9 +94,9 @@ export async function action({ request }: Route.ActionArgs) {
 
   if (intent === 'resolve-legacy-alerts') {
     try {
-      const resolvedCount = await resolveAlertsForLegacyDeployments();
+      const result = await resolveAlertsForLegacyDeployments();
       return {
-        success: `Løste ${resolvedCount} varsler for legacy deployments.`,
+        success: `Oppdatert ${result.deploymentsUpdated} deployments til legacy status og løst ${result.alertsResolved} varsler.`,
         error: null,
       };
     } catch (error) {
@@ -138,8 +138,13 @@ export default function Apps({ loaderData, actionData }: Route.ComponentProps) {
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <Form method="post">
             <input type="hidden" name="intent" value="resolve-legacy-alerts" />
-            <Button type="submit" variant="secondary" size="small">
-              Løs legacy alerts
+            <Button
+              type="submit"
+              variant="secondary"
+              size="small"
+              title="Oppdater deployments eldre enn 1 år uten commit SHA til legacy status"
+            >
+              Recheck legacy
             </Button>
           </Form>
           <Button as={Link} to="/apps/discover">
@@ -209,9 +214,20 @@ export default function Apps({ loaderData, actionData }: Route.ComponentProps) {
                     </Table.DataCell>
                     <Table.DataCell>{app.environment_name}</Table.DataCell>
                     <Table.DataCell>
-                      <Tag variant={statusVariant} size="small">
-                        {statusIcon} {statusText}
-                      </Tag>
+                      {app.stats.without_four_eyes > 0 ? (
+                        <Link
+                          to={`/deployments?app=${app.id}&only_missing=true`}
+                          style={{ textDecoration: 'none' }}
+                        >
+                          <Tag variant={statusVariant} size="small">
+                            {statusIcon} {statusText}
+                          </Tag>
+                        </Link>
+                      ) : (
+                        <Tag variant={statusVariant} size="small">
+                          {statusIcon} {statusText}
+                        </Tag>
+                      )}
                     </Table.DataCell>
                     <Table.DataCell>
                       {app.active_repo ? (

@@ -7,10 +7,12 @@ import {
   XMarkOctagonIcon,
 } from '@navikt/aksel-icons';
 import {
+  Accordion,
   Alert,
   BodyShort,
   Box,
   Button,
+  CopyButton,
   Detail,
   Heading,
   Tag,
@@ -18,7 +20,7 @@ import {
   TextField,
 } from '@navikt/ds-react';
 import { useState } from 'react';
-import { Form } from 'react-router';
+import { Form, Link } from 'react-router';
 import { createComment, deleteComment, getCommentsByDeploymentId } from '~/db/comments.server';
 import { getDeploymentById } from '~/db/deployments.server';
 import { verifyDeploymentFourEyes } from '~/lib/sync.server';
@@ -139,10 +141,10 @@ function getFourEyesStatus(deployment: any): {
       };
     case 'legacy':
       return {
-        text: 'Legacy (før 2025)',
+        text: 'Legacy (>1 år)',
         variant: 'success',
         description:
-          'Dette deploymentet er for en legacy deployment og mangler informasjon om commit. Deploymentet er ignorert.',
+          'Dette deploymentet er eldre enn 1 år og mangler informasjon om commit. Deploymentet er ignorert.',
       };
     case 'direct_push':
       return {
@@ -216,20 +218,23 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
             </Heading>
             <BodyShort>{status.description}</BodyShort>
           </div>
-          {deployment.commit_sha && (
-            <Form method="post">
-              <input type="hidden" name="intent" value="verify_four_eyes" />
-              <Button
-                type="submit"
-                size="small"
-                variant="secondary"
-                icon={<ArrowsCirclepathIcon aria-hidden />}
-                title="Verifiser four-eyes status mot GitHub"
-              >
-                Verifiser nå
-              </Button>
-            </Form>
-          )}
+          {deployment.commit_sha &&
+            ['pending', 'error', 'missing', 'direct_push'].includes(
+              deployment.four_eyes_status
+            ) && (
+              <Form method="post">
+                <input type="hidden" name="intent" value="verify_four_eyes" />
+                <Button
+                  type="submit"
+                  size="small"
+                  variant="secondary"
+                  icon={<ArrowsCirclepathIcon aria-hidden />}
+                  title="Verifiser four-eyes status mot GitHub"
+                >
+                  Verifiser nå
+                </Button>
+              </Form>
+            )}
         </div>
       </Alert>
 
@@ -237,7 +242,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
         <div>
           <Detail>Applikasjon</Detail>
           <BodyShort>
-            <strong>{deployment.app_name}</strong>
+            <Link to={`/apps/${deployment.monitored_app_id}`}>{deployment.app_name}</Link>
           </BodyShort>
         </div>
 
@@ -321,9 +326,16 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
 
         <div>
           <Detail>Nais Deployment ID</Detail>
-          <BodyShort>
-            <code className={styles.codeSmall}>{deployment.nais_deployment_id}</code>
-          </BodyShort>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <BodyShort>
+              <code className={styles.codeSmall}>{deployment.nais_deployment_id}</code>
+            </BodyShort>
+            <CopyButton
+              copyText={deployment.nais_deployment_id}
+              size="small"
+              title="Kopier deployment ID"
+            />
+          </div>
         </div>
       </div>
 
@@ -361,9 +373,17 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
             {deployment.github_pr_data.body && (
               <div style={{ gridColumn: '1 / -1' }}>
                 <Detail>Beskrivelse</Detail>
-                <BodyShort style={{ whiteSpace: 'pre-wrap' }}>
-                  {deployment.github_pr_data.body}
-                </BodyShort>
+                <Box
+                  background="neutral-soft"
+                  padding="space-16"
+                  borderRadius="12"
+                  className={styles.marginTop2}
+                >
+                  <BodyShort style={{ whiteSpace: 'pre-wrap' }}>
+                    {/* biome-ignore lint/security/noDangerouslySetInnerHtml: GitHub PR body contains safe markdown HTML */}
+                    <div dangerouslySetInnerHTML={{ __html: deployment.github_pr_data.body }} />
+                  </BodyShort>
+                </Box>
               </div>
             )}
 
@@ -541,84 +561,172 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           {/* GitHub Checks */}
           {deployment.github_pr_data.checks && deployment.github_pr_data.checks.length > 0 && (
             <div style={{ marginTop: '1rem' }}>
-              <Detail>GitHub Checks ({deployment.github_pr_data.checks.length})</Detail>
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '0.5rem',
-                  marginTop: '0.5rem',
-                }}
-              >
-                {deployment.github_pr_data.checks.map((check) => {
-                  const isSuccess = check.conclusion === 'success';
-                  const isFailure =
-                    check.conclusion === 'failure' ||
-                    check.conclusion === 'timed_out' ||
-                    check.conclusion === 'action_required';
-                  const isSkipped =
-                    check.conclusion === 'skipped' ||
-                    check.conclusion === 'neutral' ||
-                    check.conclusion === 'cancelled';
-                  const isInProgress = check.status === 'in_progress' || check.status === 'queued';
-
-                  return (
-                    <div
-                      key={check.html_url}
-                      style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+              <Accordion>
+                <Accordion.Item>
+                  <Accordion.Header>
+                    <Detail>GitHub Checks ({deployment.github_pr_data.checks.length})</Detail>
+                  </Accordion.Header>
+                  <Accordion.Content>
+                    <Box
+                      background="neutral-soft"
+                      padding="space-16"
+                      borderRadius="12"
+                      className={styles.marginTop2}
                     >
-                      {isSuccess && (
-                        <CheckmarkCircleIcon
-                          style={{ color: 'var(--a-icon-success)', fontSize: '1.2rem' }}
-                        />
-                      )}
-                      {isFailure && (
-                        <XMarkOctagonIcon
-                          style={{ color: 'var(--a-icon-danger)', fontSize: '1.2rem' }}
-                        />
-                      )}
-                      {isSkipped && (
-                        <MinusCircleIcon
-                          style={{ color: 'var(--a-icon-subtle)', fontSize: '1.2rem' }}
-                        />
-                      )}
-                      {isInProgress && <span style={{ fontSize: '1.2rem' }}>⏳</span>}
-
-                      {check.html_url ? (
-                        <a href={check.html_url} target="_blank" rel="noopener noreferrer">
-                          {check.name}
-                        </a>
-                      ) : (
-                        <span>{check.name}</span>
-                      )}
-
-                      <Tag
-                        variant={
-                          isSuccess
-                            ? 'success'
-                            : isFailure
-                              ? 'error'
-                              : isSkipped
-                                ? 'neutral'
-                                : 'warning'
-                        }
-                        size="small"
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.5rem',
+                          marginTop: '0.5rem',
+                        }}
                       >
-                        {check.conclusion || check.status}
-                      </Tag>
+                        {deployment.github_pr_data.checks.map((check) => {
+                          const isSuccess = check.conclusion === 'success';
+                          const isFailure =
+                            check.conclusion === 'failure' ||
+                            check.conclusion === 'timed_out' ||
+                            check.conclusion === 'action_required';
+                          const isSkipped =
+                            check.conclusion === 'skipped' ||
+                            check.conclusion === 'neutral' ||
+                            check.conclusion === 'cancelled';
+                          const isInProgress =
+                            check.status === 'in_progress' || check.status === 'queued';
 
-                      {check.completed_at && (
-                        <span className={styles.textSubtle}>
-                          {new Date(check.completed_at).toLocaleString('no-NO', {
-                            dateStyle: 'short',
-                            timeStyle: 'short',
-                          })}
-                        </span>
+                          return (
+                            <div
+                              key={check.html_url}
+                              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                            >
+                              {isSuccess && (
+                                <CheckmarkCircleIcon
+                                  style={{ color: 'var(--a-icon-success)', fontSize: '1.2rem' }}
+                                />
+                              )}
+                              {isFailure && (
+                                <XMarkOctagonIcon
+                                  style={{ color: 'var(--a-icon-danger)', fontSize: '1.2rem' }}
+                                />
+                              )}
+                              {isSkipped && (
+                                <MinusCircleIcon
+                                  style={{ color: 'var(--a-icon-subtle)', fontSize: '1.2rem' }}
+                                />
+                              )}
+                              {isInProgress && <span style={{ fontSize: '1.2rem' }}>⏳</span>}
+
+                              {check.html_url ? (
+                                <a href={check.html_url} target="_blank" rel="noopener noreferrer">
+                                  {check.name}
+                                </a>
+                              ) : (
+                                <span>{check.name}</span>
+                              )}
+
+                              <Tag
+                                variant={
+                                  isSuccess
+                                    ? 'success'
+                                    : isFailure
+                                      ? 'error'
+                                      : isSkipped
+                                        ? 'neutral'
+                                        : 'warning'
+                                }
+                                size="small"
+                              >
+                                {check.conclusion || check.status}
+                              </Tag>
+
+                              {check.completed_at && (
+                                <span className={styles.textSubtle}>
+                                  {new Date(check.completed_at).toLocaleString('no-NO', {
+                                    dateStyle: 'short',
+                                    timeStyle: 'short',
+                                  })}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </Box>
+                  </Accordion.Content>
+                </Accordion.Item>
+              </Accordion>
+            </div>
+          )}
+
+          {/* PR Commits */}
+          {deployment.github_pr_data?.commits && deployment.github_pr_data.commits.length > 0 && (
+            <div>
+              <Heading size="small" spacing>
+                Commits i PR ({deployment.github_pr_data.commits.length})
+              </Heading>
+              <Box
+                background="neutral-soft"
+                padding="space-16"
+                borderRadius="12"
+                className={styles.marginTop2}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {deployment.github_pr_data.commits.map((commit) => (
+                    <div
+                      key={commit.sha}
+                      style={{
+                        display: 'flex',
+                        gap: '0.75rem',
+                        padding: '0.5rem',
+                        background: 'var(--a-surface-default)',
+                        borderRadius: '0.5rem',
+                      }}
+                    >
+                      {commit.author.avatar_url && (
+                        <img
+                          src={commit.author.avatar_url}
+                          alt={commit.author.username}
+                          style={{
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '50%',
+                            flexShrink: 0,
+                          }}
+                        />
                       )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
+                          style={{
+                            display: 'flex',
+                            gap: '0.5rem',
+                            alignItems: 'baseline',
+                            flexWrap: 'wrap',
+                          }}
+                        >
+                          <a
+                            href={commit.html_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}
+                          >
+                            {commit.sha.substring(0, 7)}
+                          </a>
+                          <span className={styles.textSubtle}>{commit.author.username}</span>
+                          <span className={styles.textSubtle}>
+                            {new Date(commit.date).toLocaleString('no-NO', {
+                              dateStyle: 'short',
+                              timeStyle: 'short',
+                            })}
+                          </span>
+                        </div>
+                        <BodyShort style={{ marginTop: '0.25rem' }}>
+                          {commit.message.split('\n')[0]}
+                        </BodyShort>
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
+                  ))}
+                </div>
+              </Box>
             </div>
           )}
         </Box>

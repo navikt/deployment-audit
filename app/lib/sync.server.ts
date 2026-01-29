@@ -105,9 +105,10 @@ export async function syncDeploymentsFromNais(
     await createDeployment(deploymentParams);
     newCount++;
 
-    // Skip repository checks for legacy deployments (before 2025-01-01 without commit SHA)
-    const isLegacyDeployment =
-      new Date(naisDep.createdAt) < new Date('2025-01-01') && !naisDep.commitSha;
+    // Skip repository checks for legacy deployments (older than 1 year without commit SHA)
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    const isLegacyDeployment = new Date(naisDep.createdAt) < oneYearAgo && !naisDep.commitSha;
     if (isLegacyDeployment) {
       console.log(`⏭️  Skipping repository checks for legacy deployment: ${naisDep.id}`);
       continue;
@@ -223,7 +224,7 @@ export async function verifyDeploymentsFourEyes(
   failed: number;
   skipped: number;
 }> {
-  console.log('🔍 Starting GitHub verification for deployments');
+  console.log(`🔍 Starting GitHub verification for deployments (limit: ${filters?.limit})`);
 
   // Get deployments that need verification
   const deploymentsToVerify = await getAllDeployments({
@@ -232,19 +233,20 @@ export async function verifyDeploymentsFourEyes(
     // Skip 'approved_pr' and 'direct_push' statuses
   });
 
-  // Filter to only unverified or pending
-  const needsVerification = deploymentsToVerify.filter(
-    (d) =>
-      d.four_eyes_status === 'pending' ||
-      d.four_eyes_status === 'missing' ||
-      d.four_eyes_status === 'error'
-  );
+  // Filter to deployments without four-eyes approval
+  const needsVerification = deploymentsToVerify.filter((d) => !d.has_four_eyes);
+
+  // Prioritize: 1) pending (never verified), 2) others (failed verification or direct push)
+  const prioritized = [
+    ...needsVerification.filter((d) => d.four_eyes_status === 'pending'),
+    ...needsVerification.filter((d) => d.four_eyes_status !== 'pending'),
+  ];
 
   // Apply limit if specified
-  const toVerify = filters?.limit ? needsVerification.slice(0, filters.limit) : needsVerification;
+  const toVerify = filters?.limit ? prioritized.slice(0, filters.limit) : prioritized;
 
   console.log(
-    `📋 Found ${toVerify.length} deployments needing verification (out of ${deploymentsToVerify.length} total)`
+    `📋 Found ${toVerify.length} deployments needing verification (${prioritized.filter((d) => d.four_eyes_status === 'pending').length} pending, ${prioritized.filter((d) => d.four_eyes_status !== 'pending').length} failed)`
   );
 
   let verified = 0;
@@ -319,12 +321,16 @@ export async function verifyDeploymentFourEyes(
   const [owner, repo] = repoParts;
 
   try {
+    console.log(`🔍 [Deployment ${deploymentId}] Checking commit ${commitSha} in ${repository}`);
+
     // Check if commit is part of a PR
     const prInfo = await getPullRequestForCommit(owner, repo, commitSha);
 
     if (!prInfo) {
       // Direct push to main
-      console.log(`📌 Direct push detected for deployment ${deploymentId}`);
+      console.log(
+        `📌 [Deployment ${deploymentId}] No PR found for commit ${commitSha} - marking as direct push`
+      );
       await updateDeploymentFourEyes(deploymentId, {
         hasFourEyes: false,
         fourEyesStatus: 'direct_push',
@@ -334,11 +340,16 @@ export async function verifyDeploymentFourEyes(
       return true;
     }
 
+    console.log(`🔗 [Deployment ${deploymentId}] Found PR #${prInfo.number}: ${prInfo.title}`);
+    console.log(`   PR URL: ${prInfo.html_url}`);
+    console.log(`   PR merged_at: ${prInfo.merged_at}`);
+    console.log(`   PR state: ${prInfo.state}`);
+
     // Check if PR has approval after last commit
     const fourEyesResult = await verifyPullRequestFourEyes(owner, repo, prInfo.number);
 
     console.log(
-      `${fourEyesResult.hasFourEyes ? '✅' : '❌'} PR #${prInfo.number} ${fourEyesResult.hasFourEyes ? 'has' : 'lacks'} approval after last commit`
+      `${fourEyesResult.hasFourEyes ? '✅' : '❌'} [Deployment ${deploymentId}] PR #${prInfo.number} ${fourEyesResult.hasFourEyes ? 'has' : 'lacks'} approval: ${fourEyesResult.reason}`
     );
 
     // Fetch detailed PR information
@@ -358,8 +369,8 @@ export async function verifyDeploymentFourEyes(
 
     // Check if it's a rate limit error
     if (error instanceof Error && error.message.includes('rate limit')) {
-      console.warn('⚠️  GitHub rate limit reached, stopping verification');
-      throw error; // Re-throw to stop batch processing
+      console.warn('⚠️  GitHub rate limit reached, stopping verification without updating status');
+      throw error; // Re-throw to stop batch processing, but don't update deployment status
     }
 
     // On other errors, mark as error status
@@ -404,7 +415,7 @@ export async function syncAndVerifyDeployments(
 
   const verifyResult = await verifyDeploymentsFourEyes({
     monitored_app_id: monitoredApp.id,
-    limit: 50, // Limit to avoid rate limits
+    limit: 1000, // Limit to avoid rate limits
   });
 
   console.log(`✅ Full sync complete`);
