@@ -47,7 +47,7 @@ export async function loader({ params }: Route.LoaderArgs) {
 
   const comments = await getCommentsByDeploymentId(deploymentId);
   const manualApproval = await getManualApproval(deploymentId);
-  
+
   // Get previous and next deployments for navigation
   const previousDeployment = await getPreviousDeploymentForNav(
     deploymentId,
@@ -184,11 +184,32 @@ function getFourEyesStatus(deployment: any): {
   }
 
   switch (deployment.four_eyes_status) {
+    case 'approved':
     case 'approved_pr':
       return {
         text: 'Four-eyes OK',
         variant: 'success',
         description: 'Dette deploymentet har blitt godkjent via en approved PR.',
+      };
+    case 'baseline':
+      return {
+        text: 'Baseline',
+        variant: 'success',
+        description:
+          'Første deployment for dette miljøet. Brukes som utgangspunkt for verifisering.',
+      };
+    case 'no_changes':
+      return {
+        text: 'Ingen endringer',
+        variant: 'success',
+        description: 'Samme commit som forrige deployment.',
+      };
+    case 'unverified_commits':
+      return {
+        text: 'Uverifiserte commits',
+        variant: 'error',
+        description:
+          'Det finnes commits mellom forrige og dette deploymentet som ikke har godkjent PR. Se detaljer under.',
       };
     case 'approved_pr_with_unreviewed':
       return {
@@ -223,11 +244,17 @@ function getFourEyesStatus(deployment: any): {
         variant: 'error',
         description: 'Det oppstod en feil ved sjekk av GitHub.',
       };
+    case 'pending':
+      return {
+        text: 'Venter på verifisering',
+        variant: 'info',
+        description: 'Deploymentet er ikke verifisert ennå.',
+      };
     default:
       return {
         text: 'Ukjent status',
         variant: 'info',
-        description: 'Status for four-eyes kunne ikke fastslås.',
+        description: `Status for four-eyes kunne ikke fastslås (${deployment.four_eyes_status}).`,
       };
   }
 }
@@ -280,7 +307,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
         ) : (
           <div />
         )}
-        
+
         <Button
           as={Link}
           to={`/applications/${deployment.team_slug}/${deployment.environment_name}/${deployment.app_name}`}
@@ -323,7 +350,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
             <BodyShort>{status.description}</BodyShort>
           </div>
           {deployment.commit_sha &&
-            ['pending', 'error', 'missing', 'direct_push'].includes(
+            ['pending', 'error', 'missing', 'direct_push', 'unverified_commits'].includes(
               deployment.four_eyes_status
             ) && (
               <Form method="post">
@@ -341,6 +368,40 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
             )}
         </div>
       </Alert>
+
+      {/* Unverified commits section */}
+      {deployment.unverified_commits && deployment.unverified_commits.length > 0 && (
+        <Alert variant="error">
+          <Heading size="small" spacing>
+            Uverifiserte commits ({deployment.unverified_commits.length})
+          </Heading>
+          <BodyShort spacing>
+            Følgende commits mellom forrige og dette deploymentet har ikke godkjent PR:
+          </BodyShort>
+          <ul style={{ margin: 0, paddingLeft: '1.5rem' }}>
+            {deployment.unverified_commits.map((commit: any) => (
+              <li key={commit.sha} style={{ marginBottom: '0.5rem' }}>
+                <a
+                  href={commit.html_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={styles.codeMedium}
+                >
+                  {commit.sha.substring(0, 7)}
+                </a>{' '}
+                - {commit.message}
+                <br />
+                <Detail>
+                  av {commit.author} •{' '}
+                  {commit.pr_number
+                    ? `PR #${commit.pr_number} ikke godkjent`
+                    : 'Ingen PR (direkte push)'}
+                </Detail>
+              </li>
+            ))}
+          </ul>
+        </Alert>
+      )}
 
       <div className={styles.detailsGrid}>
         <div>

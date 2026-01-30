@@ -1,15 +1,30 @@
 import { GraphQLClient } from 'graphql-request';
 
 let client: GraphQLClient | null = null;
+let requestCount = 0;
+
+export function getNaisRequestCount(): number {
+  return requestCount;
+}
+
+export function resetNaisRequestCount(): void {
+  requestCount = 0;
+}
 
 export function getNaisClient(): GraphQLClient {
   if (!client) {
     const baseUrl = process.env.NAIS_GRAPHQL_URL || 'http://localhost:4242';
     // Ensure we're pointing to the GraphQL endpoint, not the playground
     const url = baseUrl.endsWith('/graphql') ? baseUrl : `${baseUrl}/graphql`;
+
     client = new GraphQLClient(url, {
       headers: {
         'Content-Type': 'application/json',
+      },
+      requestMiddleware: (request) => {
+        requestCount++;
+        console.log(`🌐 [Nais #${requestCount}] POST ${url}`);
+        return request;
       },
     });
   }

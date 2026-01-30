@@ -2,6 +2,15 @@ import { Octokit } from '@octokit/rest';
 import type { GitHubPRData } from '~/db/deployments.server';
 
 let octokit: Octokit | null = null;
+let requestCount = 0;
+
+export function getGitHubRequestCount(): number {
+  return requestCount;
+}
+
+export function resetGitHubRequestCount(): void {
+  requestCount = 0;
+}
 
 export function getGitHubClient(): Octokit {
   if (!octokit) {
@@ -13,6 +22,29 @@ export function getGitHubClient(): Octokit {
 
     octokit = new Octokit({
       auth: token,
+      log: {
+        debug: () => {},
+        info: () => {},
+        warn: console.warn,
+        error: console.error,
+      },
+    });
+
+    // Add request hook for logging
+    octokit.hook.before('request', (options) => {
+      requestCount++;
+      const method = options.method || 'GET';
+      const url = options.url?.replace('https://api.github.com', '') || options.baseUrl;
+      console.log(`🌐 [GitHub #${requestCount}] ${method} ${url}`);
+    });
+
+    // Add response hook for rate limit info
+    octokit.hook.after('request', (response, options) => {
+      const remaining = response.headers['x-ratelimit-remaining'];
+      const limit = response.headers['x-ratelimit-limit'];
+      if (remaining && parseInt(remaining, 10) < 100) {
+        console.warn(`⚠️  GitHub rate limit: ${remaining}/${limit} remaining`);
+      }
     });
   }
 
@@ -30,7 +62,8 @@ export interface PullRequest {
 export async function getPullRequestForCommit(
   owner: string,
   repo: string,
-  sha: string
+  sha: string,
+  verifyCommitIsInPR: boolean = false
 ): Promise<PullRequest | null> {
   const client = getGitHubClient();
 
@@ -57,7 +90,56 @@ export async function getPullRequestForCommit(
       );
     });
 
-    // Return the first (most relevant) PR
+    // When verifyCommitIsInPR is true, we need to check that the commit is actually
+    // part of the PR's original commits, not just reachable via merge from main.
+    // This is important to detect commits pushed directly to main that get
+    // "smuggled" into a PR when the PR merges main into its branch.
+    if (verifyCommitIsInPR) {
+      for (const pr of response.data) {
+        // Only check merged PRs
+        if (!pr.merged_at) continue;
+
+        // Fetch the PR's commits
+        try {
+          const prCommitsResponse = await client.pulls.listCommits({
+            owner,
+            repo,
+            pull_number: pr.number,
+            per_page: 100,
+          });
+
+          // Check if our commit is in the PR's commit list
+          const isInPR = prCommitsResponse.data.some((c) => c.sha === sha);
+
+          if (isInPR) {
+            console.log(
+              `✅ Commit ${sha.substring(0, 7)} is an original commit in PR #${pr.number}`
+            );
+            return {
+              number: pr.number,
+              title: pr.title,
+              html_url: pr.html_url,
+              merged_at: pr.merged_at,
+              state: pr.state,
+            };
+          } else {
+            console.log(
+              `⚠️  Commit ${sha.substring(0, 7)} is NOT in PR #${pr.number}'s original commits (likely merged from main)`
+            );
+          }
+        } catch (err) {
+          console.warn(`Could not fetch commits for PR #${pr.number}:`, err);
+        }
+      }
+
+      // None of the associated PRs contain this commit as an original commit
+      console.log(
+        `❌ Commit ${sha.substring(0, 7)} was not an original commit in any associated PR`
+      );
+      return null;
+    }
+
+    // Return the first (most relevant) PR (default behavior for backward compatibility)
     const pr = response.data[0];
     console.log(`✅ Using PR #${pr.number} for verification`);
 
@@ -581,8 +663,10 @@ export async function getCommitsBetween(
   message: string;
   author: string;
   date: string;
+  committer_date: string;
   html_url: string;
   parents_count: number;
+  parent_shas: string[];
 }> | null> {
   try {
     const client = getGitHubClient();
@@ -603,15 +687,20 @@ export async function getCommitsBetween(
     console.log(`      - Ahead by: ${response.data.ahead_by} commits`);
     console.log(`      - Behind by: ${response.data.behind_by} commits`);
     console.log(`      - Total commits: ${response.data.total_commits}`);
-    console.log(`      - Commits array length: ${response.data.commits.length}`);
 
-    const commits = response.data.commits.map((commit) => ({
+    // Handle case where commits array might be undefined or empty
+    const rawCommits = response.data.commits || [];
+    console.log(`      - Commits array length: ${rawCommits.length}`);
+
+    const commits = rawCommits.map((commit) => ({
       sha: commit.sha,
       message: commit.commit.message,
       author: commit.author?.login || commit.commit.author?.name || 'unknown',
       date: commit.commit.author?.date || '',
+      committer_date: commit.commit.committer?.date || commit.commit.author?.date || '',
       html_url: commit.html_url,
       parents_count: commit.parents?.length || 0,
+      parent_shas: commit.parents?.map((p) => p.sha) || [],
     }));
 
     console.log(
@@ -708,14 +797,15 @@ export async function findUnreviewedCommitsInMerge(
 
     // Check each commit that's not in the PR
     for (const commit of commitsNotInPR) {
-      // Check if this commit has an associated PR
-      const commitPR = await getPullRequestForCommit(owner, repo, commit.sha);
+      // Check if this commit has an associated PR where it's an original commit
+      // Using verifyCommitIsInPR=true to detect commits pushed directly to main
+      const commitPR = await getPullRequestForCommit(owner, repo, commit.sha, true);
 
       if (!commitPR) {
         console.log(
           `   🔍 Commit ${commit.sha.substring(0, 7)}: ${commit.message.split('\n')[0].substring(0, 60)}`
         );
-        console.log(`      ❌ No PR found - marking as unreviewed`);
+        console.log(`      ❌ No PR found (or not an original PR commit) - marking as unreviewed`);
         unreviewedCommits.push({
           ...commit,
           reason: 'Direct push to main (no PR)',
@@ -734,7 +824,7 @@ export async function findUnreviewedCommitsInMerge(
       // Check cache first
       let prApproval = prApprovalCache.get(commitPR.number);
       const isFirstCheckOfThisPR = !prApproval;
-      
+
       if (isFirstCheckOfThisPR) {
         // First time seeing this PR - log and check it
         console.log(
@@ -769,7 +859,9 @@ export async function findUnreviewedCommitsInMerge(
     if (cachedPRs.length > 0) {
       console.log(`   💾 Used cached results for ${cachedPRs.length} PR(s):`);
       for (const [prNumber, count] of cachedPRs) {
-        console.log(`      PR #${prNumber}: ${count} commits (checked once, cached ${count - 1} times)`);
+        console.log(
+          `      PR #${prNumber}: ${count} commits (checked once, cached ${count - 1} times)`
+        );
       }
     }
 

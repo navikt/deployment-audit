@@ -50,8 +50,15 @@ function getFourEyesLabel(deployment: DeploymentWithApp): {
   }
 
   switch (deployment.four_eyes_status) {
+    case 'approved':
     case 'approved_pr':
       return { text: 'Godkjent PR', variant: 'success' };
+    case 'baseline':
+      return { text: 'Baseline', variant: 'success' };
+    case 'no_changes':
+      return { text: 'Ingen endringer', variant: 'success' };
+    case 'unverified_commits':
+      return { text: 'Uverifiserte commits', variant: 'error' };
     case 'approved_pr_with_unreviewed':
       return { text: 'Ureviewed i merge', variant: 'error' };
     case 'legacy':
@@ -62,6 +69,8 @@ function getFourEyesLabel(deployment: DeploymentWithApp): {
       return { text: 'Mangler godkjenning', variant: 'error' };
     case 'error':
       return { text: 'Feil ved sjekk', variant: 'error' };
+    case 'pending':
+      return { text: 'Venter', variant: 'info' };
     default:
       return { text: 'Ukjent status', variant: 'info' };
   }

@@ -336,6 +336,7 @@ export async function updateDeploymentFourEyes(
 
 /**
  * Get the deployment that happened before this one for the same repo/environment
+ * Uses created_at for ordering (not id, which isn't guaranteed chronological)
  */
 export async function getPreviousDeployment(
   currentDeploymentId: number,
@@ -344,18 +345,20 @@ export async function getPreviousDeployment(
   environmentName: string
 ): Promise<Deployment | null> {
   const result = await pool.query(
-    `SELECT d.* FROM deployments d
-     JOIN monitored_applications ma ON d.monitored_app_id = ma.id
-     WHERE d.detected_github_owner = $1
-       AND d.detected_github_repo_name = $2
+    `SELECT prev_dep.* FROM deployments prev_dep
+     CROSS JOIN deployments curr_dep
+     JOIN monitored_applications ma ON prev_dep.monitored_app_id = ma.id
+     WHERE prev_dep.detected_github_owner = $1
+       AND prev_dep.detected_github_repo_name = $2
        AND ma.environment_name = $3
-       AND d.id < $4
-       AND d.commit_sha IS NOT NULL
-     ORDER BY d.created_at DESC
+       AND curr_dep.id = $4
+       AND prev_dep.created_at < curr_dep.created_at
+       AND prev_dep.commit_sha IS NOT NULL
+     ORDER BY prev_dep.created_at DESC
      LIMIT 1`,
     [repoOwner, repoName, environmentName, currentDeploymentId]
   );
-  
+
   return result.rows[0] || null;
 }
 
@@ -377,7 +380,7 @@ export async function getNextDeployment(
      LIMIT 1`,
     [monitoredAppId, currentDeploymentId]
   );
-  
+
   return result.rows[0] || null;
 }
 
@@ -399,7 +402,7 @@ export async function getPreviousDeploymentForNav(
      LIMIT 1`,
     [monitoredAppId, currentDeploymentId]
   );
-  
+
   return result.rows[0] || null;
 }
 

@@ -5,14 +5,22 @@ import {
   upsertApplicationRepository,
 } from '~/db/application-repositories.server';
 import {
+  type Commit,
+  getCommit,
+  hasCommitsCached,
+  type UpsertCommitParams,
+  updateCommitPrVerification,
+  upsertCommits,
+} from '~/db/commits.server';
+import {
   type CreateDeploymentParams,
   createDeployment,
   type DeploymentFilters,
   getAllDeployments,
   getDeploymentByNaisId,
   getPreviousDeployment,
-  updateDeploymentFourEyes,
   type UnverifiedCommit,
+  updateDeploymentFourEyes,
 } from '~/db/deployments.server';
 import { getMonitoredApplication } from '~/db/monitored-applications.server';
 import {
@@ -328,19 +336,23 @@ export async function verifyDeploymentFourEyes(
   const [owner, repo] = repoParts;
 
   try {
-    console.log(`🔍 [Deployment ${deploymentId}] Verifying commits up to ${commitSha.substring(0, 7)} in ${repository}`);
+    console.log(
+      `🔍 [Deployment ${deploymentId}] Verifying commits up to ${commitSha.substring(0, 7)} in ${repository}`
+    );
 
     // Step 1: Get PR info for the deployed commit itself (for UI display)
     const deployedCommitPr = await getPullRequestForCommit(owner, repo, commitSha);
     let deployedPrNumber: number | null = null;
     let deployedPrUrl: string | null = null;
     let deployedPrData: any = null;
-    
+
     if (deployedCommitPr) {
       deployedPrNumber = deployedCommitPr.number;
       deployedPrUrl = deployedCommitPr.html_url;
-      console.log(`📎 [Deployment ${deploymentId}] Deployed commit is from PR #${deployedPrNumber}`);
-      
+      console.log(
+        `📎 [Deployment ${deploymentId}] Deployed commit is from PR #${deployedPrNumber}`
+      );
+
       // Fetch detailed PR data (reviews, commits, etc.)
       deployedPrData = await getDetailedPullRequestInfo(owner, repo, deployedPrNumber);
     } else {
@@ -356,7 +368,9 @@ export async function verifyDeploymentFourEyes(
     );
 
     if (!previousDeployment) {
-      console.log(`📍 [Deployment ${deploymentId}] First deployment for ${repository}/${environmentName} - marking as baseline`);
+      console.log(
+        `📍 [Deployment ${deploymentId}] First deployment for ${repository}/${environmentName} - marking as baseline`
+      );
       await updateDeploymentFourEyes(deploymentId, {
         hasFourEyes: true,
         fourEyesStatus: 'baseline',
@@ -367,9 +381,14 @@ export async function verifyDeploymentFourEyes(
       return true;
     }
 
-    console.log(`📍 [Deployment ${deploymentId}] Previous deployment: ${previousDeployment.commit_sha?.substring(0, 7)} (ID: ${previousDeployment.id})`);
+    console.log(
+      `📍 [Deployment ${deploymentId}] Previous deployment: ${previousDeployment.commit_sha?.substring(0, 7)} (ID: ${previousDeployment.id})`
+    );
 
     // Step 3: Get all commits between previous and current deployment
+    // First check if we have them cached
+    const hasCached = await hasCommitsCached(owner, repo, commitSha);
+
     const commitsBetween = await getCommitsBetween(
       owner,
       repo,
@@ -389,7 +408,30 @@ export async function verifyDeploymentFourEyes(
       return false;
     }
 
-    console.log(`📊 [Deployment ${deploymentId}] Found ${commitsBetween.length} commit(s) between deployments`);
+    console.log(
+      `📊 [Deployment ${deploymentId}] Found ${commitsBetween.length} commit(s) between deployments`
+    );
+
+    // Cache commits to database for future fast lookups
+    if (commitsBetween.length > 0 && !hasCached) {
+      const commitsToCache: UpsertCommitParams[] = commitsBetween.map((c) => ({
+        sha: c.sha,
+        repoOwner: owner,
+        repoName: repo,
+        authorUsername: c.author,
+        authorDate: c.date ? new Date(c.date) : null,
+        committerDate: c.committer_date ? new Date(c.committer_date) : null,
+        message: c.message,
+        parentShas: c.parent_shas,
+        isMergeCommit: c.parents_count >= 2,
+        htmlUrl: c.html_url,
+      }));
+
+      await upsertCommits(commitsToCache);
+      console.log(
+        `💾 [Deployment ${deploymentId}] Cached ${commitsToCache.length} commit(s) to database`
+      );
+    }
 
     if (commitsBetween.length === 0) {
       console.log(`✅ [Deployment ${deploymentId}] No new commits - same as previous deployment`);
@@ -404,6 +446,7 @@ export async function verifyDeploymentFourEyes(
     }
 
     // Step 4: Verify each commit has four-eyes
+    // First check database cache, then GitHub API
     const unverifiedCommits: UnverifiedCommit[] = [];
     const prCache = new Map<number, { hasFourEyes: boolean; reason: string }>();
 
@@ -414,10 +457,43 @@ export async function verifyDeploymentFourEyes(
         continue;
       }
 
-      const prInfo = await getPullRequestForCommit(owner, repo, commit.sha);
+      // Check if we have cached verification in database
+      const cachedCommit = await getCommit(owner, repo, commit.sha);
+      if (cachedCommit && cachedCommit.pr_approved !== null) {
+        // We have a cached result
+        if (cachedCommit.pr_approved) {
+          console.log(
+            `   💾 Commit ${commit.sha.substring(0, 7)}: cached as approved (PR #${cachedCommit.original_pr_number})`
+          );
+          continue;
+        } else {
+          console.log(`   💾 Commit ${commit.sha.substring(0, 7)}: cached as NOT approved`);
+          unverifiedCommits.push({
+            sha: commit.sha,
+            message: commit.message.split('\n')[0],
+            author: commit.author,
+            date: commit.date,
+            html_url: commit.html_url,
+            pr_number: cachedCommit.original_pr_number,
+            reason: cachedCommit.pr_approval_reason || 'no_pr',
+          });
+          continue;
+        }
+      }
+
+      // No cached result - check GitHub API
+      // Use verifyCommitIsInPR=true to detect commits that were pushed to main
+      // and then "smuggled" into a PR when the PR merged main into its branch.
+      const prInfo = await getPullRequestForCommit(owner, repo, commit.sha, true);
 
       if (!prInfo) {
-        console.log(`   ❌ Commit ${commit.sha.substring(0, 7)}: No PR found (direct push)`);
+        console.log(
+          `   ❌ Commit ${commit.sha.substring(0, 7)}: No PR found or not an original PR commit (direct push to main)`
+        );
+
+        // Cache the result
+        await updateCommitPrVerification(owner, repo, commit.sha, null, null, null, false, 'no_pr');
+
         unverifiedCommits.push({
           sha: commit.sha,
           message: commit.message.split('\n')[0],
@@ -430,15 +506,31 @@ export async function verifyDeploymentFourEyes(
         continue;
       }
 
-      // Check cache first
+      // Check PR approval (use memory cache for this deployment)
       let approvalResult = prCache.get(prInfo.number);
       if (!approvalResult) {
         approvalResult = await verifyPullRequestFourEyes(owner, repo, prInfo.number);
         prCache.set(prInfo.number, approvalResult);
-        console.log(`   🔍 Commit ${commit.sha.substring(0, 7)}: PR #${prInfo.number} - ${approvalResult.hasFourEyes ? '✅ approved' : '❌ not approved'}`);
+        console.log(
+          `   🔍 Commit ${commit.sha.substring(0, 7)}: PR #${prInfo.number} - ${approvalResult.hasFourEyes ? '✅ approved' : '❌ not approved'}`
+        );
       } else {
-        console.log(`   💾 Commit ${commit.sha.substring(0, 7)}: PR #${prInfo.number} - cached result`);
+        console.log(
+          `   💾 Commit ${commit.sha.substring(0, 7)}: PR #${prInfo.number} - cached result`
+        );
       }
+
+      // Cache the result in database
+      await updateCommitPrVerification(
+        owner,
+        repo,
+        commit.sha,
+        prInfo.number,
+        prInfo.title,
+        prInfo.html_url,
+        approvalResult.hasFourEyes,
+        approvalResult.reason
+      );
 
       if (!approvalResult.hasFourEyes) {
         unverifiedCommits.push({
@@ -455,7 +547,9 @@ export async function verifyDeploymentFourEyes(
 
     // Step 5: Determine final status
     if (unverifiedCommits.length > 0) {
-      console.log(`❌ [Deployment ${deploymentId}] Found ${unverifiedCommits.length} unverified commit(s):`);
+      console.log(
+        `❌ [Deployment ${deploymentId}] Found ${unverifiedCommits.length} unverified commit(s):`
+      );
       unverifiedCommits.forEach((c) => {
         console.log(`      - ${c.sha.substring(0, 7)}: ${c.message.substring(0, 60)}`);
         console.log(`        Reason: ${c.reason}, PR: ${c.pr_number || 'none'}`);
@@ -470,7 +564,9 @@ export async function verifyDeploymentFourEyes(
         unverifiedCommits,
       });
     } else {
-      console.log(`✅ [Deployment ${deploymentId}] All ${commitsBetween.length} commit(s) verified`);
+      console.log(
+        `✅ [Deployment ${deploymentId}] All ${commitsBetween.length} commit(s) verified`
+      );
       await updateDeploymentFourEyes(deploymentId, {
         hasFourEyes: true,
         fourEyesStatus: 'approved',
