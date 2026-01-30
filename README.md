@@ -42,7 +42,7 @@ cp .env.example .env
 
 Fyll inn:
 ```env
-DATABASE_URL=postgresql://username:password@localhost:5432/nais_audit
+DATABASE_URL=postgresql://username:password@localhost:5432/pensjon_deployment_audit
 GITHUB_TOKEN=your_github_token
 NAIS_GRAPHQL_URL=http://localhost:4242/graphql
 ```
@@ -73,8 +73,8 @@ npm run dev
 Applikasjonen bruker distroless Node.js 24 image for produksjon:
 
 ```bash
-docker build -t nais-audit .
-docker run -e DATABASE_URL=... -e GITHUB_TOKEN=... -p 3000:3000 nais-audit
+docker build -t pensjon-deployment-audit .
+docker run -e DATABASE_URL=... -e GITHUB_TOKEN=... -p 3000:3000 pensjon-deployment-audit
 ```
 
 Database migrations kjøres automatisk ved oppstart.
