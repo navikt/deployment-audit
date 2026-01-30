@@ -1,5 +1,6 @@
 import { CheckmarkCircleIcon } from '@navikt/aksel-icons';
-import { Alert, BodyShort, Button, Heading, Loader, TextField } from '@navikt/ds-react';
+import { Alert, BodyShort, Button, Heading, ProgressBar, TextField } from '@navikt/ds-react';
+import { useEffect, useState } from 'react';
 import { Form, useNavigation } from 'react-router';
 import { getAllDeployments } from '../db/deployments.server';
 import { verifyDeploymentsFourEyes } from '../lib/sync.server';
@@ -77,6 +78,30 @@ export default function DeploymentsVerify({ loaderData, actionData }: Route.Comp
   const { appId, stats } = loaderData;
   const navigation = useNavigation();
   const isVerifying = navigation.state === 'submitting';
+
+  // Simulate progress based on typical verification time
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    if (!isVerifying) {
+      setProgress(0);
+      return;
+    }
+
+    // Estimate: ~1 second per deployment, progress updates every second
+    const formData = navigation.formData;
+    const limit = formData ? Number(formData.get('limit')) || 50 : 50;
+    const estimatedSeconds = limit * 1; // 1 second per deployment estimate
+
+    let elapsed = 0;
+    const interval = setInterval(() => {
+      elapsed += 1;
+      const percentage = Math.min((elapsed / estimatedSeconds) * 100, 95); // Cap at 95% until done
+      setProgress(percentage);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isVerifying, navigation.formData]);
 
   return (
     <div className={styles.pageContainer}>
@@ -180,10 +205,15 @@ export default function DeploymentsVerify({ loaderData, actionData }: Route.Comp
 
       {isVerifying && (
         <div className={styles.loadingCenter}>
-          <Loader size="2xlarge" title="Verifiserer deployments med GitHub..." />
-          <BodyShort className={styles.marginTop1}>
-            Dette kan ta litt tid. Ikke lukk vinduet.
-          </BodyShort>
+          <div style={{ width: '100%', maxWidth: '600px' }}>
+            <ProgressBar value={progress} size="medium" aria-label="Verifiserings-fremdrift" />
+            <BodyShort className={styles.marginTop1} textColor="subtle">
+              Verifiserer deployments... {Math.round(progress)}%
+            </BodyShort>
+            <BodyShort size="small" className={styles.marginTop05} textColor="subtle">
+              Dette kan ta litt tid. Ikke lukk vinduet.
+            </BodyShort>
+          </div>
         </div>
       )}
     </div>
