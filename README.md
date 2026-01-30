@@ -70,19 +70,14 @@ npm run dev
 
 ## 🐳 Docker
 
-### Standard Alpine image
+Applikasjonen bruker distroless Node.js 24 image for produksjon:
+
 ```bash
 docker build -t nais-audit .
 docker run -e DATABASE_URL=... -e GITHUB_TOKEN=... -p 3000:3000 nais-audit
 ```
 
-### Distroless image (anbefalt for produksjon)
-```bash
-docker build -f Dockerfile.distroless -t nais-audit:distroless .
-docker run -e DATABASE_URL=... -e GITHUB_TOKEN=... -p 3000:3000 nais-audit:distroless
-```
-
-Begge images kjører database migrations automatisk ved oppstart.
+Database migrations kjøres automatisk ved oppstart.
 
 ## 📖 Bruk
 
