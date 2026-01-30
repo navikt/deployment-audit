@@ -701,17 +701,17 @@ export async function findUnreviewedCommitsInMerge(
 
     // Cache for PR approvals to avoid checking same PR multiple times
     const prApprovalCache = new Map<number, { hasFourEyes: boolean; reason: string }>();
+    const prCheckedCount = new Map<number, number>(); // Track how many commits per PR
 
     // Check each commit that's not in the PR
     for (const commit of commitsNotInPR) {
-      console.log(
-        `   🔍 Checking commit ${commit.sha.substring(0, 7)}: ${commit.message.split('\n')[0].substring(0, 60)}`
-      );
-
       // Check if this commit has an associated PR
       const commitPR = await getPullRequestForCommit(owner, repo, commit.sha);
 
       if (!commitPR) {
+        console.log(
+          `   🔍 Commit ${commit.sha.substring(0, 7)}: ${commit.message.split('\n')[0].substring(0, 60)}`
+        );
         console.log(`      ❌ No PR found - marking as unreviewed`);
         unreviewedCommits.push({
           ...commit,
@@ -723,32 +723,50 @@ export async function findUnreviewedCommitsInMerge(
       // Skip checking same PR we're already verifying (avoids infinite loop on merge commits)
       if (currentPrNumber && commitPR.number === currentPrNumber) {
         console.log(
-          `      ℹ️  Commit belongs to current PR #${commitPR.number} - skipping (already checked)`
+          `   🔍 Commit ${commit.sha.substring(0, 7)}: belongs to current PR #${commitPR.number} - skipping`
         );
         continue;
       }
 
       // Check cache first
       let prApproval = prApprovalCache.get(commitPR.number);
+      const isFirstCheckOfThisPR = !prApproval;
       
-      if (prApproval) {
-        console.log(`      💾 Using cached result for PR #${commitPR.number}`);
-      } else {
+      if (isFirstCheckOfThisPR) {
+        // First time seeing this PR - log and check it
+        console.log(
+          `   🔍 Commit ${commit.sha.substring(0, 7)}: ${commit.message.split('\n')[0].substring(0, 60)}`
+        );
         console.log(`      📝 Found PR #${commitPR.number} - checking approval`);
-        // Check if the PR was approved
         prApproval = await verifyPullRequestFourEyes(owner, repo, commitPR.number);
-        // Cache the result
         prApprovalCache.set(commitPR.number, prApproval);
+        prCheckedCount.set(commitPR.number, 1);
+      } else {
+        // Already checked this PR - just count it
+        const count = prCheckedCount.get(commitPR.number) || 0;
+        prCheckedCount.set(commitPR.number, count + 1);
       }
 
-      if (!prApproval.hasFourEyes) {
-        console.log(`      ❌ PR #${commitPR.number} not approved - marking as unreviewed`);
+      // prApproval is guaranteed to be defined here
+      if (!prApproval!.hasFourEyes) {
+        if (isFirstCheckOfThisPR) {
+          console.log(`      ❌ PR #${commitPR.number} not approved - marking as unreviewed`);
+        }
         unreviewedCommits.push({
           ...commit,
-          reason: `PR #${commitPR.number} not approved: ${prApproval.reason}`,
+          reason: `PR #${commitPR.number} not approved: ${prApproval!.reason}`,
         });
-      } else {
+      } else if (isFirstCheckOfThisPR) {
         console.log(`      ✅ PR #${commitPR.number} is approved`);
+      }
+    }
+
+    // Log summary of cached checks
+    const cachedPRs = Array.from(prCheckedCount.entries()).filter(([_, count]) => count > 1);
+    if (cachedPRs.length > 0) {
+      console.log(`   💾 Used cached results for ${cachedPRs.length} PR(s):`);
+      for (const [prNumber, count] of cachedPRs) {
+        console.log(`      PR #${prNumber}: ${count} commits (checked once, cached ${count - 1} times)`);
       }
     }
 
