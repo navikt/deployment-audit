@@ -360,17 +360,20 @@ export async function getPreviousDeployment(
 }
 
 /**
- * Get the next deployment (chronologically) for navigation
+ * Get the next deployment (chronologically newer) for navigation
+ * Next = deployment that happened AFTER this one (newer created_at)
  */
 export async function getNextDeployment(
   currentDeploymentId: number,
   monitoredAppId: number
 ): Promise<Deployment | null> {
   const result = await pool.query(
-    `SELECT * FROM deployments
-     WHERE monitored_app_id = $1
-       AND id > $2
-     ORDER BY created_at ASC, id ASC
+    `SELECT next_dep.* FROM deployments next_dep
+     CROSS JOIN deployments curr_dep
+     WHERE next_dep.monitored_app_id = $1
+       AND curr_dep.id = $2
+       AND next_dep.created_at > curr_dep.created_at
+     ORDER BY next_dep.created_at ASC
      LIMIT 1`,
     [monitoredAppId, currentDeploymentId]
   );
@@ -379,17 +382,20 @@ export async function getNextDeployment(
 }
 
 /**
- * Get the previous deployment (chronologically) for navigation
+ * Get the previous deployment (chronologically older) for navigation
+ * Previous = deployment that happened BEFORE this one (older created_at)
  */
 export async function getPreviousDeploymentForNav(
   currentDeploymentId: number,
   monitoredAppId: number
 ): Promise<Deployment | null> {
   const result = await pool.query(
-    `SELECT * FROM deployments
-     WHERE monitored_app_id = $1
-       AND id < $2
-     ORDER BY created_at DESC, id DESC
+    `SELECT prev_dep.* FROM deployments prev_dep
+     CROSS JOIN deployments curr_dep
+     WHERE prev_dep.monitored_app_id = $1
+       AND curr_dep.id = $2
+       AND prev_dep.created_at < curr_dep.created_at
+     ORDER BY prev_dep.created_at DESC
      LIMIT 1`,
     [monitoredAppId, currentDeploymentId]
   );
