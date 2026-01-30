@@ -699,6 +699,9 @@ export async function findUnreviewedCommitsInMerge(
       reason: string;
     }> = [];
 
+    // Cache for PR approvals to avoid checking same PR multiple times
+    const prApprovalCache = new Map<number, { hasFourEyes: boolean; reason: string }>();
+
     // Check each commit that's not in the PR
     for (const commit of commitsNotInPR) {
       console.log(
@@ -725,10 +728,18 @@ export async function findUnreviewedCommitsInMerge(
         continue;
       }
 
-      console.log(`      📝 Found PR #${commitPR.number} - checking approval`);
-
-      // Check if the PR was approved
-      const prApproval = await verifyPullRequestFourEyes(owner, repo, commitPR.number);
+      // Check cache first
+      let prApproval = prApprovalCache.get(commitPR.number);
+      
+      if (prApproval) {
+        console.log(`      💾 Using cached result for PR #${commitPR.number}`);
+      } else {
+        console.log(`      📝 Found PR #${commitPR.number} - checking approval`);
+        // Check if the PR was approved
+        prApproval = await verifyPullRequestFourEyes(owner, repo, commitPR.number);
+        // Cache the result
+        prApprovalCache.set(commitPR.number, prApproval);
+      }
 
       if (!prApproval.hasFourEyes) {
         console.log(`      ❌ PR #${commitPR.number} not approved - marking as unreviewed`);
