@@ -334,29 +334,31 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
       {/* Main header */}
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <Heading size="large">
-            {deployment.app_name} @ {deployment.environment_name}
+          <Heading size="large" style={{ flex: 1 }}>
+            {deployment.github_pr_data?.title || `${deployment.app_name} @ ${deployment.environment_name}`}
           </Heading>
-          {/* Four-eyes status tag (only shown for OK/approved states) */}
-          {(deployment.four_eyes_status === 'approved' || deployment.four_eyes_status === 'manually_approved') && (
-            <Tag variant="success" size="small">
-              Godkjent
-            </Tag>
-          )}
-          {/* Method tag */}
-          {deployment.github_pr_number ? (
-            <Tag variant="info" size="small">
-              Pull Request
-            </Tag>
-          ) : deployment.four_eyes_status === 'direct_push' || deployment.four_eyes_status === 'unverified_commits' ? (
-            <Tag variant="warning" size="small">
-              Direct Push
-            </Tag>
-          ) : deployment.four_eyes_status === 'legacy' ? (
-            <Tag variant="neutral" size="small">
-              Legacy
-            </Tag>
-          ) : null}
+          <HStack gap="space-8">
+            {/* Four-eyes status tag (only shown for OK/approved states) */}
+            {(deployment.four_eyes_status === 'approved' || deployment.four_eyes_status === 'manually_approved') && (
+              <Tag variant="success" size="small">
+                Godkjent
+              </Tag>
+            )}
+            {/* Method tag */}
+            {deployment.github_pr_number ? (
+              <Tag variant="info" size="small">
+                Pull Request
+              </Tag>
+            ) : deployment.four_eyes_status === 'direct_push' || deployment.four_eyes_status === 'unverified_commits' ? (
+              <Tag variant="warning" size="small">
+                Direct Push
+              </Tag>
+            ) : deployment.four_eyes_status === 'legacy' ? (
+              <Tag variant="neutral" size="small">
+                Legacy
+              </Tag>
+            ) : null}
+          </HStack>
         </div>
         <BodyShort className={styles.textSubtle}>
           {new Date(deployment.created_at).toLocaleString('no-NO', {
@@ -370,7 +372,6 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
               <a href={deployment.github_pr_url} target="_blank" rel="noopener noreferrer">
                 #{deployment.github_pr_number}
               </a>
-              {deployment.github_pr_data?.title && ` - ${deployment.github_pr_data.title}`}
             </>
           )}
         </BodyShort>
@@ -835,7 +836,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           {/* PR Commits */}
           {deployment.github_pr_data.commits && deployment.github_pr_data.commits.length > 0 && (
             <Accordion.Item>
-              <Accordion.Header>Commits i PR ({deployment.github_pr_data.commits.length})</Accordion.Header>
+              <Accordion.Header>Commits ({deployment.github_pr_data.commits.length})</Accordion.Header>
               <Accordion.Content>
                 <VStack gap="space-12">
                   {deployment.github_pr_data.commits.map((commit) => (
