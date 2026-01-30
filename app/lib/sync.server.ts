@@ -108,10 +108,9 @@ export async function syncDeploymentsFromNais(
     await createDeployment(deploymentParams);
     newCount++;
 
-    // Skip repository checks for legacy deployments (older than 1 year without commit SHA)
-    const oneYearAgo = new Date();
-    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-    const isLegacyDeployment = new Date(naisDep.createdAt) < oneYearAgo && !naisDep.commitSha;
+    // Skip repository checks for legacy deployments (before 2025-01-01 without commit SHA)
+    const legacyCutoffDate = new Date('2025-01-01T00:00:00Z');
+    const isLegacyDeployment = new Date(naisDep.createdAt) < legacyCutoffDate && !naisDep.commitSha;
     if (isLegacyDeployment) {
       console.log(`⏭️  Skipping repository checks for legacy deployment: ${naisDep.id}`);
       continue;

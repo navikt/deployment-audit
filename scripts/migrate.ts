@@ -24,9 +24,14 @@ async function runMigrations() {
     const configPath = join(__dirname, '..', '.node-pg-migrate.json');
     const config = JSON.parse(readFileSync(configPath, 'utf-8'));
 
+    const databaseUrl = process.env[config['database-url-var']];
+    if (!databaseUrl) {
+      throw new Error(`Environment variable ${config['database-url-var']} is not set`);
+    }
+
     // Run migrations
     await runner({
-      databaseUrl: process.env[config['database-url-var']],
+      databaseUrl,
       dir: join(__dirname, '..', config['migrations-dir']),
       direction: 'up',
       migrationsTable: config['migrations-table'],
