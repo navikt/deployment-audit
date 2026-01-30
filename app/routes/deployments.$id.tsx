@@ -2,8 +2,11 @@ import {
   ArrowsCirclepathIcon,
   ChatIcon,
   CheckmarkCircleIcon,
+  CheckmarkIcon,
+  CircleIcon,
   MinusCircleIcon,
   TrashIcon,
+  XMarkIcon,
   XMarkOctagonIcon,
 } from '@navikt/aksel-icons'
 import {
@@ -189,7 +192,7 @@ function getFourEyesStatus(deployment: any): {
 } {
   if (deployment.has_four_eyes) {
     return {
-      text: 'Four-eyes OK',
+      text: 'Godkjent',
       variant: 'success',
       description: 'Dette deploymentet har blitt godkjent via en approved PR.',
     }
@@ -199,7 +202,7 @@ function getFourEyesStatus(deployment: any): {
     case 'approved':
     case 'approved_pr':
       return {
-        text: 'Four-eyes OK',
+        text: 'Godkjent',
         variant: 'success',
         description: 'Dette deploymentet har blitt godkjent via en approved PR.',
       }
@@ -291,7 +294,42 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
 
   return (
     <div className={styles.pageContainer}>
-      {/* Combined Header: App + Environment + Status Tags */}
+      {/* Breadcrumb with navigation */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Detail className={styles.textSubtle}>
+          {deployment.team_slug} / {deployment.environment_name} / {deployment.app_name}
+        </Detail>
+        <HStack gap="space-8">
+          {previousDeployment ? (
+            <Button as={Link} to={`/deployments/${previousDeployment.id}`} variant="tertiary" size="xsmall">
+              ← Forrige
+            </Button>
+          ) : (
+            <Button variant="tertiary" size="xsmall" disabled>
+              ← Forrige
+            </Button>
+          )}
+          <Button
+            as={Link}
+            to={`/applications/${deployment.team_slug}/${deployment.environment_name}/${deployment.app_name}`}
+            variant="tertiary"
+            size="xsmall"
+          >
+            Alle
+          </Button>
+          {nextDeployment ? (
+            <Button as={Link} to={`/deployments/${nextDeployment.id}`} variant="tertiary" size="xsmall">
+              Neste →
+            </Button>
+          ) : (
+            <Button variant="tertiary" size="xsmall" disabled>
+              Neste →
+            </Button>
+          )}
+        </HStack>
+      </div>
+
+      {/* Main header */}
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
           <Heading size="large">
@@ -300,7 +338,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           {/* Four-eyes status tag (only shown for OK/approved states) */}
           {(deployment.four_eyes_status === 'approved' || deployment.four_eyes_status === 'manually_approved') && (
             <Tag variant="success" size="small">
-              ✓ Four-eyes OK
+              Godkjent
             </Tag>
           )}
           {/* Method tag */}
@@ -328,40 +366,12 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
               {' '}
               via{' '}
               <a href={deployment.github_pr_url} target="_blank" rel="noopener noreferrer">
-                #{deployment.github_pr_number}
+                PR #{deployment.github_pr_number}
               </a>
               {deployment.github_pr_data?.title && ` - ${deployment.github_pr_data.title}`}
             </>
           )}
         </BodyShort>
-      </div>
-
-      {/* Navigation between deployments - toned down */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        {previousDeployment ? (
-          <Button as={Link} to={`/deployments/${previousDeployment.id}`} variant="tertiary" size="small">
-            ← Forrige
-          </Button>
-        ) : (
-          <div />
-        )}
-
-        <Button
-          as={Link}
-          to={`/applications/${deployment.team_slug}/${deployment.environment_name}/${deployment.app_name}`}
-          variant="tertiary"
-          size="small"
-        >
-          Alle deployments
-        </Button>
-
-        {nextDeployment ? (
-          <Button as={Link} to={`/deployments/${nextDeployment.id}`} variant="tertiary" size="small">
-            Neste →
-          </Button>
-        ) : (
-          <div />
-        )}
       </div>
 
       {actionData?.success && <Alert variant="success">{actionData.success}</Alert>}
@@ -433,23 +443,6 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
       {/* Deployment Details Section */}
       <Heading size="medium">Detaljer</Heading>
       <HGrid gap="space-16" columns={{ xs: 1, sm: 2, md: 3 }}>
-        <VStack gap="space-4">
-          <Detail>Applikasjon</Detail>
-          <BodyShort>
-            <Link to={`/apps/${deployment.monitored_app_id}`}>{deployment.app_name}</Link>
-          </BodyShort>
-        </VStack>
-
-        <VStack gap="space-4">
-          <Detail>Nais Team</Detail>
-          <BodyShort>{deployment.team_slug}</BodyShort>
-        </VStack>
-
-        <VStack gap="space-4">
-          <Detail>Miljø</Detail>
-          <BodyShort>{deployment.environment_name}</BodyShort>
-        </VStack>
-
         <VStack gap="space-4">
           <Detail>Deployer</Detail>
           <BodyShort>
@@ -572,16 +565,6 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
         </VStack>
 
         {/* PR-specific fields in same grid */}
-        {deployment.github_pr_number && deployment.github_pr_url && (
-          <VStack gap="space-4">
-            <Detail>Pull Request</Detail>
-            <BodyShort>
-              <a href={deployment.github_pr_url} target="_blank" rel="noopener noreferrer">
-                #{deployment.github_pr_number}
-              </a>
-            </BodyShort>
-          </VStack>
-        )}
 
         {deployment.github_pr_data && (
           <>
@@ -693,8 +676,8 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                   </Tag>
                 )}
                 {deployment.github_pr_data.checks_passed === true && (
-                  <Tag variant="success" size="small">
-                    ✓ Checks passed
+                  <Tag variant="neutral" size="small">
+                    <CheckmarkIcon aria-hidden style={{ color: 'var(--ax-text-success)' }} /> Checks OK
                   </Tag>
                 )}
                 {deployment.github_pr_data.checks_passed === false && (
@@ -718,33 +701,6 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
               </VStack>
             )}
 
-            {deployment.github_pr_data.requested_reviewers &&
-              deployment.github_pr_data.requested_reviewers.length > 0 && (
-                <VStack gap="space-4">
-                  <Detail>Forespurte reviewers</Detail>
-                  <HStack gap="space-8" wrap>
-                    {deployment.github_pr_data.requested_reviewers.map((r) => (
-                      <Tag key={r.username} variant="neutral" size="small">
-                        {r.username}
-                      </Tag>
-                    ))}
-                  </HStack>
-                </VStack>
-              )}
-
-            {deployment.github_pr_data.requested_teams && deployment.github_pr_data.requested_teams.length > 0 && (
-              <VStack gap="space-4">
-                <Detail>Forespurte teams</Detail>
-                <HStack gap="space-8" wrap>
-                  {deployment.github_pr_data.requested_teams.map((t) => (
-                    <Tag key={t.slug} variant="neutral" size="small">
-                      {t.name}
-                    </Tag>
-                  ))}
-                </HStack>
-              </VStack>
-            )}
-
             {deployment.github_pr_data.milestone && (
               <VStack gap="space-4">
                 <Detail>Milestone</Detail>
@@ -757,83 +713,145 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
         )}
       </HGrid>
 
-      {/* Reviewers section - shown separately as it's more detailed */}
+      {/* PR Details Accordion - Reviewers, Checks, Commits */}
       {deployment.github_pr_data && (
-        <Box>
+        <Accordion>
+          {/* Reviewers - includes requested and completed reviews */}
+          {((deployment.github_pr_data.reviewers && deployment.github_pr_data.reviewers.length > 0) ||
+            (deployment.github_pr_data.requested_reviewers && deployment.github_pr_data.requested_reviewers.length > 0) ||
+            (deployment.github_pr_data.requested_teams && deployment.github_pr_data.requested_teams.length > 0)) && (
+            <Accordion.Item>
+              <Accordion.Header>
+                Reviewers (
+                {(deployment.github_pr_data.reviewers?.length || 0) +
+                  (deployment.github_pr_data.requested_reviewers?.length || 0) +
+                  (deployment.github_pr_data.requested_teams?.length || 0)}
+                )
+              </Accordion.Header>
+              <Accordion.Content>
+                <VStack gap="space-8">
+                  {/* Completed reviews */}
+                  {deployment.github_pr_data.reviewers?.map((reviewer) => (
+                    <HStack key={`${reviewer.username}:${reviewer.submitted_at}`} gap="space-8" align="center">
+                      {reviewer.state === 'APPROVED' && (
+                        <CheckmarkIcon aria-hidden style={{ color: 'var(--ax-text-success)' }} />
+                      )}
+                      {reviewer.state === 'CHANGES_REQUESTED' && (
+                        <XMarkIcon aria-hidden style={{ color: 'var(--ax-text-danger)' }} />
+                      )}
+                      {reviewer.state === 'COMMENTED' && (
+                        <ChatIcon aria-hidden style={{ color: 'var(--ax-text-neutral-subtle)' }} />
+                      )}
+                      <a href={`https://github.com/${reviewer.username}`} target="_blank" rel="noopener noreferrer">
+                        {reviewer.username}
+                      </a>
+                      <span className={styles.textSubtle}>
+                        {new Date(reviewer.submitted_at).toLocaleString('no-NO', {
+                          dateStyle: 'short',
+                          timeStyle: 'short',
+                        })}
+                      </span>
+                    </HStack>
+                  ))}
 
-          {/* Reviewers */}
-          {deployment.github_pr_data.reviewers && deployment.github_pr_data.reviewers.length > 0 && (
-            <div style={{ marginTop: '1rem' }}>
-              <Detail>Reviewers</Detail>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {deployment.github_pr_data.reviewers.map((reviewer) => (
-                  <div
-                    key={`${reviewer.username}:${reviewer.submitted_at}`}
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                  >
-                    {reviewer.state === 'APPROVED' && <span style={{ fontSize: '1.2rem' }}>✅</span>}
-                    {reviewer.state === 'CHANGES_REQUESTED' && <span style={{ fontSize: '1.2rem' }}>🔴</span>}
-                    {reviewer.state === 'COMMENTED' && <span style={{ fontSize: '1.2rem' }}>💬</span>}
-                    <a href={`https://github.com/${reviewer.username}`} target="_blank" rel="noopener noreferrer">
-                      {reviewer.username}
-                    </a>
-                    <span className={styles.textSubtle}>
-                      -{' '}
-                      {new Date(reviewer.submitted_at).toLocaleString('no-NO', {
-                        dateStyle: 'short',
-                        timeStyle: 'short',
-                      })}
-                    </span>
-                    <Tag
-                      variant={
-                        reviewer.state === 'APPROVED'
-                          ? 'success'
-                          : reviewer.state === 'CHANGES_REQUESTED'
-                            ? 'error'
-                            : 'neutral'
-                      }
-                      size="small"
-                    >
-                      {reviewer.state}
-                    </Tag>
-                  </div>
-                ))}
-              </div>
-            </div>
+                  {/* Requested reviewers (pending) */}
+                  {deployment.github_pr_data.requested_reviewers?.map((r) => (
+                    <HStack key={`pending:${r.username}`} gap="space-8" align="center">
+                      <CircleIcon aria-hidden style={{ color: 'var(--ax-text-warning)' }} />
+                      <a href={`https://github.com/${r.username}`} target="_blank" rel="noopener noreferrer">
+                        {r.username}
+                      </a>
+                    </HStack>
+                  ))}
+
+                  {/* Requested teams (pending) */}
+                  {deployment.github_pr_data.requested_teams?.map((t) => (
+                    <HStack key={`team:${t.slug}`} gap="space-8" align="center">
+                      <CircleIcon aria-hidden style={{ color: 'var(--ax-text-warning)' }} />
+                      <span>{t.name}</span>
+                    </HStack>
+                  ))}
+                </VStack>
+              </Accordion.Content>
+            </Accordion.Item>
           )}
 
-          {/* Unreviewed commits warning */}
-          {deployment.github_pr_data?.unreviewed_commits && deployment.github_pr_data.unreviewed_commits.length > 0 && (
-            <div>
-              <Alert variant="error">
-                <Heading size="small" spacing>
-                  ⚠️ Ureviewed commits funnet
-                </Heading>
-                <BodyShort spacing>
-                  Følgende commits var på main mellom PR base og merge, men mangler godkjenning:
-                </BodyShort>
-              </Alert>
+          {/* GitHub Checks */}
+          {deployment.github_pr_data.checks && deployment.github_pr_data.checks.length > 0 && (
+            <Accordion.Item>
+              <Accordion.Header>GitHub Checks ({deployment.github_pr_data.checks.length})</Accordion.Header>
+              <Accordion.Content>
+                <VStack gap="space-8">
+                  {deployment.github_pr_data.checks.map((check) => {
+                    const isSuccess = check.conclusion === 'success'
+                    const isFailure =
+                      check.conclusion === 'failure' ||
+                      check.conclusion === 'timed_out' ||
+                      check.conclusion === 'action_required'
+                    const isSkipped =
+                      check.conclusion === 'skipped' || check.conclusion === 'neutral' || check.conclusion === 'cancelled'
+                    const isInProgress = check.status === 'in_progress' || check.status === 'queued'
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {deployment.github_pr_data.unreviewed_commits.map((commit) => (
-                  <Box
-                    key={commit.sha}
-                    background="danger-soft"
-                    padding="space-16"
-                    borderRadius="8"
-                    borderWidth="1"
-                    borderColor="danger-subtleA"
-                  >
-                    <div style={{ display: 'flex', gap: '0.75rem' }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div
-                          style={{
-                            display: 'flex',
-                            gap: '0.5rem',
-                            alignItems: 'baseline',
-                            flexWrap: 'wrap',
-                          }}
+                    return (
+                      <HStack key={check.html_url} gap="space-8" align="center">
+                        {isSuccess && <CheckmarkCircleIcon style={{ color: 'var(--ax-text-success)' }} />}
+                        {isFailure && <XMarkOctagonIcon style={{ color: 'var(--ax-text-danger)' }} />}
+                        {isSkipped && <MinusCircleIcon style={{ color: 'var(--ax-text-neutral-subtle)' }} />}
+                        {isInProgress && <span>⏳</span>}
+
+                        {check.html_url ? (
+                          <a href={check.html_url} target="_blank" rel="noopener noreferrer">
+                            {check.name}
+                          </a>
+                        ) : (
+                          <span>{check.name}</span>
+                        )}
+
+                        <Tag
+                          variant={isSuccess ? 'success' : isFailure ? 'error' : isSkipped ? 'neutral' : 'warning'}
+                          size="small"
                         >
+                          {check.conclusion || check.status}
+                        </Tag>
+
+                        {check.completed_at && (
+                          <span className={styles.textSubtle}>
+                            {new Date(check.completed_at).toLocaleString('no-NO', {
+                              dateStyle: 'short',
+                              timeStyle: 'short',
+                            })}
+                          </span>
+                        )}
+                      </HStack>
+                    )
+                  })}
+                </VStack>
+              </Accordion.Content>
+            </Accordion.Item>
+          )}
+
+          {/* PR Commits */}
+          {deployment.github_pr_data.commits && deployment.github_pr_data.commits.length > 0 && (
+            <Accordion.Item>
+              <Accordion.Header>Commits i PR ({deployment.github_pr_data.commits.length})</Accordion.Header>
+              <Accordion.Content>
+                <VStack gap="space-12">
+                  {deployment.github_pr_data.commits.map((commit) => (
+                    <HStack key={commit.sha} gap="space-12" align="start">
+                      {commit.author.avatar_url && (
+                        <img
+                          src={commit.author.avatar_url}
+                          alt={commit.author.username}
+                          style={{
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '50%',
+                            flexShrink: 0,
+                          }}
+                        />
+                      )}
+                      <VStack gap="space-4">
+                        <HStack gap="space-8" align="baseline" wrap>
                           <a
                             href={commit.html_url}
                             target="_blank"
@@ -842,103 +860,23 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                           >
                             {commit.sha.substring(0, 7)}
                           </a>
-                          <span className={styles.textSubtle}>{commit.author}</span>
+                          <span className={styles.textSubtle}>{commit.author.username}</span>
                           <span className={styles.textSubtle}>
-                            {new Date(commit.date).toLocaleDateString('no-NO', {
-                              year: 'numeric',
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
+                            {new Date(commit.date).toLocaleString('no-NO', {
+                              dateStyle: 'short',
+                              timeStyle: 'short',
                             })}
                           </span>
-                        </div>
-                        <BodyShort size="small" style={{ marginTop: '0.25rem' }}>
-                          {commit.message.split('\n')[0]}
-                        </BodyShort>
-                        <Detail style={{ marginTop: '0.5rem', color: 'var(--a-text-danger)' }}>{commit.reason}</Detail>
-                      </div>
-                    </div>
-                  </Box>
-                ))}
-              </div>
-
-              {/* Manual approval section */}
-              {manualApproval ? (
-                <Alert variant="success">
-                  <Heading size="small">✅ Manuelt godkjent</Heading>
-                  <BodyShort>
-                    Godkjent av <strong>{manualApproval.approved_by}</strong> den{' '}
-                    {new Date(manualApproval.approved_at!).toLocaleDateString('no-NO', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </BodyShort>
-                  {manualApproval.comment_text && (
-                    <BodyShort style={{ marginTop: '0.5rem', fontStyle: 'italic' }}>
-                      "{manualApproval.comment_text}"
-                    </BodyShort>
-                  )}
-                </Alert>
-              ) : (
-                <Box background="warning-soft" padding="space-16" borderRadius="8">
-                  <Heading size="small" spacing>
-                    Krever manuell godkjenning
-                  </Heading>
-                  <BodyShort spacing>
-                    Gjennomgå de unreviewed commits over. Hvis endringene er OK (f.eks. hotfix eller revert), godkjenn
-                    manuelt.
-                  </BodyShort>
-
-                  {!showApprovalForm ? (
-                    <Button variant="primary" size="small" onClick={() => setShowApprovalForm(true)}>
-                      Godkjenn etter gjennomgang
-                    </Button>
-                  ) : (
-                    <Form method="post">
-                      <input type="hidden" name="intent" value="manual_approval" />
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        <TextField
-                          label="Godkjenner (ditt navn)"
-                          name="approved_by"
-                          value={approvedBy}
-                          onChange={(e) => setApprovedBy(e.target.value)}
-                          required
-                          size="small"
-                        />
-                        <Textarea
-                          label="Begrunnelse (valgfritt)"
-                          name="reason"
-                          value={approvalReason}
-                          onChange={(e) => setApprovalReason(e.target.value)}
-                          description="F.eks: 'Hotfix godkjent i Slack' eller 'Revert av feil deployment'"
-                          size="small"
-                          rows={2}
-                        />
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <Button type="submit" variant="primary" size="small">
-                            Godkjenn
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="small"
-                            onClick={() => setShowApprovalForm(false)}
-                          >
-                            Avbryt
-                          </Button>
-                        </div>
-                      </div>
-                    </Form>
-                  )}
-                </Box>
-              )}
-            </div>
+                        </HStack>
+                        <BodyShort>{commit.message.split('\n')[0]}</BodyShort>
+                      </VStack>
+                    </HStack>
+                  ))}
+                </VStack>
+              </Accordion.Content>
+            </Accordion.Item>
           )}
-        </Box>
+        </Accordion>
       )}
 
       {/* Resources section */}
@@ -1032,292 +970,139 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
               </div>
             </div>
           )}
-
-          {/* GitHub Checks */}
-          {deployment.github_pr_data.checks && deployment.github_pr_data.checks.length > 0 && (
-            <div style={{ marginTop: '1rem' }}>
-              <Accordion>
-                <Accordion.Item>
-                  <Accordion.Header>
-                    <Detail>GitHub Checks ({deployment.github_pr_data.checks.length})</Detail>
-                  </Accordion.Header>
-                  <Accordion.Content>
-                    <Box background="neutral-soft" padding="space-16" borderRadius="12" className={styles.marginTop2}>
-                      <div
-                        style={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '0.5rem',
-                          marginTop: '0.5rem',
-                        }}
-                      >
-                        {deployment.github_pr_data.checks.map((check) => {
-                          const isSuccess = check.conclusion === 'success'
-                          const isFailure =
-                            check.conclusion === 'failure' ||
-                            check.conclusion === 'timed_out' ||
-                            check.conclusion === 'action_required'
-                          const isSkipped =
-                            check.conclusion === 'skipped' ||
-                            check.conclusion === 'neutral' ||
-                            check.conclusion === 'cancelled'
-                          const isInProgress = check.status === 'in_progress' || check.status === 'queued'
-
-                          return (
-                            <div key={check.html_url} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              {isSuccess && (
-                                <CheckmarkCircleIcon style={{ color: 'var(--a-icon-success)', fontSize: '1.2rem' }} />
-                              )}
-                              {isFailure && (
-                                <XMarkOctagonIcon style={{ color: 'var(--a-icon-danger)', fontSize: '1.2rem' }} />
-                              )}
-                              {isSkipped && (
-                                <MinusCircleIcon style={{ color: 'var(--a-icon-subtle)', fontSize: '1.2rem' }} />
-                              )}
-                              {isInProgress && <span style={{ fontSize: '1.2rem' }}>⏳</span>}
-
-                              {check.html_url ? (
-                                <a href={check.html_url} target="_blank" rel="noopener noreferrer">
-                                  {check.name}
-                                </a>
-                              ) : (
-                                <span>{check.name}</span>
-                              )}
-
-                              <Tag
-                                variant={
-                                  isSuccess ? 'success' : isFailure ? 'error' : isSkipped ? 'neutral' : 'warning'
-                                }
-                                size="small"
-                              >
-                                {check.conclusion || check.status}
-                              </Tag>
-
-                              {check.completed_at && (
-                                <span className={styles.textSubtle}>
-                                  {new Date(check.completed_at).toLocaleString('no-NO', {
-                                    dateStyle: 'short',
-                                    timeStyle: 'short',
-                                  })}
-                                </span>
-                              )}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </Box>
-                  </Accordion.Content>
-                </Accordion.Item>
-              </Accordion>
-            </div>
-          )}
-
-          {/* PR Commits */}
-          {deployment.github_pr_data?.commits && deployment.github_pr_data.commits.length > 0 && (
-            <div>
-              <Accordion>
-                <Accordion.Item>
-                  <Accordion.Header>Commits i PR ({deployment.github_pr_data.commits.length})</Accordion.Header>
-                  <Accordion.Content>
-                    <Box background="neutral-soft" padding="space-16" borderRadius="12">
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                        {deployment.github_pr_data.commits.map((commit) => (
-                          <div
-                            key={commit.sha}
-                            style={{
-                              display: 'flex',
-                              gap: '0.75rem',
-                              padding: '0.5rem',
-                              background: 'var(--a-surface-default)',
-                              borderRadius: '0.5rem',
-                            }}
-                          >
-                            {commit.author.avatar_url && (
-                              <img
-                                src={commit.author.avatar_url}
-                                alt={commit.author.username}
-                                style={{
-                                  width: '32px',
-                                  height: '32px',
-                                  borderRadius: '50%',
-                                  flexShrink: 0,
-                                }}
-                              />
-                            )}
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div
-                                style={{
-                                  display: 'flex',
-                                  gap: '0.5rem',
-                                  alignItems: 'baseline',
-                                  flexWrap: 'wrap',
-                                }}
-                              >
-                                <a
-                                  href={commit.html_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}
-                                >
-                                  {commit.sha.substring(0, 7)}
-                                </a>
-                                <span className={styles.textSubtle}>{commit.author.username}</span>
-                                <span className={styles.textSubtle}>
-                                  {new Date(commit.date).toLocaleString('no-NO', {
-                                    dateStyle: 'short',
-                                    timeStyle: 'short',
-                                  })}
-                                </span>
-                              </div>
-                              <BodyShort style={{ marginTop: '0.25rem' }}>{commit.message.split('\n')[0]}</BodyShort>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </Box>
-                  </Accordion.Content>
-                </Accordion.Item>
-              </Accordion>
-            </div>
-          )}
-
-          {/* Unreviewed commits warning */}
-          {deployment.github_pr_data?.unreviewed_commits && deployment.github_pr_data.unreviewed_commits.length > 0 && (
-            <div>
-              <Alert variant="error">
-                <Heading size="small" spacing>
-                  ⚠️ Ureviewed commits funnet
-                </Heading>
-                <BodyShort spacing>
-                  Følgende commits var på main mellom PR base og merge, men mangler godkjenning:
-                </BodyShort>
-              </Alert>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {deployment.github_pr_data.unreviewed_commits.map((commit) => (
-                  <Box
-                    key={commit.sha}
-                    background="danger-soft"
-                    padding="space-16"
-                    borderRadius="8"
-                    borderWidth="1"
-                    borderColor="danger-subtleA"
-                  >
-                    <div style={{ display: 'flex', gap: '0.75rem' }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div
-                          style={{
-                            display: 'flex',
-                            gap: '0.5rem',
-                            alignItems: 'baseline',
-                            flexWrap: 'wrap',
-                          }}
-                        >
-                          <a
-                            href={commit.html_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}
-                          >
-                            {commit.sha.substring(0, 7)}
-                          </a>
-                          <span className={styles.textSubtle}>{commit.author}</span>
-                          <span className={styles.textSubtle}>
-                            {new Date(commit.date).toLocaleDateString('no-NO', {
-                              year: 'numeric',
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </span>
-                        </div>
-                        <BodyShort size="small" style={{ marginTop: '0.25rem' }}>
-                          {commit.message.split('\n')[0]}
-                        </BodyShort>
-                        <Detail style={{ marginTop: '0.5rem', color: 'var(--a-text-danger)' }}>{commit.reason}</Detail>
-                      </div>
-                    </div>
-                  </Box>
-                ))}
-              </div>
-
-              {/* Manual approval section */}
-              {manualApproval ? (
-                <Alert variant="success">
-                  <Heading size="small">✅ Manuelt godkjent</Heading>
-                  <BodyShort>
-                    Godkjent av <strong>{manualApproval.approved_by}</strong> den{' '}
-                    {new Date(manualApproval.approved_at!).toLocaleDateString('no-NO', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </BodyShort>
-                  {manualApproval.comment_text && (
-                    <BodyShort style={{ marginTop: '0.5rem', fontStyle: 'italic' }}>
-                      "{manualApproval.comment_text}"
-                    </BodyShort>
-                  )}
-                </Alert>
-              ) : (
-                <Box background="warning-soft" padding="space-16" borderRadius="8">
-                  <Heading size="small" spacing>
-                    Krever manuell godkjenning
-                  </Heading>
-                  <BodyShort spacing>
-                    Gjennomgå de unreviewed commits over. Hvis endringene er OK (f.eks. hotfix eller revert), godkjenn
-                    manuelt.
-                  </BodyShort>
-
-                  {!showApprovalForm ? (
-                    <Button variant="primary" size="small" onClick={() => setShowApprovalForm(true)}>
-                      Godkjenn etter gjennomgang
-                    </Button>
-                  ) : (
-                    <Form method="post">
-                      <input type="hidden" name="intent" value="manual_approval" />
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        <TextField
-                          label="Godkjenner (ditt navn)"
-                          name="approved_by"
-                          value={approvedBy}
-                          onChange={(e) => setApprovedBy(e.target.value)}
-                          required
-                          size="small"
-                        />
-                        <Textarea
-                          label="Begrunnelse (valgfritt)"
-                          name="reason"
-                          value={approvalReason}
-                          onChange={(e) => setApprovalReason(e.target.value)}
-                          description="F.eks: 'Hotfix godkjent i Slack' eller 'Revert av feil deployment'"
-                          size="small"
-                          rows={2}
-                        />
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <Button type="submit" variant="primary" size="small">
-                            Godkjenn
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="small"
-                            onClick={() => setShowApprovalForm(false)}
-                          >
-                            Avbryt
-                          </Button>
-                        </div>
-                      </div>
-                    </Form>
-                  )}
-                </Box>
-              )}
-            </div>
-          )}
         </Box>
+      )}
+
+      {/* Unreviewed commits warning */}
+      {deployment.github_pr_data?.unreviewed_commits && deployment.github_pr_data.unreviewed_commits.length > 0 && (
+        <div>
+          <Alert variant="error">
+            <Heading size="small" spacing>
+              ⚠️ Ureviewed commits funnet
+            </Heading>
+            <BodyShort spacing>
+              Følgende commits var på main mellom PR base og merge, men mangler godkjenning:
+            </BodyShort>
+          </Alert>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {deployment.github_pr_data.unreviewed_commits.map((commit) => (
+              <Box
+                key={commit.sha}
+                background="danger-soft"
+                padding="space-16"
+                borderRadius="8"
+                borderWidth="1"
+                borderColor="danger-subtleA"
+              >
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{
+                      display: 'flex',
+                      gap: '0.5rem',
+                      alignItems: 'baseline',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <a
+                      href={commit.html_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}
+                    >
+                      {commit.sha.substring(0, 7)}
+                    </a>
+                    <span className={styles.textSubtle}>{commit.author}</span>
+                    <span className={styles.textSubtle}>
+                      {new Date(commit.date).toLocaleDateString('no-NO', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                  </div>
+                  <BodyShort size="small" style={{ marginTop: '0.25rem' }}>
+                    {commit.message.split('\n')[0]}
+                  </BodyShort>
+                  <Detail style={{ marginTop: '0.5rem', color: 'var(--a-text-danger)' }}>{commit.reason}</Detail>
+                </div>
+              </div>
+            </Box>
+          ))}
+        </div>
+
+        {/* Manual approval section */}
+        {manualApproval ? (
+          <Alert variant="success">
+            <Heading size="small">✅ Manuelt godkjent</Heading>
+            <BodyShort>
+              Godkjent av <strong>{manualApproval.approved_by}</strong> den{' '}
+              {new Date(manualApproval.approved_at!).toLocaleDateString('no-NO', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </BodyShort>
+            {manualApproval.comment_text && (
+              <BodyShort style={{ marginTop: '0.5rem', fontStyle: 'italic' }}>
+                "{manualApproval.comment_text}"
+              </BodyShort>
+            )}
+          </Alert>
+        ) : (
+          <Box background="warning-soft" padding="space-16" borderRadius="8">
+            <Heading size="small" spacing>
+              Krever manuell godkjenning
+            </Heading>
+            <BodyShort spacing>
+              Gjennomgå de unreviewed commits over. Hvis endringene er OK (f.eks. hotfix eller revert), godkjenn
+              manuelt.
+            </BodyShort>
+
+            {!showApprovalForm ? (
+              <Button variant="primary" size="small" onClick={() => setShowApprovalForm(true)}>
+                Godkjenn etter gjennomgang
+              </Button>
+            ) : (
+              <Form method="post">
+                <input type="hidden" name="intent" value="manual_approval" />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <TextField
+                    label="Godkjenner (ditt navn)"
+                    name="approved_by"
+                    value={approvedBy}
+                    onChange={(e) => setApprovedBy(e.target.value)}
+                    required
+                    size="small"
+                  />
+                  <Textarea
+                    label="Begrunnelse (valgfritt)"
+                    name="reason"
+                    value={approvalReason}
+                    onChange={(e) => setApprovalReason(e.target.value)}
+                    description="F.eks: 'Hotfix godkjent i Slack' eller 'Revert av feil deployment'"
+                    size="small"
+                    rows={2}
+                  />
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <Button type="submit" variant="primary" size="small">
+                      Godkjenn
+                    </Button>
+                    <Button type="button" variant="secondary" size="small" onClick={() => setShowApprovalForm(false)}>
+                      Avbryt
+                    </Button>
+                  </div>
+                </div>
+              </Form>
+            )}
+          </Box>
+        )}
+      </div>
       )}
 
       {/* Comments section */}
