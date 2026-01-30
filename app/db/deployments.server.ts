@@ -1,5 +1,15 @@
 import { pool } from './connection.server';
 
+export interface UnverifiedCommit {
+  sha: string;
+  message: string;
+  author: string;
+  date: string;
+  html_url: string;
+  pr_number: number | null;
+  reason: string; // 'no_pr' | 'pr_not_approved' | 'pr_not_found'
+}
+
 export interface Deployment {
   id: number;
   monitored_app_id: number;
@@ -17,6 +27,7 @@ export interface Deployment {
   github_pr_data: GitHubPRData | null;
   branch_name: string | null;
   parent_commits: Array<{ sha: string }> | null;
+  unverified_commits: UnverifiedCommit[] | null;
   resources: any; // JSONB
   synced_at: Date;
 }
@@ -288,6 +299,7 @@ export async function updateDeploymentFourEyes(
     githubPrData?: GitHubPRData | null;
     branchName?: string | null;
     parentCommits?: Array<{ sha: string }> | null;
+    unverifiedCommits?: UnverifiedCommit[] | null;
   }
 ): Promise<Deployment> {
   const result = await pool.query(
@@ -298,8 +310,9 @@ export async function updateDeploymentFourEyes(
          github_pr_url = $4,
          github_pr_data = $5,
          branch_name = $6,
-         parent_commits = $7
-     WHERE id = $8
+         parent_commits = $7,
+         unverified_commits = $8
+     WHERE id = $9
      RETURNING *`,
     [
       data.hasFourEyes,
@@ -309,6 +322,7 @@ export async function updateDeploymentFourEyes(
       data.githubPrData ? JSON.stringify(data.githubPrData) : null,
       data.branchName || null,
       data.parentCommits ? JSON.stringify(data.parentCommits) : null,
+      data.unverifiedCommits ? JSON.stringify(data.unverifiedCommits) : null,
       deploymentId,
     ]
   );
@@ -318,6 +332,31 @@ export async function updateDeploymentFourEyes(
   }
 
   return result.rows[0];
+}
+
+/**
+ * Get the deployment that happened before this one for the same repo/environment
+ */
+export async function getPreviousDeployment(
+  currentDeploymentId: number,
+  repoOwner: string,
+  repoName: string,
+  environmentName: string
+): Promise<Deployment | null> {
+  const result = await pool.query(
+    `SELECT d.* FROM deployments d
+     JOIN monitored_applications ma ON d.monitored_app_id = ma.id
+     WHERE d.detected_github_owner = $1
+       AND d.detected_github_repo_name = $2
+       AND ma.environment_name = $3
+       AND d.id < $4
+       AND d.commit_sha IS NOT NULL
+     ORDER BY d.created_at DESC
+     LIMIT 1`,
+    [repoOwner, repoName, environmentName, currentDeploymentId]
+  );
+  
+  return result.rows[0] || null;
 }
 
 export interface AppDeploymentStats {

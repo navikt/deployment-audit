@@ -582,6 +582,7 @@ export async function getCommitsBetween(
   author: string;
   date: string;
   html_url: string;
+  parents_count: number;
 }> | null> {
   try {
     const client = getGitHubClient();
@@ -610,6 +611,7 @@ export async function getCommitsBetween(
       author: commit.author?.login || commit.commit.author?.name || 'unknown',
       date: commit.commit.author?.date || '',
       html_url: commit.html_url,
+      parents_count: commit.parents?.length || 0,
     }));
 
     console.log(
@@ -639,6 +641,7 @@ export async function getCommitsBetween(
 }
 
 /**
+ * DEPRECATED: Use between-deployment verification instead
  * Check if commits in a merge are all from approved PRs
  * Returns list of unreviewed commits (if any)
  * @param prBranchTip - Tip of PR branch before merge

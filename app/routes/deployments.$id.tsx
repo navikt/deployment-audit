@@ -133,8 +133,9 @@ export async function action({ request, params }: Route.ActionArgs) {
 
       const success = await verifyDeploymentFourEyes(
         deployment.id,
-        deployment.commit_sha,
+        deployment.commit_sha!,
         `${deployment.detected_github_owner}/${deployment.detected_github_repo_name}`,
+        deployment.environment_name,
         deployment.trigger_url
       );
 

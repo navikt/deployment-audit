@@ -10,14 +10,13 @@ import {
   type DeploymentFilters,
   getAllDeployments,
   getDeploymentByNaisId,
+  getPreviousDeployment,
   updateDeploymentFourEyes,
+  type UnverifiedCommit,
 } from '~/db/deployments.server';
 import { getMonitoredApplication } from '~/db/monitored-applications.server';
 import {
-  findUnreviewedCommitsInMerge,
-  getBranchFromWorkflowRun,
-  getCommitDetails,
-  getDetailedPullRequestInfo,
+  getCommitsBetween,
   getPullRequestForCommit,
   verifyPullRequestFourEyes,
 } from '~/lib/github.server';
@@ -276,6 +275,7 @@ export async function verifyDeploymentsFourEyes(
         deployment.id,
         deployment.commit_sha,
         `${deployment.detected_github_owner}/${deployment.detected_github_repo_name}`,
+        deployment.environment_name,
         deployment.trigger_url
       );
 
@@ -308,12 +308,14 @@ export async function verifyDeploymentsFourEyes(
 
 /**
  * Verify and update four-eyes status for a single deployment
+ * New approach: Checks ALL commits between previous deployment and this one
  * Returns true if verification succeeded, false if skipped
  */
 export async function verifyDeploymentFourEyes(
   deploymentId: number,
   commitSha: string,
   repository: string,
+  environmentName: string,
   triggerUrl?: string | null
 ): Promise<boolean> {
   const repoParts = repository.split('/');
@@ -325,149 +327,135 @@ export async function verifyDeploymentFourEyes(
   const [owner, repo] = repoParts;
 
   try {
-    console.log(`🔍 [Deployment ${deploymentId}] Checking commit ${commitSha} in ${repository}`);
+    console.log(`🔍 [Deployment ${deploymentId}] Verifying commits up to ${commitSha.substring(0, 7)} in ${repository}`);
 
-    // Fetch branch name from workflow run if available
-    let branchName: string | null = null;
-    if (triggerUrl) {
-      branchName = await getBranchFromWorkflowRun(triggerUrl);
-    }
+    // Step 1: Get previous deployment for this repo/environment
+    const previousDeployment = await getPreviousDeployment(
+      deploymentId,
+      owner,
+      repo,
+      environmentName
+    );
 
-    // Fetch commit details to get parent commits (for merge commits)
-    const commitDetails = await getCommitDetails(owner, repo, commitSha);
-    const parentCommits = commitDetails?.parents || null;
-
-    // Check if commit is part of a PR
-    const prInfo = await getPullRequestForCommit(owner, repo, commitSha);
-
-    if (!prInfo) {
-      // Direct push to main
-      console.log(
-        `📌 [Deployment ${deploymentId}] No PR found for commit ${commitSha} - marking as direct push`
-      );
+    if (!previousDeployment) {
+      console.log(`📍 [Deployment ${deploymentId}] First deployment for ${repository}/${environmentName} - marking as baseline`);
       await updateDeploymentFourEyes(deploymentId, {
-        hasFourEyes: false,
-        fourEyesStatus: 'direct_push',
+        hasFourEyes: true,
+        fourEyesStatus: 'baseline',
         githubPrNumber: null,
         githubPrUrl: null,
-        branchName,
-        parentCommits,
       });
       return true;
     }
 
-    console.log(`🔗 [Deployment ${deploymentId}] Found PR #${prInfo.number}: ${prInfo.title}`);
-    console.log(`   PR URL: ${prInfo.html_url}`);
-    console.log(`   PR merged_at: ${prInfo.merged_at}`);
-    console.log(`   PR state: ${prInfo.state}`);
+    console.log(`📍 [Deployment ${deploymentId}] Previous deployment: ${previousDeployment.commit_sha?.substring(0, 7)} (ID: ${previousDeployment.id})`);
 
-    // Check if PR has approval after last commit
-    const fourEyesResult = await verifyPullRequestFourEyes(owner, repo, prInfo.number);
-
-    console.log(
-      `${fourEyesResult.hasFourEyes ? '✅' : '❌'} [Deployment ${deploymentId}] PR #${prInfo.number} ${fourEyesResult.hasFourEyes ? 'has' : 'lacks'} approval: ${fourEyesResult.reason}`
+    // Step 2: Get all commits between previous and current deployment
+    const commitsBetween = await getCommitsBetween(
+      owner,
+      repo,
+      previousDeployment.commit_sha!,
+      commitSha
     );
 
-    // Fetch detailed PR information
-    const detailedPrInfo = await getDetailedPullRequestInfo(owner, repo, prInfo.number);
+    if (!commitsBetween) {
+      console.warn(`⚠️  [Deployment ${deploymentId}] Could not fetch commits between deployments`);
+      await updateDeploymentFourEyes(deploymentId, {
+        hasFourEyes: false,
+        fourEyesStatus: 'error',
+        githubPrNumber: null,
+        githubPrUrl: null,
+      });
+      return false;
+    }
 
-    // Check for unreviewed commits in merge (ONLY if PR itself is approved)
-    let unreviewedCommits: Array<any> = [];
-    if (
-      fourEyesResult.hasFourEyes &&
-      parentCommits &&
-      parentCommits.length >= 2 &&
-      detailedPrInfo
-    ) {
-      console.log(
-        `🔀 [Deployment ${deploymentId}] Merge commit detected - checking for unreviewed commits`
-      );
-      console.log(`   📌 Commit SHA (merge): ${commitSha.substring(0, 7)}`);
-      console.log(`   📌 Parent 0 (main before merge): ${parentCommits[0].sha.substring(0, 7)}`);
-      console.log(`   📌 Parent 1 (PR branch tip): ${parentCommits[1].sha.substring(0, 7)}`);
-      console.log(`   📌 PR #${prInfo.number} has ${detailedPrInfo.commits.length} commits`);
+    console.log(`📊 [Deployment ${deploymentId}] Found ${commitsBetween.length} commit(s) between deployments`);
 
-      // Compare PR branch tip with main tip to find commits on main not in PR
-      const mainBeforeMerge = parentCommits[0].sha;
-      const prBranchTip = parentCommits[1].sha;
-      const prCommitShas = detailedPrInfo.commits.map((c) => c.sha);
+    if (commitsBetween.length === 0) {
+      console.log(`✅ [Deployment ${deploymentId}] No new commits - same as previous deployment`);
+      await updateDeploymentFourEyes(deploymentId, {
+        hasFourEyes: true,
+        fourEyesStatus: 'no_changes',
+        githubPrNumber: null,
+        githubPrUrl: null,
+      });
+      return true;
+    }
 
-      console.log(
-        `   🔍 Will compare: ${prBranchTip.substring(0, 7)} (PR branch) to ${mainBeforeMerge.substring(0, 7)} (main before merge)`
-      );
-      console.log(`   🔍 This finds commits on main NOT in PR branch`);
+    // Step 3: Verify each commit has four-eyes
+    const unverifiedCommits: UnverifiedCommit[] = [];
+    const prCache = new Map<number, { hasFourEyes: boolean; reason: string }>();
 
-      unreviewedCommits = await findUnreviewedCommitsInMerge(
-        owner,
-        repo,
-        prBranchTip, // Compare from PR branch tip
-        mainBeforeMerge, // To main before merge
-        prCommitShas,
-        prInfo.number // Pass current PR number to avoid checking same PR twice
-      );
+    for (const commit of commitsBetween) {
+      // Skip merge commits (they're verified through their source PRs)
+      if (commit.parents_count >= 2) {
+        console.log(`   ⏭️  Skipping merge commit ${commit.sha.substring(0, 7)}`);
+        continue;
+      }
 
-      if (unreviewedCommits.length > 0) {
-        console.log(
-          `⚠️  [Deployment ${deploymentId}] Found ${unreviewedCommits.length} unreviewed commit(s) in merge:`
-        );
-        unreviewedCommits.forEach((c) => {
-          console.log(
-            `      - ${c.sha.substring(0, 7)}: ${c.message.split('\n')[0].substring(0, 60)}`
-          );
-          console.log(`        Reason: ${c.reason}`);
+      const prInfo = await getPullRequestForCommit(owner, repo, commit.sha);
+
+      if (!prInfo) {
+        console.log(`   ❌ Commit ${commit.sha.substring(0, 7)}: No PR found (direct push)`);
+        unverifiedCommits.push({
+          sha: commit.sha,
+          message: commit.message.split('\n')[0],
+          author: commit.author,
+          date: commit.date,
+          html_url: commit.html_url,
+          pr_number: null,
+          reason: 'no_pr',
         });
-      } else {
-        console.log(`   ✅ [Deployment ${deploymentId}] No unreviewed commits found`);
+        continue;
       }
+
+      // Check cache first
+      let approvalResult = prCache.get(prInfo.number);
+      if (!approvalResult) {
+        approvalResult = await verifyPullRequestFourEyes(owner, repo, prInfo.number);
+        prCache.set(prInfo.number, approvalResult);
+        console.log(`   🔍 Commit ${commit.sha.substring(0, 7)}: PR #${prInfo.number} - ${approvalResult.hasFourEyes ? '✅ approved' : '❌ not approved'}`);
+      } else {
+        console.log(`   💾 Commit ${commit.sha.substring(0, 7)}: PR #${prInfo.number} - cached result`);
+      }
+
+      if (!approvalResult.hasFourEyes) {
+        unverifiedCommits.push({
+          sha: commit.sha,
+          message: commit.message.split('\n')[0],
+          author: commit.author,
+          date: commit.date,
+          html_url: commit.html_url,
+          pr_number: prInfo.number,
+          reason: 'pr_not_approved',
+        });
+      }
+    }
+
+    // Step 4: Determine final status
+    if (unverifiedCommits.length > 0) {
+      console.log(`❌ [Deployment ${deploymentId}] Found ${unverifiedCommits.length} unverified commit(s):`);
+      unverifiedCommits.forEach((c) => {
+        console.log(`      - ${c.sha.substring(0, 7)}: ${c.message.substring(0, 60)}`);
+        console.log(`        Reason: ${c.reason}, PR: ${c.pr_number || 'none'}`);
+      });
+
+      await updateDeploymentFourEyes(deploymentId, {
+        hasFourEyes: false,
+        fourEyesStatus: 'unverified_commits',
+        githubPrNumber: null,
+        githubPrUrl: null,
+        unverifiedCommits,
+      });
     } else {
-      if (!fourEyesResult.hasFourEyes) {
-        console.log(
-          `   ℹ️  [Deployment ${deploymentId}] Skipping unreviewed commits check - PR itself lacks approval`
-        );
-      } else {
-        console.log(
-          `   ℹ️  [Deployment ${deploymentId}] Not a merge commit or no detailed PR info`
-        );
-        if (!parentCommits) {
-          console.log(`      - No parent commits available`);
-        } else if (parentCommits.length < 2) {
-          console.log(`      - Only ${parentCommits.length} parent(s) - not a merge`);
-        }
-        if (!detailedPrInfo) {
-          console.log(`      - No detailed PR info available`);
-        }
-      }
+      console.log(`✅ [Deployment ${deploymentId}] All ${commitsBetween.length} commit(s) verified`);
+      await updateDeploymentFourEyes(deploymentId, {
+        hasFourEyes: true,
+        fourEyesStatus: 'approved',
+        githubPrNumber: null,
+        githubPrUrl: null,
+      });
     }
-
-    // Add unreviewed commits to PR data if found
-    const prDataWithUnreviewed = detailedPrInfo
-      ? {
-          ...detailedPrInfo,
-          unreviewed_commits: unreviewedCommits.length > 0 ? unreviewedCommits : undefined,
-        }
-      : null;
-
-    // Determine final status
-    let finalHasFourEyes = fourEyesResult.hasFourEyes;
-    let finalStatus = fourEyesResult.hasFourEyes ? 'approved_pr' : 'missing';
-
-    if (unreviewedCommits.length > 0) {
-      finalHasFourEyes = false;
-      finalStatus = 'approved_pr_with_unreviewed';
-      console.log(
-        `❌ [Deployment ${deploymentId}] Marking as not approved due to unreviewed commits`
-      );
-    }
-
-    await updateDeploymentFourEyes(deploymentId, {
-      hasFourEyes: finalHasFourEyes,
-      fourEyesStatus: finalStatus,
-      githubPrNumber: prInfo.number,
-      githubPrUrl: prInfo.html_url,
-      githubPrData: prDataWithUnreviewed,
-      branchName,
-      parentCommits,
-    });
 
     return true;
   } catch (error) {
