@@ -14,6 +14,8 @@ import {
 } from '~/db/deployments.server';
 import { getMonitoredApplication } from '~/db/monitored-applications.server';
 import {
+  getBranchFromWorkflowRun,
+  getCommitDetails,
   getDetailedPullRequestInfo,
   getPullRequestForCommit,
   verifyPullRequestFourEyes,
@@ -273,7 +275,8 @@ export async function verifyDeploymentsFourEyes(
       const success = await verifyDeploymentFourEyes(
         deployment.id,
         deployment.commit_sha,
-        `${deployment.detected_github_owner}/${deployment.detected_github_repo_name}`
+        `${deployment.detected_github_owner}/${deployment.detected_github_repo_name}`,
+        deployment.trigger_url
       );
 
       if (success) {
@@ -310,7 +313,8 @@ export async function verifyDeploymentsFourEyes(
 export async function verifyDeploymentFourEyes(
   deploymentId: number,
   commitSha: string,
-  repository: string
+  repository: string,
+  triggerUrl?: string | null
 ): Promise<boolean> {
   const repoParts = repository.split('/');
   if (repoParts.length !== 2) {
@@ -322,6 +326,16 @@ export async function verifyDeploymentFourEyes(
 
   try {
     console.log(`🔍 [Deployment ${deploymentId}] Checking commit ${commitSha} in ${repository}`);
+
+    // Fetch branch name from workflow run if available
+    let branchName: string | null = null;
+    if (triggerUrl) {
+      branchName = await getBranchFromWorkflowRun(triggerUrl);
+    }
+
+    // Fetch commit details to get parent commits (for merge commits)
+    const commitDetails = await getCommitDetails(owner, repo, commitSha);
+    const parentCommits = commitDetails?.parents || null;
 
     // Check if commit is part of a PR
     const prInfo = await getPullRequestForCommit(owner, repo, commitSha);
@@ -336,6 +350,8 @@ export async function verifyDeploymentFourEyes(
         fourEyesStatus: 'direct_push',
         githubPrNumber: null,
         githubPrUrl: null,
+        branchName,
+        parentCommits,
       });
       return true;
     }
@@ -361,6 +377,8 @@ export async function verifyDeploymentFourEyes(
       githubPrNumber: prInfo.number,
       githubPrUrl: prInfo.html_url,
       githubPrData: detailedPrInfo,
+      branchName,
+      parentCommits,
     });
 
     return true;

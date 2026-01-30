@@ -97,6 +97,10 @@ CREATE TABLE IF NOT EXISTS deployments (
   --   checks: [{ name: string, status: string, conclusion: string, started_at: string, completed_at: string, html_url: string }]
   -- }
   
+  -- Branch and merge information
+  branch_name VARCHAR(255), -- Branch that was deployed (from GitHub Actions workflow)
+  parent_commits JSONB, -- Parent commit SHAs for merge commits: [{ sha: string }, ...]
+  
   -- Kubernetes resources (JSONB for flexibility)
   resources JSONB,
   

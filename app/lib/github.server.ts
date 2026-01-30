@@ -483,3 +483,83 @@ export async function getDetailedPullRequestInfo(
     return null;
   }
 }
+
+/**
+ * Get branch name from GitHub Actions workflow run URL
+ * Example URL: https://github.com/navikt/pensjon-pen/actions/runs/21433252772
+ */
+export async function getBranchFromWorkflowRun(triggerUrl: string): Promise<string | null> {
+  try {
+    // Parse workflow run ID from URL
+    const match = triggerUrl.match(/\/actions\/runs\/(\d+)/);
+    if (!match) {
+      console.warn(`Could not extract workflow run ID from URL: ${triggerUrl}`);
+      return null;
+    }
+
+    const runId = parseInt(match[1], 10);
+    
+    // Extract owner/repo from URL
+    const repoMatch = triggerUrl.match(/github\.com\/([^\/]+)\/([^\/]+)\//);
+    if (!repoMatch) {
+      console.warn(`Could not extract owner/repo from URL: ${triggerUrl}`);
+      return null;
+    }
+
+    const [, owner, repo] = repoMatch;
+    const client = getGitHubClient();
+
+    console.log(`🔍 Fetching workflow run ${runId} for ${owner}/${repo}`);
+
+    const response = await client.actions.getWorkflowRun({
+      owner,
+      repo,
+      run_id: runId,
+    });
+
+    console.log(`✅ Workflow run branch: ${response.data.head_branch}`);
+    return response.data.head_branch;
+  } catch (error) {
+    console.error('Error fetching workflow run:', error);
+    return null;
+  }
+}
+
+/**
+ * Get commit details including parent commits for merge commits
+ */
+export async function getCommitDetails(
+  owner: string,
+  repo: string,
+  sha: string
+): Promise<{
+  parents: Array<{ sha: string }>;
+  message: string;
+} | null> {
+  try {
+    const client = getGitHubClient();
+
+    console.log(`🔍 Fetching commit details for ${sha} in ${owner}/${repo}`);
+
+    const response = await client.repos.getCommit({
+      owner,
+      repo,
+      ref: sha,
+    });
+
+    const parents = response.data.parents.map((p) => ({ sha: p.sha }));
+    
+    console.log(`✅ Commit has ${parents.length} parent(s)`);
+    if (parents.length > 1) {
+      console.log(`   🔀 Merge commit with parents: ${parents.map(p => p.sha.substring(0, 7)).join(', ')}`);
+    }
+
+    return {
+      parents,
+      message: response.data.commit.message,
+    };
+  } catch (error) {
+    console.error(`Error fetching commit details for ${sha}:`, error);
+    return null;
+  }
+}

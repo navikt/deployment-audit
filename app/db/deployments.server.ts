@@ -15,6 +15,8 @@ export interface Deployment {
   github_pr_number: number | null;
   github_pr_url: string | null;
   github_pr_data: GitHubPRData | null;
+  branch_name: string | null;
+  parent_commits: Array<{ sha: string }> | null;
   resources: any; // JSONB
   synced_at: Date;
 }
@@ -276,6 +278,8 @@ export async function updateDeploymentFourEyes(
     githubPrNumber: number | null;
     githubPrUrl: string | null;
     githubPrData?: GitHubPRData | null;
+    branchName?: string | null;
+    parentCommits?: Array<{ sha: string }> | null;
   }
 ): Promise<Deployment> {
   const result = await pool.query(
@@ -284,8 +288,10 @@ export async function updateDeploymentFourEyes(
          four_eyes_status = $2,
          github_pr_number = $3,
          github_pr_url = $4,
-         github_pr_data = $5
-     WHERE id = $6
+         github_pr_data = $5,
+         branch_name = $6,
+         parent_commits = $7
+     WHERE id = $8
      RETURNING *`,
     [
       data.hasFourEyes,
@@ -293,6 +299,8 @@ export async function updateDeploymentFourEyes(
       data.githubPrNumber,
       data.githubPrUrl,
       data.githubPrData ? JSON.stringify(data.githubPrData) : null,
+      data.branchName || null,
+      data.parentCommits ? JSON.stringify(data.parentCommits) : null,
       deploymentId,
     ]
   );

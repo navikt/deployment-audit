@@ -97,7 +97,8 @@ export async function action({ request, params }: Route.ActionArgs) {
       const success = await verifyDeploymentFourEyes(
         deployment.id,
         deployment.commit_sha,
-        `${deployment.detected_github_owner}/${deployment.detected_github_repo_name}`
+        `${deployment.detected_github_owner}/${deployment.detected_github_repo_name}`,
+        deployment.trigger_url
       );
 
       if (success) {
@@ -292,6 +293,43 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
             )}
           </BodyShort>
         </div>
+
+        {deployment.branch_name && (
+          <div>
+            <Detail>Branch</Detail>
+            <BodyShort>
+              <a
+                href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/tree/${deployment.branch_name}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.codeMedium}
+              >
+                {deployment.branch_name}
+              </a>
+            </BodyShort>
+          </div>
+        )}
+
+        {deployment.parent_commits && deployment.parent_commits.length > 1 && (
+          <div>
+            <Detail>Merge commit (parents)</Detail>
+            <BodyShort>
+              {deployment.parent_commits.map((parent, index) => (
+                <span key={parent.sha}>
+                  <a
+                    href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/commit/${parent.sha}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={styles.codeMedium}
+                  >
+                    {parent.sha.substring(0, 7)}
+                  </a>
+                  {index < deployment.parent_commits!.length - 1 && ', '}
+                </span>
+              ))}
+            </BodyShort>
+          </div>
+        )}
 
         {deployment.github_pr_number && deployment.github_pr_url && (
           <div>
