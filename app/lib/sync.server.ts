@@ -372,9 +372,14 @@ export async function verifyDeploymentFourEyes(
     // Fetch detailed PR information
     const detailedPrInfo = await getDetailedPullRequestInfo(owner, repo, prInfo.number);
 
-    // Check for unreviewed commits in merge (if this is a merge commit)
+    // Check for unreviewed commits in merge (ONLY if PR itself is approved)
     let unreviewedCommits: Array<any> = [];
-    if (parentCommits && parentCommits.length >= 2 && detailedPrInfo) {
+    if (
+      fourEyesResult.hasFourEyes &&
+      parentCommits &&
+      parentCommits.length >= 2 &&
+      detailedPrInfo
+    ) {
       console.log(
         `🔀 [Deployment ${deploymentId}] Merge commit detected - checking for unreviewed commits`
       );
@@ -416,14 +421,22 @@ export async function verifyDeploymentFourEyes(
         console.log(`   ✅ [Deployment ${deploymentId}] No unreviewed commits found`);
       }
     } else {
-      console.log(`   ℹ️  [Deployment ${deploymentId}] Not a merge commit or no detailed PR info`);
-      if (!parentCommits) {
-        console.log(`      - No parent commits available`);
-      } else if (parentCommits.length < 2) {
-        console.log(`      - Only ${parentCommits.length} parent(s) - not a merge`);
-      }
-      if (!detailedPrInfo) {
-        console.log(`      - No detailed PR info available`);
+      if (!fourEyesResult.hasFourEyes) {
+        console.log(
+          `   ℹ️  [Deployment ${deploymentId}] Skipping unreviewed commits check - PR itself lacks approval`
+        );
+      } else {
+        console.log(
+          `   ℹ️  [Deployment ${deploymentId}] Not a merge commit or no detailed PR info`
+        );
+        if (!parentCommits) {
+          console.log(`      - No parent commits available`);
+        } else if (parentCommits.length < 2) {
+          console.log(`      - Only ${parentCommits.length} parent(s) - not a merge`);
+        }
+        if (!detailedPrInfo) {
+          console.log(`      - No detailed PR info available`);
+        }
       }
     }
 
