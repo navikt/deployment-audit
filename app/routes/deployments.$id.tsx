@@ -706,72 +706,73 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           {/* PR Commits */}
           {deployment.github_pr_data?.commits && deployment.github_pr_data.commits.length > 0 && (
             <div>
-              <Heading size="small" spacing>
-                Commits i PR ({deployment.github_pr_data.commits.length})
-              </Heading>
-              <Box
-                background="neutral-soft"
-                padding="space-16"
-                borderRadius="12"
-                className={styles.marginTop2}
-              >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {deployment.github_pr_data.commits.map((commit) => (
-                    <div
-                      key={commit.sha}
-                      style={{
-                        display: 'flex',
-                        gap: '0.75rem',
-                        padding: '0.5rem',
-                        background: 'var(--a-surface-default)',
-                        borderRadius: '0.5rem',
-                      }}
-                    >
-                      {commit.author.avatar_url && (
-                        <img
-                          src={commit.author.avatar_url}
-                          alt={commit.author.username}
-                          style={{
-                            width: '32px',
-                            height: '32px',
-                            borderRadius: '50%',
-                            flexShrink: 0,
-                          }}
-                        />
-                      )}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div
-                          style={{
-                            display: 'flex',
-                            gap: '0.5rem',
-                            alignItems: 'baseline',
-                            flexWrap: 'wrap',
-                          }}
-                        >
-                          <a
-                            href={commit.html_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}
+              <Accordion>
+                <Accordion.Item>
+                  <Accordion.Header>
+                    Commits i PR ({deployment.github_pr_data.commits.length})
+                  </Accordion.Header>
+                  <Accordion.Content>
+                    <Box background="neutral-soft" padding="space-16" borderRadius="12">
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        {deployment.github_pr_data.commits.map((commit) => (
+                          <div
+                            key={commit.sha}
+                            style={{
+                              display: 'flex',
+                              gap: '0.75rem',
+                              padding: '0.5rem',
+                              background: 'var(--a-surface-default)',
+                              borderRadius: '0.5rem',
+                            }}
                           >
-                            {commit.sha.substring(0, 7)}
-                          </a>
-                          <span className={styles.textSubtle}>{commit.author.username}</span>
-                          <span className={styles.textSubtle}>
-                            {new Date(commit.date).toLocaleString('no-NO', {
-                              dateStyle: 'short',
-                              timeStyle: 'short',
-                            })}
-                          </span>
-                        </div>
-                        <BodyShort style={{ marginTop: '0.25rem' }}>
-                          {commit.message.split('\n')[0]}
-                        </BodyShort>
+                            {commit.author.avatar_url && (
+                              <img
+                                src={commit.author.avatar_url}
+                                alt={commit.author.username}
+                                style={{
+                                  width: '32px',
+                                  height: '32px',
+                                  borderRadius: '50%',
+                                  flexShrink: 0,
+                                }}
+                              />
+                            )}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  gap: '0.5rem',
+                                  alignItems: 'baseline',
+                                  flexWrap: 'wrap',
+                                }}
+                              >
+                                <a
+                                  href={commit.html_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}
+                                >
+                                  {commit.sha.substring(0, 7)}
+                                </a>
+                                <span className={styles.textSubtle}>{commit.author.username}</span>
+                                <span className={styles.textSubtle}>
+                                  {new Date(commit.date).toLocaleString('no-NO', {
+                                    dateStyle: 'short',
+                                    timeStyle: 'short',
+                                  })}
+                                </span>
+                              </div>
+                              <BodyShort style={{ marginTop: '0.25rem' }}>
+                                {commit.message.split('\n')[0]}
+                              </BodyShort>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </Box>
+                    </Box>
+                  </Accordion.Content>
+                </Accordion.Item>
+              </Accordion>
             </div>
           )}
 
