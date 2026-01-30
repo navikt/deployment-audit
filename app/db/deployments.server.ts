@@ -359,6 +359,44 @@ export async function getPreviousDeployment(
   return result.rows[0] || null;
 }
 
+/**
+ * Get the next deployment (chronologically) for navigation
+ */
+export async function getNextDeployment(
+  currentDeploymentId: number,
+  monitoredAppId: number
+): Promise<Deployment | null> {
+  const result = await pool.query(
+    `SELECT * FROM deployments
+     WHERE monitored_app_id = $1
+       AND id > $2
+     ORDER BY created_at ASC, id ASC
+     LIMIT 1`,
+    [monitoredAppId, currentDeploymentId]
+  );
+  
+  return result.rows[0] || null;
+}
+
+/**
+ * Get the previous deployment (chronologically) for navigation
+ */
+export async function getPreviousDeploymentForNav(
+  currentDeploymentId: number,
+  monitoredAppId: number
+): Promise<Deployment | null> {
+  const result = await pool.query(
+    `SELECT * FROM deployments
+     WHERE monitored_app_id = $1
+       AND id < $2
+     ORDER BY created_at DESC, id DESC
+     LIMIT 1`,
+    [monitoredAppId, currentDeploymentId]
+  );
+  
+  return result.rows[0] || null;
+}
+
 export interface AppDeploymentStats {
   total: number;
   with_four_eyes: number;

@@ -27,7 +27,12 @@ import {
   getCommentsByDeploymentId,
   getManualApproval,
 } from '~/db/comments.server';
-import { getDeploymentById, updateDeploymentFourEyes } from '~/db/deployments.server';
+import {
+  getDeploymentById,
+  getNextDeployment,
+  getPreviousDeploymentForNav,
+  updateDeploymentFourEyes,
+} from '~/db/deployments.server';
 import { verifyDeploymentFourEyes } from '~/lib/sync.server';
 import styles from '../styles/common.module.css';
 import type { Route } from './+types/deployments.$id';
@@ -42,8 +47,15 @@ export async function loader({ params }: Route.LoaderArgs) {
 
   const comments = await getCommentsByDeploymentId(deploymentId);
   const manualApproval = await getManualApproval(deploymentId);
+  
+  // Get previous and next deployments for navigation
+  const previousDeployment = await getPreviousDeploymentForNav(
+    deploymentId,
+    deployment.monitored_app_id
+  );
+  const nextDeployment = await getNextDeployment(deploymentId, deployment.monitored_app_id);
 
-  return { deployment, comments, manualApproval };
+  return { deployment, comments, manualApproval, previousDeployment, nextDeployment };
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
@@ -221,7 +233,7 @@ function getFourEyesStatus(deployment: any): {
 }
 
 export default function DeploymentDetail({ loaderData, actionData }: Route.ComponentProps) {
-  const { deployment, comments, manualApproval } = loaderData;
+  const { deployment, comments, manualApproval, previousDeployment, nextDeployment } = loaderData;
   const [commentText, setCommentText] = useState('');
   const [slackLink, setSlackLink] = useState('');
   const [approvedBy, setApprovedBy] = useState('');
@@ -248,6 +260,49 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           })}
         </BodyShort>
       </div>
+
+      {/* Navigation between deployments */}
+      <Box
+        background="neutral-soft"
+        padding="space-16"
+        borderRadius="8"
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+      >
+        {previousDeployment ? (
+          <Button
+            as={Link}
+            to={`/deployments/${previousDeployment.id}`}
+            variant="secondary"
+            size="small"
+          >
+            ← Forrige
+          </Button>
+        ) : (
+          <div />
+        )}
+        
+        <Button
+          as={Link}
+          to={`/applications/${deployment.team_slug}/${deployment.environment_name}/${deployment.app_name}`}
+          variant="tertiary"
+          size="small"
+        >
+          Alle deployments
+        </Button>
+
+        {nextDeployment ? (
+          <Button
+            as={Link}
+            to={`/deployments/${nextDeployment.id}`}
+            variant="secondary"
+            size="small"
+          >
+            Neste →
+          </Button>
+        ) : (
+          <div />
+        )}
+      </Box>
 
       {actionData?.success && <Alert variant="success">{actionData.success}</Alert>}
       {actionData?.error && <Alert variant="error">{actionData.error}</Alert>}
