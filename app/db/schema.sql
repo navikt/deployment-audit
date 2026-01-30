@@ -158,34 +158,6 @@ CREATE TABLE IF NOT EXISTS deployment_comments (
 
 CREATE INDEX IF NOT EXISTS idx_deployment_comments_deployment_id ON deployment_comments(deployment_id);
 
--- Tertial boards for teams
-CREATE TABLE IF NOT EXISTS tertial_boards (
-  id SERIAL PRIMARY KEY,
-  team_name VARCHAR(255) NOT NULL,
-  year INTEGER NOT NULL,
-  tertial INTEGER NOT NULL CHECK (tertial IN (1, 2, 3)),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(team_name, year, tertial)
-);
-
--- Goals within tertial boards
-CREATE TABLE IF NOT EXISTS tertial_goals (
-  id SERIAL PRIMARY KEY,
-  board_id INTEGER REFERENCES tertial_boards(id) ON DELETE CASCADE,
-  goal_title VARCHAR(512) NOT NULL,
-  goal_description TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_tertial_goals_board_id ON tertial_goals(board_id);
-
--- Many-to-many relationship between deployments and goals
-CREATE TABLE IF NOT EXISTS deployment_goals (
-  deployment_id INTEGER REFERENCES deployments(id) ON DELETE CASCADE,
-  goal_id INTEGER REFERENCES tertial_goals(id) ON DELETE CASCADE,
-  PRIMARY KEY (deployment_id, goal_id)
-);
-
 -- Triggers for updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$

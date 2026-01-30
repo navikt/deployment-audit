@@ -156,28 +156,3 @@ CREATE TABLE IF NOT EXISTS deployment_comments (
 );
 
 CREATE INDEX IF NOT EXISTS idx_comments_deployment ON deployment_comments(deployment_id);
-
--- Tertial goals tracking
-CREATE TABLE IF NOT EXISTS tertial_boards (
-  id SERIAL PRIMARY KEY,
-  name VARCHAR(255) NOT NULL UNIQUE,
-  start_date DATE NOT NULL,
-  end_date DATE NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS tertial_goals (
-  id SERIAL PRIMARY KEY,
-  board_id INTEGER REFERENCES tertial_boards(id) ON DELETE CASCADE,
-  monitored_app_id INTEGER REFERENCES monitored_applications(id) ON DELETE CASCADE,
-  
-  goal_percentage INTEGER NOT NULL CHECK (goal_percentage >= 0 AND goal_percentage <= 100),
-  notes TEXT,
-  
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  
-  UNIQUE(board_id, monitored_app_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_goals_board ON tertial_goals(board_id);
-CREATE INDEX IF NOT EXISTS idx_goals_app ON tertial_goals(monitored_app_id);

@@ -30,12 +30,10 @@ async function initDatabase() {
     console.log('🗑️  Dropping existing tables...');
     await pool.query(`
       DROP TABLE IF EXISTS deployment_comments CASCADE;
-      DROP TABLE IF EXISTS deployment_goals CASCADE;
-      DROP TABLE IF EXISTS tertial_goals CASCADE;
-      DROP TABLE IF EXISTS tertial_boards CASCADE;
       DROP TABLE IF EXISTS deployments CASCADE;
       DROP TABLE IF EXISTS repositories CASCADE;
       DROP TABLE IF EXISTS repository_alerts CASCADE;
+      DROP TABLE IF EXISTS application_repositories CASCADE;
       DROP TABLE IF EXISTS monitored_applications CASCADE;
     `);
     console.log('✅ Old tables dropped\n');
