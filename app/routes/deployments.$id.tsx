@@ -397,6 +397,143 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
         </Alert>
       )}
 
+      {/* Deployment Method Section */}
+      <Box background="neutral-soft" padding="space-24" borderRadius="8">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+          {deployment.github_pr_number ? (
+            <>
+              <Tag variant="info" size="medium">
+                Pull Request
+              </Tag>
+              <Heading size="small">
+                <a href={deployment.github_pr_url || '#'} target="_blank" rel="noopener noreferrer">
+                  PR #{deployment.github_pr_number}
+                </a>
+                {deployment.github_pr_data?.title && ` - ${deployment.github_pr_data.title}`}
+              </Heading>
+            </>
+          ) : deployment.four_eyes_status === 'direct_push' || deployment.four_eyes_status === 'unverified_commits' ? (
+            <>
+              <Tag variant="warning" size="medium">
+                Direct Push
+              </Tag>
+              <Heading size="small">Pushet direkte til main</Heading>
+            </>
+          ) : deployment.four_eyes_status === 'legacy' ? (
+            <>
+              <Tag variant="neutral" size="medium">
+                Legacy
+              </Tag>
+              <Heading size="small">Historisk deployment</Heading>
+            </>
+          ) : (
+            <>
+              <Tag variant="neutral" size="medium">
+                Ukjent
+              </Tag>
+              <Heading size="small">Metode ikke fastslått</Heading>
+            </>
+          )}
+        </div>
+
+        {/* Quick summary row */}
+        <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
+          <div>
+            <Detail>Tidspunkt</Detail>
+            <BodyShort>
+              {new Date(deployment.created_at).toLocaleString('no-NO', {
+                dateStyle: 'medium',
+                timeStyle: 'short',
+              })}
+            </BodyShort>
+          </div>
+          <div>
+            <Detail>Deployer</Detail>
+            <BodyShort>
+              {deployment.deployer_username ? (
+                <>
+                  <a
+                    href={`https://github.com/${deployment.deployer_username}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {deployment.deployer_username}
+                  </a>
+                  {getUserDisplay(deployment.deployer_username) && (
+                    <span className={styles.textSubtle}> ({getUserDisplay(deployment.deployer_username)})</span>
+                  )}
+                </>
+              ) : (
+                '(ukjent)'
+              )}
+            </BodyShort>
+          </div>
+          <div>
+            <Detail>Commit</Detail>
+            <BodyShort>
+              {deployment.commit_sha ? (
+                <a
+                  href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/commit/${deployment.commit_sha}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={styles.codeMedium}
+                >
+                  {deployment.commit_sha.substring(0, 7)}
+                </a>
+              ) : (
+                <span className={styles.textSubtle}>(ukjent)</span>
+              )}
+            </BodyShort>
+          </div>
+          <div>
+            <Detail>Miljø</Detail>
+            <BodyShort>{deployment.environment_name}</BodyShort>
+          </div>
+          {deployment.github_pr_data?.creator && (
+            <div>
+              <Detail>PR Opprettet av</Detail>
+              <BodyShort>
+                <a
+                  href={`https://github.com/${deployment.github_pr_data.creator.username}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {deployment.github_pr_data.creator.username}
+                </a>
+                {getUserDisplay(deployment.github_pr_data.creator.username) && (
+                  <span className={styles.textSubtle}>
+                    {' '}
+                    ({getUserDisplay(deployment.github_pr_data.creator.username)})
+                  </span>
+                )}
+              </BodyShort>
+            </div>
+          )}
+          {deployment.github_pr_data?.merged_by && (
+            <div>
+              <Detail>Merget av</Detail>
+              <BodyShort>
+                <a
+                  href={`https://github.com/${deployment.github_pr_data.merged_by.username}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {deployment.github_pr_data.merged_by.username}
+                </a>
+                {getUserDisplay(deployment.github_pr_data.merged_by.username) && (
+                  <span className={styles.textSubtle}>
+                    {' '}
+                    ({getUserDisplay(deployment.github_pr_data.merged_by.username)})
+                  </span>
+                )}
+              </BodyShort>
+            </div>
+          )}
+        </div>
+      </Box>
+
+      {/* Deployment Details Section */}
+      <Heading size="medium">Detaljer</Heading>
       <div className={styles.detailsGrid}>
         <div>
           <Detail>Applikasjon</Detail>
