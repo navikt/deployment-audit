@@ -234,10 +234,14 @@ export async function verifyDeploymentsFourEyes(filters?: DeploymentFilters & { 
   const needsVerification = deploymentsToVerify.filter((d) => !d.has_four_eyes)
 
   // Prioritize: 1) pending (never verified), 2) others (failed verification or direct push)
-  const prioritized = [
-    ...needsVerification.filter((d) => d.four_eyes_status === 'pending'),
-    ...needsVerification.filter((d) => d.four_eyes_status !== 'pending'),
-  ]
+  // Within each priority, sort by created_at ascending (oldest first)
+  const pending = needsVerification
+    .filter((d) => d.four_eyes_status === 'pending')
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+  const nonPending = needsVerification
+    .filter((d) => d.four_eyes_status !== 'pending')
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+  const prioritized = [...pending, ...nonPending]
 
   // Apply limit if specified
   const toVerify = filters?.limit ? prioritized.slice(0, filters.limit) : prioritized
