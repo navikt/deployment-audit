@@ -4,6 +4,13 @@ import type { GitHubPRData } from '~/db/deployments.server'
 let octokit: Octokit | null = null
 let requestCount = 0
 
+// Cache for PR commits to avoid repeated API calls for same PR
+const prCommitsCache = new Map<string, string[]>()
+
+export function clearPrCommitsCache(): void {
+  prCommitsCache.clear()
+}
+
 export function getGitHubRequestCount(): number {
   return requestCount
 }
@@ -187,34 +194,46 @@ export async function getPullRequestForCommit(
         // Only check merged PRs
         if (!pr.merged_at) continue
 
-        // Fetch the PR's commits
-        try {
-          const prCommitsResponse = await client.pulls.listCommits({
-            owner,
-            repo,
-            pull_number: pr.number,
-            per_page: 100,
-          })
+        // Check cache first
+        const cacheKey = `${owner}/${repo}#${pr.number}`
+        let prCommitShas = prCommitsCache.get(cacheKey)
 
-          // Check if our commit is in the PR's commit list
-          const isInPR = prCommitsResponse.data.some((c) => c.sha === sha)
+        if (!prCommitShas) {
+          // Fetch the PR's commits
+          try {
+            const prCommitsResponse = await client.pulls.listCommits({
+              owner,
+              repo,
+              pull_number: pr.number,
+              per_page: 100,
+            })
 
-          if (isInPR) {
-            console.log(`✅ Commit ${sha.substring(0, 7)} is an original commit in PR #${pr.number}`)
-            return {
-              number: pr.number,
-              title: pr.title,
-              html_url: pr.html_url,
-              merged_at: pr.merged_at,
-              state: pr.state,
-            }
-          } else {
-            console.log(
-              `⚠️  Commit ${sha.substring(0, 7)} is NOT in PR #${pr.number}'s original commits (likely merged from main)`,
-            )
+            prCommitShas = prCommitsResponse.data.map((c) => c.sha)
+            prCommitsCache.set(cacheKey, prCommitShas)
+          } catch (err) {
+            console.warn(`Could not fetch commits for PR #${pr.number}:`, err)
+            continue
           }
-        } catch (err) {
-          console.warn(`Could not fetch commits for PR #${pr.number}:`, err)
+        } else {
+          console.log(`   📋 Using cached commits for PR #${pr.number} (${prCommitShas.length} commits)`)
+        }
+
+        // Check if our commit is in the PR's commit list
+        const isInPR = prCommitShas.includes(sha)
+
+        if (isInPR) {
+          console.log(`✅ Commit ${sha.substring(0, 7)} is an original commit in PR #${pr.number}`)
+          return {
+            number: pr.number,
+            title: pr.title,
+            html_url: pr.html_url,
+            merged_at: pr.merged_at,
+            state: pr.state,
+          }
+        } else {
+          console.log(
+            `⚠️  Commit ${sha.substring(0, 7)} is NOT in PR #${pr.number}'s original commits (likely merged from main)`,
+          )
         }
       }
 
