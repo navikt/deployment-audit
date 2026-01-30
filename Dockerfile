@@ -18,5 +18,10 @@ FROM node:20-alpine
 COPY ./package.json package-lock.json /app/
 COPY --from=production-dependencies-env /app/node_modules /app/node_modules
 COPY --from=build-env /app/build /app/build
+# Copy migration files for runtime
+COPY ./app/db/migrations /app/app/db/migrations
+COPY ./node-pg-migrate.json /app/
+COPY ./scripts /app/scripts
 WORKDIR /app
-CMD ["npm", "run", "start"]
+# Run migrations then start server
+CMD ["sh", "-c", "npx node-pg-migrate up -m app/db/migrations && npm run start"]

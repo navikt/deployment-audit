@@ -1,4 +1,14 @@
 .react-router
 build
 node_modules
-README.md
+.git
+.env
+.env.local
+*.log
+npm-debug.log*
+dist
+.vscode
+.idea
+.DS_Store
+coverage
+scripts/start-prod.js

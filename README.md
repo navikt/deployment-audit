@@ -54,20 +54,35 @@ NAIS_GRAPHQL_URL=http://localhost:4242/graphql
 npm run db:migrate
 ```
 
-**Eller med legacy init script:**
+**Eller med legacy init script (dropper alle tabeller først):**
 ```bash
 npm run db:init
 ```
 
-> **Tip:** Sjekk migration status med `npm run db:migrate:status`
-
 ### 4. Start appen
 
+**Lokalt (med auto-migrations):**
 ```bash
 npm run dev
 ```
 
 Åpne [http://localhost:5173](http://localhost:5173)
+
+## 🐳 Docker
+
+### Standard Alpine image
+```bash
+docker build -t nais-audit .
+docker run -e DATABASE_URL=... -e GITHUB_TOKEN=... -p 3000:3000 nais-audit
+```
+
+### Distroless image (anbefalt for produksjon)
+```bash
+docker build -f Dockerfile.distroless -t nais-audit:distroless .
+docker run -e DATABASE_URL=... -e GITHUB_TOKEN=... -p 3000:3000 nais-audit:distroless
+```
+
+Begge images kjører database migrations automatisk ved oppstart.
 
 ## 📖 Bruk
 
