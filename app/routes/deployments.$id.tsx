@@ -288,28 +288,55 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
 
   return (
     <div className={styles.pageContainer}>
+      {/* Combined Header: App + Environment + Status Tags */}
       <div>
-        <Detail>Deployment</Detail>
-        <Heading size="large">
-          {deployment.app_name} @ {deployment.environment_name}
-        </Heading>
-        <BodyShort>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <Heading size="large">
+            {deployment.app_name} @ {deployment.environment_name}
+          </Heading>
+          {/* Four-eyes status tag (only shown for OK/approved states) */}
+          {(deployment.four_eyes_status === 'approved' || deployment.four_eyes_status === 'manually_approved') && (
+            <Tag variant="success" size="small">
+              ✓ Four-eyes OK
+            </Tag>
+          )}
+          {/* Method tag */}
+          {deployment.github_pr_number ? (
+            <Tag variant="info" size="small">
+              Pull Request
+            </Tag>
+          ) : deployment.four_eyes_status === 'direct_push' || deployment.four_eyes_status === 'unverified_commits' ? (
+            <Tag variant="warning" size="small">
+              Direct Push
+            </Tag>
+          ) : deployment.four_eyes_status === 'legacy' ? (
+            <Tag variant="neutral" size="small">
+              Legacy
+            </Tag>
+          ) : null}
+        </div>
+        <BodyShort className={styles.textSubtle}>
           {new Date(deployment.created_at).toLocaleString('no-NO', {
             dateStyle: 'long',
             timeStyle: 'short',
           })}
+          {deployment.github_pr_number && deployment.github_pr_url && (
+            <>
+              {' '}
+              via{' '}
+              <a href={deployment.github_pr_url} target="_blank" rel="noopener noreferrer">
+                #{deployment.github_pr_number}
+              </a>
+              {deployment.github_pr_data?.title && ` - ${deployment.github_pr_data.title}`}
+            </>
+          )}
         </BodyShort>
       </div>
 
-      {/* Navigation between deployments */}
-      <Box
-        background="neutral-soft"
-        padding="space-16"
-        borderRadius="8"
-        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-      >
+      {/* Navigation between deployments - toned down */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         {previousDeployment ? (
-          <Button as={Link} to={`/deployments/${previousDeployment.id}`} variant="secondary" size="small">
+          <Button as={Link} to={`/deployments/${previousDeployment.id}`} variant="tertiary" size="small">
             ← Forrige
           </Button>
         ) : (
@@ -326,51 +353,54 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
         </Button>
 
         {nextDeployment ? (
-          <Button as={Link} to={`/deployments/${nextDeployment.id}`} variant="secondary" size="small">
+          <Button as={Link} to={`/deployments/${nextDeployment.id}`} variant="tertiary" size="small">
             Neste →
           </Button>
         ) : (
           <div />
         )}
-      </Box>
+      </div>
 
       {actionData?.success && <Alert variant="success">{actionData.success}</Alert>}
       {actionData?.error && <Alert variant="error">{actionData.error}</Alert>}
 
-      <Alert variant={status.variant}>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'flex-start',
-            gap: '1rem',
-          }}
-        >
-          <div style={{ flex: 1 }}>
-            <Heading size="small" spacing>
-              {status.text}
-            </Heading>
-            <BodyShort>{status.description}</BodyShort>
+      {/* Four-eyes Alert - only shown for non-OK states */}
+      {deployment.four_eyes_status !== 'approved' && deployment.four_eyes_status !== 'manually_approved' && (
+        <Alert variant={status.variant}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'flex-start',
+              gap: '1rem',
+            }}
+          >
+            <div style={{ flex: 1 }}>
+              <Heading size="small" spacing>
+                {status.text}
+              </Heading>
+              <BodyShort>{status.description}</BodyShort>
+            </div>
+            {deployment.commit_sha &&
+              ['pending', 'error', 'missing', 'direct_push', 'unverified_commits'].includes(
+                deployment.four_eyes_status,
+              ) && (
+                <Form method="post">
+                  <input type="hidden" name="intent" value="verify_four_eyes" />
+                  <Button
+                    type="submit"
+                    size="small"
+                    variant="secondary"
+                    icon={<ArrowsCirclepathIcon aria-hidden />}
+                    title="Verifiser four-eyes status mot GitHub"
+                  >
+                    Verifiser nå
+                  </Button>
+                </Form>
+              )}
           </div>
-          {deployment.commit_sha &&
-            ['pending', 'error', 'missing', 'direct_push', 'unverified_commits'].includes(
-              deployment.four_eyes_status,
-            ) && (
-              <Form method="post">
-                <input type="hidden" name="intent" value="verify_four_eyes" />
-                <Button
-                  type="submit"
-                  size="small"
-                  variant="secondary"
-                  icon={<ArrowsCirclepathIcon aria-hidden />}
-                  title="Verifiser four-eyes status mot GitHub"
-                >
-                  Verifiser nå
-                </Button>
-              </Form>
-            )}
-        </div>
-      </Alert>
+        </Alert>
+      )}
 
       {/* Unverified commits section */}
       {deployment.unverified_commits && deployment.unverified_commits.length > 0 && (
@@ -396,46 +426,6 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           </ul>
         </Alert>
       )}
-
-      {/* Deployment Method Section */}
-      <Box background="neutral-soft" padding="space-24" borderRadius="8">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          {deployment.github_pr_number ? (
-            <>
-              <Tag variant="info" size="medium">
-                Pull Request
-              </Tag>
-              <Heading size="small">
-                <a href={deployment.github_pr_url || '#'} target="_blank" rel="noopener noreferrer">
-                  PR #{deployment.github_pr_number}
-                </a>
-                {deployment.github_pr_data?.title && ` - ${deployment.github_pr_data.title}`}
-              </Heading>
-            </>
-          ) : deployment.four_eyes_status === 'direct_push' || deployment.four_eyes_status === 'unverified_commits' ? (
-            <>
-              <Tag variant="warning" size="medium">
-                Direct Push
-              </Tag>
-              <Heading size="small">Pushet direkte til main</Heading>
-            </>
-          ) : deployment.four_eyes_status === 'legacy' ? (
-            <>
-              <Tag variant="neutral" size="medium">
-                Legacy
-              </Tag>
-              <Heading size="small">Historisk deployment</Heading>
-            </>
-          ) : (
-            <>
-              <Tag variant="neutral" size="medium">
-                Ukjent
-              </Tag>
-              <Heading size="small">Metode ikke fastslått</Heading>
-            </>
-          )}
-        </div>
-      </Box>
 
       {/* Deployment Details Section */}
       <Heading size="medium">Detaljer</Heading>
