@@ -264,13 +264,7 @@ export default function AppDeployments() {
           </Box>
         ) : (
           deployments.map((deployment) => (
-            <Box
-              key={deployment.id}
-              padding="space-20"
-              background="raised"
-              borderColor="neutral-subtle"
-              className={styles.stackedListItem}
-            >
+            <Box key={deployment.id} padding="space-20" background="raised" className={styles.stackedListItem}>
               <VStack gap="space-12">
                 {/* First row: Time, Title (on desktop), Tags (right-aligned) */}
                 <HStack gap="space-8" align="center" justify="space-between" wrap>

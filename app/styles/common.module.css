@@ -434,10 +434,9 @@
 
 /* Stacked list styles - for connected cards without gaps */
 .stackedListItem {
-  /* No border-radius by default (middle items) */
   border-radius: 0;
-  /* Only bottom border to avoid double borders */
-  border-width: 1px 1px 0 1px;
+  border: 1px solid var(--ax-border-neutral-subtle);
+  border-bottom: none;
 }
 
 .stackedListItem:first-child {
@@ -448,5 +447,5 @@
 .stackedListItem:last-child {
   border-bottom-left-radius: var(--ax-radius-8);
   border-bottom-right-radius: var(--ax-radius-8);
-  border-width: 1px;
+  border-bottom: 1px solid var(--ax-border-neutral-subtle);
 }
