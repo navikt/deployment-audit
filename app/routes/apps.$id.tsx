@@ -7,10 +7,11 @@ import {
   Detail,
   Heading,
   HGrid,
+  Hide,
   HStack,
   Label,
   Select,
-  Table,
+  Show,
   Tag,
   VStack,
 } from '@navikt/ds-react'
@@ -274,48 +275,43 @@ export default function AppDetail() {
         <Box padding="space-24" borderRadius="8" background="raised" borderColor="warning-subtle" borderWidth="1">
           <VStack gap="space-16">
             <Heading size="medium">⚠️ Åpne varsler ({alerts.length})</Heading>
-            <Table size="small">
-              <Table.Header>
-                <Table.Row>
-                  <Table.HeaderCell>Dato</Table.HeaderCell>
-                  <Table.HeaderCell>Type</Table.HeaderCell>
-                  <Table.HeaderCell>Forventet repo</Table.HeaderCell>
-                  <Table.HeaderCell>Detektert repo</Table.HeaderCell>
-                  <Table.HeaderCell>Deployment</Table.HeaderCell>
-                </Table.Row>
-              </Table.Header>
-              <Table.Body>
-                {alerts.map((alert) => (
-                  <Table.Row key={alert.id}>
-                    <Table.DataCell>
-                      <Detail textColor="subtle">{new Date(alert.created_at).toLocaleDateString('no-NO')}</Detail>
-                    </Table.DataCell>
-                    <Table.DataCell>
-                      <Tag data-color="warning" size="xsmall" variant="outline">
-                        {alert.alert_type === 'repository_mismatch' && 'Ukjent repo'}
-                        {alert.alert_type === 'pending_approval' && 'Venter godkjenning'}
-                        {alert.alert_type === 'historical_repository' && 'Historisk repo'}
-                      </Tag>
-                    </Table.DataCell>
-                    <Table.DataCell>
-                      <code style={{ fontSize: '0.75rem' }}>
-                        {alert.expected_github_owner}/{alert.expected_github_repo_name}
-                      </code>
-                    </Table.DataCell>
-                    <Table.DataCell>
-                      <code style={{ fontSize: '0.75rem' }}>
-                        {alert.detected_github_owner}/{alert.detected_github_repo_name}
-                      </code>
-                    </Table.DataCell>
-                    <Table.DataCell>
+            <VStack gap="space-12">
+              {alerts.map((alert) => (
+                <Box key={alert.id} padding="space-16" borderRadius="8" background="sunken">
+                  <VStack gap="space-12">
+                    {/* First row: Type tag, date, action button */}
+                    <HStack gap="space-8" align="center" justify="space-between" wrap>
+                      <HStack gap="space-12" align="center">
+                        <Tag data-color="warning" size="xsmall" variant="outline">
+                          {alert.alert_type === 'repository_mismatch' && 'Ukjent repo'}
+                          {alert.alert_type === 'pending_approval' && 'Venter godkjenning'}
+                          {alert.alert_type === 'historical_repository' && 'Historisk repo'}
+                        </Tag>
+                        <Detail textColor="subtle">{new Date(alert.created_at).toLocaleDateString('no-NO')}</Detail>
+                      </HStack>
                       <Button as={Link} to={`/deployments/${alert.deployment_id}`} size="xsmall" variant="tertiary">
                         Se deployment
                       </Button>
-                    </Table.DataCell>
-                  </Table.Row>
-                ))}
-              </Table.Body>
-            </Table>
+                    </HStack>
+                    {/* Repository comparison */}
+                    <VStack gap="space-4">
+                      <HStack gap="space-8" wrap>
+                        <Detail textColor="subtle">Forventet:</Detail>
+                        <code style={{ fontSize: '0.75rem' }}>
+                          {alert.expected_github_owner}/{alert.expected_github_repo_name}
+                        </code>
+                      </HStack>
+                      <HStack gap="space-8" wrap>
+                        <Detail textColor="subtle">Detektert:</Detail>
+                        <code style={{ fontSize: '0.75rem', color: 'var(--ax-text-danger)' }}>
+                          {alert.detected_github_owner}/{alert.detected_github_repo_name}
+                        </code>
+                      </HStack>
+                    </VStack>
+                  </VStack>
+                </Box>
+              ))}
+            </VStack>
             <div>
               <Button as={Link} to="/alerts" variant="secondary" size="small">
                 Se alle varsler →
@@ -359,38 +355,29 @@ export default function AppDetail() {
           {pendingRepos.length > 0 && (
             <VStack gap="space-12">
               <Label>Venter godkjenning ({pendingRepos.length})</Label>
-              <Table size="small">
-                <Table.Header>
-                  <Table.Row>
-                    <Table.HeaderCell>Repository</Table.HeaderCell>
-                    <Table.HeaderCell>Opprettet</Table.HeaderCell>
-                    <Table.HeaderCell>Handlinger</Table.HeaderCell>
-                  </Table.Row>
-                </Table.Header>
-                <Table.Body>
-                  {pendingRepos.map((repo) => (
-                    <Table.Row key={repo.id}>
-                      <Table.DataCell>
+              <VStack gap="space-8">
+                {pendingRepos.map((repo) => (
+                  <Box key={repo.id} padding="space-16" borderRadius="8" background="sunken">
+                    <VStack gap="space-12">
+                      <HStack gap="space-8" align="center" justify="space-between" wrap>
                         <HStack gap="space-8" align="center">
                           <ExclamationmarkTriangleIcon style={{ color: 'var(--ax-text-warning)' }} />
                           <Link to={`https://github.com/${repo.github_owner}/${repo.github_repo_name}`} target="_blank">
-                            {repo.github_owner}/{repo.github_repo_name}
+                            <BodyShort weight="semibold">{repo.github_owner}/{repo.github_repo_name}</BodyShort>
                           </Link>
                         </HStack>
-                      </Table.DataCell>
-                      <Table.DataCell>
                         <Detail textColor="subtle">{new Date(repo.created_at).toLocaleDateString('no-NO')}</Detail>
-                      </Table.DataCell>
-                      <Table.DataCell>
-                        <HStack gap="space-8">
-                          <form method="post" style={{ display: 'inline' }}>
-                            <input type="hidden" name="action" value="approve_repo" />
-                            <input type="hidden" name="repo_id" value={repo.id} />
-                            <input type="hidden" name="set_active" value="true" />
-                            <Button type="submit" size="xsmall" variant="primary">
-                              ✓ Godkjenn som aktiv
-                            </Button>
-                          </form>
+                      </HStack>
+                      <HStack gap="space-8" wrap>
+                        <form method="post" style={{ display: 'inline' }}>
+                          <input type="hidden" name="action" value="approve_repo" />
+                          <input type="hidden" name="repo_id" value={repo.id} />
+                          <input type="hidden" name="set_active" value="true" />
+                          <Button type="submit" size="xsmall" variant="primary">
+                            ✓ Godkjenn som aktiv
+                          </Button>
+                        </form>
+                        <Show above="sm">
                           <form method="post" style={{ display: 'inline' }}>
                             <input type="hidden" name="action" value="approve_repo" />
                             <input type="hidden" name="repo_id" value={repo.id} />
@@ -399,19 +386,19 @@ export default function AppDetail() {
                               Godkjenn som historisk
                             </Button>
                           </form>
-                          <form method="post" style={{ display: 'inline' }}>
-                            <input type="hidden" name="action" value="reject_repo" />
-                            <input type="hidden" name="repo_id" value={repo.id} />
-                            <Button type="submit" size="xsmall" variant="danger">
-                              ✗ Avvis
-                            </Button>
-                          </form>
-                        </HStack>
-                      </Table.DataCell>
-                    </Table.Row>
-                  ))}
-                </Table.Body>
-              </Table>
+                        </Show>
+                        <form method="post" style={{ display: 'inline' }}>
+                          <input type="hidden" name="action" value="reject_repo" />
+                          <input type="hidden" name="repo_id" value={repo.id} />
+                          <Button type="submit" size="xsmall" variant="danger">
+                            ✗ Avvis
+                          </Button>
+                        </form>
+                      </HStack>
+                    </VStack>
+                  </Box>
+                ))}
+              </VStack>
             </VStack>
           )}
 
@@ -419,45 +406,34 @@ export default function AppDetail() {
           {historicalRepos.length > 0 && (
             <VStack gap="space-12">
               <Label>Historiske repositories ({historicalRepos.length})</Label>
-              <Table size="small">
-                <Table.Header>
-                  <Table.Row>
-                    <Table.HeaderCell>Repository</Table.HeaderCell>
-                    <Table.HeaderCell>Opprettet</Table.HeaderCell>
-                    <Table.HeaderCell>Handlinger</Table.HeaderCell>
-                  </Table.Row>
-                </Table.Header>
-                <Table.Body>
-                  {historicalRepos.map((repo) => (
-                    <Table.Row key={repo.id}>
-                      <Table.DataCell>
-                        <HStack gap="space-8" align="center">
-                          <Link to={`https://github.com/${repo.github_owner}/${repo.github_repo_name}`} target="_blank">
-                            {repo.github_owner}/{repo.github_repo_name}
-                          </Link>
-                          {repo.redirects_to_owner && (
-                            <Tag data-color="info" size="xsmall" variant="outline">
-                              → {repo.redirects_to_owner}/{repo.redirects_to_repo}
-                            </Tag>
-                          )}
-                        </HStack>
-                      </Table.DataCell>
-                      <Table.DataCell>
-                        <Detail textColor="subtle">{new Date(repo.created_at).toLocaleDateString('no-NO')}</Detail>
-                      </Table.DataCell>
-                      <Table.DataCell>
-                        <form method="post" style={{ display: 'inline' }}>
-                          <input type="hidden" name="action" value="set_active" />
-                          <input type="hidden" name="repo_id" value={repo.id} />
-                          <Button type="submit" size="xsmall" variant="secondary">
-                            Sett som aktiv
-                          </Button>
-                        </form>
-                      </Table.DataCell>
-                    </Table.Row>
-                  ))}
-                </Table.Body>
-              </Table>
+              <VStack gap="space-8">
+                {historicalRepos.map((repo) => (
+                  <Box key={repo.id} padding="space-16" borderRadius="8" background="sunken">
+                    <HStack gap="space-8" align="center" justify="space-between" wrap>
+                      <HStack gap="space-8" align="center" wrap>
+                        <Link to={`https://github.com/${repo.github_owner}/${repo.github_repo_name}`} target="_blank">
+                          <BodyShort>{repo.github_owner}/{repo.github_repo_name}</BodyShort>
+                        </Link>
+                        {repo.redirects_to_owner && (
+                          <Tag data-color="info" size="xsmall" variant="outline">
+                            → {repo.redirects_to_owner}/{repo.redirects_to_repo}
+                          </Tag>
+                        )}
+                        <Show above="md">
+                          <Detail textColor="subtle">{new Date(repo.created_at).toLocaleDateString('no-NO')}</Detail>
+                        </Show>
+                      </HStack>
+                      <form method="post" style={{ display: 'inline' }}>
+                        <input type="hidden" name="action" value="set_active" />
+                        <input type="hidden" name="repo_id" value={repo.id} />
+                        <Button type="submit" size="xsmall" variant="secondary">
+                          Sett som aktiv
+                        </Button>
+                      </form>
+                    </HStack>
+                  </Box>
+                ))}
+              </VStack>
             </VStack>
           )}
 
