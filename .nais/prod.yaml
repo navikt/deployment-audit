@@ -57,7 +57,7 @@ spec:
         tier: db-f1-micro
         diskAutoresize: true
         databases:
-          - name: audit
+          - name: pensjon-deployment-audit
             envVarPrefix: DB
 
   env:
