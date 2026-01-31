@@ -6,7 +6,6 @@ import {
 } from '@navikt/aksel-icons'
 import { Alert, BodyShort, Box, Button, Detail, Heading, Hide, HStack, Show, Tag, VStack } from '@navikt/ds-react'
 import { Form, Link } from 'react-router'
-import { resolveAlertsForLegacyDeployments } from '~/db/alerts.server'
 import { getRepositoriesByAppId } from '~/db/application-repositories.server'
 import { getAppDeploymentStats } from '~/db/deployments.server'
 import { getAllMonitoredApplications } from '~/db/monitored-applications.server'
@@ -103,22 +102,6 @@ export async function action({ request }: Route.ActionArgs) {
     }
   }
 
-  if (intent === 'resolve-legacy-alerts') {
-    try {
-      const result = await resolveAlertsForLegacyDeployments()
-      return {
-        success: `Oppdatert ${result.deploymentsUpdated} deployments til legacy status og løst ${result.alertsResolved} varsler.`,
-        error: null,
-      }
-    } catch (error) {
-      console.error('Resolve legacy alerts error:', error)
-      return {
-        success: null,
-        error: error instanceof Error ? error.message : 'Kunne ikke løse legacy alerts',
-      }
-    }
-  }
-
   return { success: null, error: 'Ugyldig handling' }
 }
 
@@ -175,22 +158,9 @@ export default function Apps({ loaderData, actionData }: Route.ComponentProps) {
           </Heading>
           <BodyShort textColor="subtle">Administrer hvilke applikasjoner som overvåkes for deployments.</BodyShort>
         </div>
-        <HStack gap="space-8">
-          <Form method="post">
-            <input type="hidden" name="intent" value="resolve-legacy-alerts" />
-            <Button
-              type="submit"
-              variant="secondary"
-              size="small"
-              title="Oppdater deployments eldre enn 1 år uten commit SHA til legacy status"
-            >
-              Recheck legacy
-            </Button>
-          </Form>
-          <Button as={Link} to="/apps/discover">
-            Oppdag nye applikasjoner
-          </Button>
-        </HStack>
+        <Button as={Link} to="/apps/discover">
+          Oppdag nye applikasjoner
+        </Button>
       </HStack>
 
       {actionData?.success && (
