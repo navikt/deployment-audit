@@ -1,9 +1,8 @@
 import { PlusIcon } from '@navikt/aksel-icons'
-import { Alert, BodyShort, Box, Button, Checkbox, Detail, Heading, Table, TextField, VStack } from '@navikt/ds-react'
-import { useState } from 'react'
+import { Alert, BodyShort, Box, Button, Detail, Heading, HStack, Tag, TextField, VStack } from '@navikt/ds-react'
 import { Form, useNavigation } from 'react-router'
 import { upsertApplicationRepository } from '../db/application-repositories.server'
-import { createMonitoredApplication } from '../db/monitored-applications.server'
+import { createMonitoredApplication, getAllMonitoredApplications } from '../db/monitored-applications.server'
 import { fetchAllTeamsAndApplications, getApplicationInfo } from '../lib/nais.server'
 import type { Route } from './+types/apps.discover'
 
@@ -15,11 +14,17 @@ export async function loader() {
   try {
     // Fetch all teams and applications on page load
     const allApps = await fetchAllTeamsAndApplications()
-    return { allApps, error: null }
+    // Fetch already monitored apps
+    const monitoredApps = await getAllMonitoredApplications()
+    const monitoredKeys = new Set(
+      monitoredApps.map((app) => `${app.team_slug}|${app.environment_name}|${app.app_name}`),
+    )
+    return { allApps, monitoredKeys: Array.from(monitoredKeys), error: null }
   } catch (error) {
     console.error('Loader error:', error)
     return {
       allApps: [],
+      monitoredKeys: [],
       error: error instanceof Error ? error.message : 'Kunne ikke laste applikasjoner',
     }
   }
@@ -29,83 +34,64 @@ export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData()
   const intent = formData.get('intent')
 
-  // Add selected applications
+  // Add single application
   if (intent === 'add') {
-    const selectedApps = formData.getAll('app')
+    const teamSlug = formData.get('team_slug') as string
+    const environmentName = formData.get('environment_name') as string
+    const appName = formData.get('app_name') as string
 
-    if (!selectedApps.length) {
-      return {
-        error: 'Velg minst én applikasjon',
-      }
+    if (!teamSlug || !environmentName || !appName) {
+      return { error: 'Mangler påkrevde felt', success: null }
     }
 
     try {
-      let addedCount = 0
+      // Get app info to find repository
+      const appInfo = await getApplicationInfo(teamSlug, environmentName, appName)
 
-      for (const appKey of selectedApps) {
-        const [teamSlug, appName] = (appKey as string).split('|')
+      // Create monitored application
+      const monitoredApp = await createMonitoredApplication({
+        team_slug: teamSlug,
+        environment_name: environmentName,
+        app_name: appName,
+      })
 
-        // Discover which environment this app is in (try common ones)
-        const commonEnvs = ['dev-gcp', 'dev-fss', 'prod-gcp', 'prod-fss']
-        let appInfo = null
-        let foundEnv = null
-
-        for (const env of commonEnvs) {
-          appInfo = await getApplicationInfo(teamSlug, env, appName)
-          if (appInfo) {
-            foundEnv = env
-            break
-          }
-        }
-
-        if (!appInfo || !foundEnv) {
-          console.warn(`Could not find app info for ${teamSlug}/${appName}`)
-          continue
-        }
-
-        // Create monitored application (without repo fields)
-        const monitoredApp = await createMonitoredApplication({
-          team_slug: teamSlug,
-          environment_name: foundEnv,
-          app_name: appName,
+      // If we found a repository, add it as active
+      if (appInfo?.repository) {
+        const [owner, repo] = appInfo.repository.split('/')
+        await upsertApplicationRepository({
+          monitoredAppId: monitoredApp.id,
+          githubOwner: owner,
+          githubRepoName: repo,
+          status: 'active',
+          approvedBy: 'user',
         })
-
-        // If we found a repository, add it as active
-        if (appInfo.repository) {
-          const [owner, repo] = appInfo.repository.split('/')
-          await upsertApplicationRepository({
-            monitoredAppId: monitoredApp.id,
-            githubOwner: owner,
-            githubRepoName: repo,
-            status: 'active',
-            approvedBy: 'user',
-          })
-        }
-
-        addedCount++
       }
 
       return {
         error: null,
-        success: `La til ${addedCount} applikasjon(er) for overvåking`,
+        success: `La til ${appName} (${environmentName}) for overvåking`,
       }
     } catch (error) {
       console.error('Add error:', error)
       return {
-        error: error instanceof Error ? error.message : 'Kunne ikke legge til applikasjoner',
+        error: error instanceof Error ? error.message : 'Kunne ikke legge til applikasjon',
+        success: null,
       }
     }
   }
 
-  return { error: 'Ugyldig handling' }
+  return { error: 'Ugyldig handling', success: null }
 }
+
+import { useState } from 'react'
 
 export default function AppsDiscover({ loaderData, actionData }: Route.ComponentProps) {
   const navigation = useNavigation()
   const isAdding = navigation.state === 'submitting'
+  const addingApp = navigation.formData?.get('app_name') as string | null
 
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedApps, setSelectedApps] = useState<Set<string>>(new Set())
+  const monitoredKeys = new Set(loaderData.monitoredKeys)
 
   // Filter apps based on search query
   const filteredApps = loaderData.allApps.filter((app) => {
@@ -113,30 +99,28 @@ export default function AppsDiscover({ loaderData, actionData }: Route.Component
     return app.teamSlug.toLowerCase().includes(query) || app.appName.toLowerCase().includes(query)
   })
 
-  // Group by team for display
-  const appsByTeam = filteredApps.reduce(
+  // Group by team -> environment for display
+  type AppInfo = { appName: string; environmentName: string }
+  const appsByTeamAndEnv = filteredApps.reduce(
     (acc, app) => {
-      if (!acc[app.teamSlug]) {
-        acc[app.teamSlug] = []
+      const teamKey = app.teamSlug
+      if (!acc[teamKey]) {
+        acc[teamKey] = {}
       }
-      acc[app.teamSlug].push(app.appName)
+      if (!acc[teamKey][app.environmentName]) {
+        acc[teamKey][app.environmentName] = []
+      }
+      acc[teamKey][app.environmentName].push({
+        appName: app.appName,
+        environmentName: app.environmentName,
+      })
       return acc
     },
-    {} as Record<string, string[]>,
+    {} as Record<string, Record<string, AppInfo[]>>,
   )
 
-  const toggleApp = (appKey: string) => {
-    const newSelected = new Set(selectedApps)
-    if (newSelected.has(appKey)) {
-      newSelected.delete(appKey)
-    } else {
-      newSelected.add(appKey)
-    }
-    setSelectedApps(newSelected)
-  }
-
   const totalResults = filteredApps.length
-  const totalTeams = Object.keys(appsByTeam).length
+  const totalTeams = Object.keys(appsByTeamAndEnv).length
 
   return (
     <VStack gap="space-32">
@@ -171,84 +155,76 @@ export default function AppsDiscover({ loaderData, actionData }: Route.Component
           </Box>
 
           {searchQuery && (
-            <Form method="post">
-              <input type="hidden" name="intent" value="add" />
+            <VStack gap="space-24">
+              {Object.entries(appsByTeamAndEnv)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([teamSlug, envs]) => (
+                  <Box
+                    key={teamSlug}
+                    padding="space-20"
+                    borderRadius="8"
+                    background="raised"
+                    borderColor="neutral-subtle"
+                    borderWidth="1"
+                  >
+                    <VStack gap="space-16">
+                      <Heading size="small">{teamSlug}</Heading>
 
-              <VStack gap="space-24">
-                <BodyShort>
-                  <strong>{selectedApps.size}</strong> applikasjon(er) valgt
-                </BodyShort>
+                      {Object.entries(envs)
+                        .sort(([a], [b]) => a.localeCompare(b))
+                        .map(([envName, apps]) => (
+                          <VStack key={envName} gap="space-8">
+                            <Detail textColor="subtle">{envName}</Detail>
+                            <VStack gap="space-4">
+                              {apps
+                                .sort((a, b) => a.appName.localeCompare(b.appName))
+                                .map((app) => {
+                                  const appKey = `${teamSlug}|${envName}|${app.appName}`
+                                  const isMonitored = monitoredKeys.has(appKey)
+                                  const isAddingThis = isAdding && addingApp === app.appName
 
-                {Object.entries(appsByTeam)
-                  .sort(([a], [b]) => a.localeCompare(b))
-                  .map(([teamSlug, apps]) => (
-                    <Box
-                      key={teamSlug}
-                      padding="space-20"
-                      borderRadius="8"
-                      background="raised"
-                      borderColor="neutral-subtle"
-                      borderWidth="1"
-                    >
-                      <VStack gap="space-16">
-                        <Heading size="small">
-                          {teamSlug}{' '}
-                          <Detail as="span" textColor="subtle">
-                            ({apps.length} treff)
-                          </Detail>
-                        </Heading>
-
-                        <Box style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                          <Table size="small">
-                            <Table.Header>
-                              <Table.Row>
-                                <Table.HeaderCell scope="col">Velg</Table.HeaderCell>
-                                <Table.HeaderCell scope="col">Applikasjon</Table.HeaderCell>
-                                <Table.HeaderCell scope="col">Team</Table.HeaderCell>
-                              </Table.Row>
-                            </Table.Header>
-                            <Table.Body>
-                              {apps.sort().map((appName) => {
-                                const appKey = `${teamSlug}|${appName}`
-                                const isSelected = selectedApps.has(appKey)
-                                return (
-                                  <Table.Row key={appKey}>
-                                    <Table.DataCell>
-                                      <Checkbox
-                                        name="app"
-                                        value={appKey}
-                                        checked={isSelected}
-                                        onChange={() => toggleApp(appKey)}
-                                        hideLabel
-                                      >
-                                        Velg {appName}
-                                      </Checkbox>
-                                    </Table.DataCell>
-                                    <Table.DataCell>
-                                      <strong>{appName}</strong>
-                                    </Table.DataCell>
-                                    <Table.DataCell>
-                                      <Detail textColor="subtle">{teamSlug}</Detail>
-                                    </Table.DataCell>
-                                  </Table.Row>
-                                )
-                              })}
-                            </Table.Body>
-                          </Table>
-                        </Box>
-                      </VStack>
-                    </Box>
-                  ))}
-
-                {selectedApps.size > 0 && (
-                  <div>
-                    <Button type="submit" variant="primary" icon={<PlusIcon aria-hidden />} disabled={isAdding}>
-                      {isAdding ? 'Legger til...' : `Legg til ${selectedApps.size} applikasjon(er)`}
-                    </Button>
-                  </div>
-                )}
-              </VStack>
-            </Form>
+                                  return (
+                                    <HStack
+                                      key={appKey}
+                                      gap="space-8"
+                                      align="center"
+                                      justify="space-between"
+                                      wrap
+                                      style={isMonitored ? { opacity: 0.5 } : undefined}
+                                    >
+                                      <BodyShort weight="semibold">{app.appName}</BodyShort>
+                                      {isMonitored ? (
+                                        <Tag size="xsmall" variant="outline" data-color="success">
+                                          Overvåkes
+                                        </Tag>
+                                      ) : (
+                                        <Form method="post" style={{ display: 'inline' }}>
+                                          <input type="hidden" name="intent" value="add" />
+                                          <input type="hidden" name="team_slug" value={teamSlug} />
+                                          <input type="hidden" name="environment_name" value={envName} />
+                                          <input type="hidden" name="app_name" value={app.appName} />
+                                          <Button
+                                            type="submit"
+                                            size="xsmall"
+                                            variant="secondary"
+                                            icon={<PlusIcon aria-hidden />}
+                                            disabled={isAdding}
+                                            loading={isAddingThis}
+                                          >
+                                            Legg til
+                                          </Button>
+                                        </Form>
+                                      )}
+                                    </HStack>
+                                  )
+                                })}
+                            </VStack>
+                          </VStack>
+                        ))}
+                    </VStack>
+                  </Box>
+                ))}
+            </VStack>
           )}
 
           {!searchQuery && (

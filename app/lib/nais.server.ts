@@ -476,6 +476,7 @@ export function getDateRange(period: string): { startDate: Date; endDate: Date }
 
 /**
  * Teams and Applications query for interactive search
+ * Includes environment info via teamEnvironment
  */
 const TEAMS_AND_APPLICATIONS_QUERY = `
   query TeamsAndApplications(
@@ -493,6 +494,11 @@ const TEAMS_AND_APPLICATIONS_QUERY = `
         applications(first: $appsFirst) {
           nodes {
             name
+            teamEnvironment {
+              environment {
+                name
+              }
+            }
           }
         }
       }
@@ -503,7 +509,14 @@ const TEAMS_AND_APPLICATIONS_QUERY = `
 export interface TeamWithApps {
   slug: string
   applications: {
-    nodes: Array<{ name: string }>
+    nodes: Array<{
+      name: string
+      teamEnvironment: {
+        environment: {
+          name: string
+        }
+      }
+    }>
   }
 }
 
@@ -519,19 +532,20 @@ interface TeamsAndApplicationsResponse {
 
 /**
  * Fetch all teams and their applications for interactive search
- * Returns flattened list of team + app combinations
+ * Returns flattened list of team + app + environment combinations
  */
 export async function fetchAllTeamsAndApplications(): Promise<
   Array<{
     teamSlug: string
     appName: string
+    environmentName: string
   }>
 > {
   const client = getNaisClient()
   console.log('🔍 Fetching all teams and applications for search')
 
   try {
-    const allResults: Array<{ teamSlug: string; appName: string }> = []
+    const allResults: Array<{ teamSlug: string; appName: string; environmentName: string }> = []
     let after: string | null = null
     let hasMore = true
 
@@ -552,6 +566,7 @@ export async function fetchAllTeamsAndApplications(): Promise<
           allResults.push({
             teamSlug: team.slug,
             appName: app.name,
+            environmentName: app.teamEnvironment.environment.name,
           })
         }
       }
