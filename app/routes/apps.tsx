@@ -76,13 +76,8 @@ export default function Apps({ loaderData }: Route.ComponentProps) {
 
   return (
     <VStack gap="space-32">
-      <HStack justify="space-between" align="start" wrap>
-        <div>
-          <Heading size="large" spacing>
-            Overvåkede applikasjoner
-          </Heading>
-          <BodyShort textColor="subtle">Administrer hvilke applikasjoner som overvåkes for deployments.</BodyShort>
-        </div>
+      <HStack justify="space-between" align="center" wrap>
+        <Heading size="large">Overvåkede applikasjoner</Heading>
         <Button as={Link} to="/apps/discover" size="small" variant="secondary">
           Legg til applikasjon
         </Button>
