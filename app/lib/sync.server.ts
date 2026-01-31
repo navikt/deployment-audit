@@ -226,11 +226,11 @@ export async function verifyDeploymentsFourEyes(filters?: DeploymentFilters & { 
 }> {
   console.log(`🔍 Starting GitHub verification for deployments (limit: ${filters?.limit})`)
 
-  // Get deployments that need verification
+  // Get deployments that need verification - fetch all non-approved deployments
   const deploymentsToVerify = await getAllDeployments({
     ...filters,
-    // Only verify deployments that haven't been verified yet or failed
-    // Skip 'approved_pr' and 'direct_push' statuses
+    only_missing_four_eyes: true,
+    per_page: 10000, // Get all deployments, not just first 20
   })
 
   // Filter to deployments without four-eyes approval, excluding legacy deployments
