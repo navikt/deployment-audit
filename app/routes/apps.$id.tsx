@@ -199,7 +199,7 @@ export default function AppDetail() {
             </Box>
             <Box padding="space-12" borderRadius="8" background="sunken">
               <VStack gap="space-4">
-                <Detail textColor="subtle">Med fire øyne</Detail>
+                <Detail textColor="subtle">Godkjent</Detail>
                 <Heading size="large" style={{ color: 'var(--ax-text-success)' }}>
                   {deploymentStats.with_four_eyes} ({deploymentStats.four_eyes_percentage}%)
                 </Heading>
@@ -207,7 +207,7 @@ export default function AppDetail() {
             </Box>
             <Box padding="space-12" borderRadius="8" background="sunken">
               <VStack gap="space-4">
-                <Detail textColor="subtle">Uten fire øyne</Detail>
+                <Detail textColor="subtle">Mangler godkjenning</Detail>
                 <Heading size="large" style={{ color: 'var(--ax-text-danger)' }}>
                   {deploymentStats.without_four_eyes}
                 </Heading>
