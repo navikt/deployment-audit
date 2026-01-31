@@ -44,6 +44,9 @@ async function runMigrations() {
     const dbDatabase = process.env.DB_DATABASE;
     const dbUsername = process.env.DB_USERNAME;
     const dbPassword = process.env.DB_PASSWORD;
+    const dbSslCert = process.env.DB_SSLCERT;
+    const dbSslKey = process.env.DB_SSLKEY;
+    const dbSslRootCert = process.env.DB_SSLROOTCERT;
     const isNais = !!(dbHost && dbDatabase && dbUsername && dbPassword);
 
     const configDbUrl = process.env[config['database-url-var']];
@@ -54,21 +57,27 @@ async function runMigrations() {
       throw new Error(`Environment variable DATABASE_URL is not set`);
     }
 
-    // Build database config
-    // SSL required by Cloud SQL, but skip hostname verification
-    // since we connect to IP address, not the cert's DNS name
-    const databaseUrl: string | { host: string; port: number; database: string; user: string; password: string; ssl: { rejectUnauthorized: boolean } } = isNais
-      ? {
-          host: dbHost!,
-          port: dbPort ? parseInt(dbPort, 10) : 5432,
-          database: dbDatabase!,
-          user: dbUsername!,
-          password: dbPassword!,
-          ssl: {
-            rejectUnauthorized: false,
-          },
-        }
-      : configDbUrl!;
+    // Build database config with client certificates for Cloud SQL
+    type SslConfig = { rejectUnauthorized: boolean; ca?: string; cert?: string; key?: string };
+    let databaseUrl: string | { host: string; port: number; database: string; user: string; password: string; ssl: SslConfig };
+
+    if (isNais) {
+      const sslConfig: SslConfig = { rejectUnauthorized: false };
+      if (dbSslRootCert) sslConfig.ca = readFileSync(dbSslRootCert, 'utf-8');
+      if (dbSslCert) sslConfig.cert = readFileSync(dbSslCert, 'utf-8');
+      if (dbSslKey) sslConfig.key = readFileSync(dbSslKey, 'utf-8');
+
+      databaseUrl = {
+        host: dbHost!,
+        port: dbPort ? parseInt(dbPort, 10) : 5432,
+        database: dbDatabase!,
+        user: dbUsername!,
+        password: dbPassword!,
+        ssl: sslConfig,
+      };
+    } else {
+      databaseUrl = configDbUrl!;
+    }
 
     // Run migrations
     await runner({

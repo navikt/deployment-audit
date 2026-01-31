@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { Pool, type PoolClient, type QueryResult } from 'pg'
 
 let poolInstance: Pool | null = null
@@ -9,19 +10,33 @@ function buildConnectionConfig() {
   const dbDatabase = process.env.DB_DATABASE
   const dbUsername = process.env.DB_USERNAME
   const dbPassword = process.env.DB_PASSWORD
+  const dbSslCert = process.env.DB_SSLCERT
+  const dbSslKey = process.env.DB_SSLKEY
+  const dbSslRootCert = process.env.DB_SSLROOTCERT
 
   if (dbHost && dbDatabase && dbUsername && dbPassword) {
+    const sslConfig: { rejectUnauthorized: boolean; ca?: string; cert?: string; key?: string } = {
+      rejectUnauthorized: false,
+    }
+
+    // Add client certificates if available
+    if (dbSslRootCert) {
+      sslConfig.ca = readFileSync(dbSslRootCert, 'utf-8')
+    }
+    if (dbSslCert) {
+      sslConfig.cert = readFileSync(dbSslCert, 'utf-8')
+    }
+    if (dbSslKey) {
+      sslConfig.key = readFileSync(dbSslKey, 'utf-8')
+    }
+
     return {
       host: dbHost,
       port: dbPort ? parseInt(dbPort, 10) : 5432,
       database: dbDatabase,
       user: dbUsername,
       password: dbPassword,
-      // SSL required by Cloud SQL, but skip hostname verification
-      // since we connect to IP address, not the cert's DNS name
-      ssl: {
-        rejectUnauthorized: false,
-      },
+      ssl: sslConfig,
     }
   }
 
