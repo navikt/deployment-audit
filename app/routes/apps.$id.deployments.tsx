@@ -145,9 +145,8 @@ export default function AppDeployments() {
                 <option value="">Alle</option>
                 <option value="approved">Godkjent</option>
                 <option value="manually_approved">Manuelt godkjent</option>
+                <option value="not_approved">Ikke godkjent</option>
                 <option value="pending">Venter</option>
-                <option value="direct_push">Direct push</option>
-                <option value="unverified_commits">Uverifiserte commits</option>
                 <option value="legacy">Legacy</option>
                 <option value="error">Feil</option>
               </Select>

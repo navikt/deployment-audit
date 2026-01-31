@@ -1,18 +1,5 @@
 import { ChevronLeftIcon, ChevronRightIcon } from '@navikt/aksel-icons'
-import {
-  BodyShort,
-  Box,
-  Button,
-  Checkbox,
-  Detail,
-  Heading,
-  HGrid,
-  Hide,
-  HStack,
-  Select,
-  Show,
-  VStack,
-} from '@navikt/ds-react'
+import { BodyShort, Box, Button, Detail, Heading, HGrid, Hide, HStack, Select, Show, VStack } from '@navikt/ds-react'
 import { Form, Link, useSearchParams } from 'react-router'
 import { MethodTag, StatusTag } from '~/components/deployment-tags'
 import { getDeploymentsPaginated } from '~/db/deployments.server'
@@ -27,7 +14,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   const appId = url.searchParams.get('app')
   const teamSlug = url.searchParams.get('team')
   const period = url.searchParams.get('period') || 'last-month'
-  const onlyMissing = url.searchParams.get('only_missing') === 'true'
   const environment = url.searchParams.get('environment')
   const status = url.searchParams.get('status') || undefined
   const method = url.searchParams.get('method') as 'pr' | 'direct_push' | 'legacy' | undefined
@@ -47,7 +33,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     team_slug: teamSlug || undefined,
     start_date: startDate,
     end_date: endDate,
-    only_missing_four_eyes: onlyMissing,
     environment_name: environment || undefined,
     four_eyes_status: status,
     method: method && ['pr', 'direct_push', 'legacy'].includes(method) ? method : undefined,
@@ -90,7 +75,6 @@ export default function Deployments({ loaderData }: Route.ComponentProps) {
   const currentApp = searchParams.get('app')
   const currentTeam = searchParams.get('team')
   const currentPeriod = searchParams.get('period') || 'last-month'
-  const onlyMissing = searchParams.get('only_missing') === 'true'
   const currentEnvironment = searchParams.get('environment')
   const currentStatus = searchParams.get('status') || ''
   const currentMethod = searchParams.get('method') || ''
@@ -156,9 +140,8 @@ export default function Deployments({ loaderData }: Route.ComponentProps) {
                 <option value="">Alle</option>
                 <option value="approved">Godkjent</option>
                 <option value="manually_approved">Manuelt godkjent</option>
+                <option value="not_approved">Ikke godkjent</option>
                 <option value="pending">Venter</option>
-                <option value="direct_push">Direct push</option>
-                <option value="unverified_commits">Uverifiserte commits</option>
                 <option value="legacy">Legacy</option>
                 <option value="error">Feil</option>
               </Select>
@@ -170,10 +153,6 @@ export default function Deployments({ loaderData }: Route.ComponentProps) {
                 <option value="legacy">Legacy</option>
               </Select>
             </HGrid>
-
-            <Checkbox name="only_missing" value="true" defaultChecked={onlyMissing}>
-              Vis kun deployments som mangler godkjenning
-            </Checkbox>
           </VStack>
         </Form>
       </Box>

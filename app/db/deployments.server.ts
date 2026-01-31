@@ -220,13 +220,13 @@ export async function getDeploymentsPaginated(filters?: DeploymentFilters): Prom
   }
 
   if (filters?.four_eyes_status) {
-    whereSql += ` AND d.four_eyes_status = $${paramIndex}`
-    params.push(filters.four_eyes_status)
-    paramIndex++
-  }
-
-  if (filters?.only_missing_four_eyes) {
-    whereSql += ' AND d.has_four_eyes = false'
+    if (filters.four_eyes_status === 'not_approved') {
+      whereSql += ` AND d.four_eyes_status IN ('direct_push', 'unverified_commits', 'approved_pr_with_unreviewed')`
+    } else {
+      whereSql += ` AND d.four_eyes_status = $${paramIndex}`
+      params.push(filters.four_eyes_status)
+      paramIndex++
+    }
   }
 
   if (filters?.only_repository_mismatch) {
