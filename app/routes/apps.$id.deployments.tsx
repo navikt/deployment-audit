@@ -17,6 +17,7 @@ import { Form, Link, type LoaderFunctionArgs, useLoaderData, useSearchParams } f
 import { type DeploymentFilters, getDeploymentsPaginated } from '~/db/deployments.server'
 import { getMonitoredApplicationById } from '~/db/monitored-applications.server'
 import { getUserMappings } from '~/db/user-mappings.server'
+import styles from '~/styles/common.module.css'
 import type { Route } from './+types/apps.$id.deployments'
 
 export function meta({ data }: Route.MetaArgs) {
@@ -256,7 +257,7 @@ export default function AppDeployments() {
       </Box>
 
       {/* Deployments list */}
-      <VStack gap="space-16">
+      <div>
         {deployments.length === 0 ? (
           <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
             <BodyShort>Ingen deployments funnet med valgte filtre.</BodyShort>
@@ -266,10 +267,9 @@ export default function AppDeployments() {
             <Box
               key={deployment.id}
               padding="space-20"
-              borderRadius="8"
               background="raised"
               borderColor="neutral-subtle"
-              borderWidth="1"
+              className={styles.stackedListItem}
             >
               <VStack gap="space-12">
                 {/* First row: Time, Title (on desktop), Tags (right-aligned) */}
@@ -358,7 +358,7 @@ export default function AppDeployments() {
             </Box>
           ))
         )}
-      </VStack>
+      </div>
 
       {/* Pagination */}
       {total_pages > 1 && (
