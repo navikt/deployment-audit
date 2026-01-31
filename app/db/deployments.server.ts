@@ -160,10 +160,111 @@ export interface DeploymentFilters {
   four_eyes_status?: string
   only_missing_four_eyes?: boolean
   only_repository_mismatch?: boolean
+  deployer_username?: string
+  commit_sha?: string
+  method?: 'pr' | 'direct_push' | 'legacy'
+  page?: number
+  per_page?: number
+}
+
+export interface PaginatedDeployments {
+  deployments: DeploymentWithApp[]
+  total: number
+  page: number
+  per_page: number
+  total_pages: number
 }
 
 export async function getAllDeployments(filters?: DeploymentFilters): Promise<DeploymentWithApp[]> {
-  let sql = `
+  const result = await getDeploymentsPaginated(filters)
+  return result.deployments
+}
+
+export async function getDeploymentsPaginated(filters?: DeploymentFilters): Promise<PaginatedDeployments> {
+  let whereSql = ' WHERE 1=1'
+  const params: any[] = []
+  let paramIndex = 1
+
+  if (filters?.monitored_app_id) {
+    whereSql += ` AND d.monitored_app_id = $${paramIndex}`
+    params.push(filters.monitored_app_id)
+    paramIndex++
+  }
+
+  if (filters?.team_slug) {
+    whereSql += ` AND ma.team_slug = $${paramIndex}`
+    params.push(filters.team_slug)
+    paramIndex++
+  }
+
+  if (filters?.environment_name) {
+    whereSql += ` AND ma.environment_name = $${paramIndex}`
+    params.push(filters.environment_name)
+    paramIndex++
+  }
+
+  if (filters?.start_date) {
+    whereSql += ` AND d.created_at >= $${paramIndex}`
+    params.push(filters.start_date)
+    paramIndex++
+  }
+
+  if (filters?.end_date) {
+    whereSql += ` AND d.created_at <= $${paramIndex}`
+    params.push(filters.end_date)
+    paramIndex++
+  }
+
+  if (filters?.four_eyes_status) {
+    whereSql += ` AND d.four_eyes_status = $${paramIndex}`
+    params.push(filters.four_eyes_status)
+    paramIndex++
+  }
+
+  if (filters?.only_missing_four_eyes) {
+    whereSql += ' AND d.has_four_eyes = false'
+  }
+
+  if (filters?.only_repository_mismatch) {
+    whereSql += ` AND d.four_eyes_status = 'repository_mismatch'`
+  }
+
+  if (filters?.deployer_username) {
+    whereSql += ` AND d.deployer_username ILIKE $${paramIndex}`
+    params.push(`%${filters.deployer_username}%`)
+    paramIndex++
+  }
+
+  if (filters?.commit_sha) {
+    whereSql += ` AND d.commit_sha ILIKE $${paramIndex}`
+    params.push(`%${filters.commit_sha}%`)
+    paramIndex++
+  }
+
+  if (filters?.method === 'pr') {
+    whereSql += ' AND d.github_pr_number IS NOT NULL'
+  } else if (filters?.method === 'direct_push') {
+    whereSql += ` AND d.github_pr_number IS NULL AND d.four_eyes_status != 'legacy'`
+  } else if (filters?.method === 'legacy') {
+    whereSql += ` AND d.four_eyes_status = 'legacy'`
+  }
+
+  // Count total
+  const countSql = `
+    SELECT COUNT(*) as total
+    FROM deployments d
+    JOIN monitored_applications ma ON d.monitored_app_id = ma.id
+    ${whereSql}
+  `
+  const countResult = await pool.query(countSql, params)
+  const total = parseInt(countResult.rows[0].total, 10)
+
+  // Pagination
+  const page = filters?.page || 1
+  const per_page = filters?.per_page || 20
+  const offset = (page - 1) * per_page
+
+  const dataSql = `
     SELECT 
       d.*,
       ma.team_slug,
@@ -171,61 +272,21 @@ export async function getAllDeployments(filters?: DeploymentFilters): Promise<De
       ma.app_name
     FROM deployments d
     JOIN monitored_applications ma ON d.monitored_app_id = ma.id
-    WHERE 1=1
+    ${whereSql}
+    ORDER BY d.created_at DESC
+    LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
   `
-  const params: any[] = []
-  let paramIndex = 1
+  params.push(per_page, offset)
 
-  if (filters?.monitored_app_id) {
-    sql += ` AND d.monitored_app_id = $${paramIndex}`
-    params.push(filters.monitored_app_id)
-    paramIndex++
+  const result = await pool.query(dataSql, params)
+
+  return {
+    deployments: result.rows,
+    total,
+    page,
+    per_page,
+    total_pages: Math.ceil(total / per_page),
   }
-
-  if (filters?.team_slug) {
-    sql += ` AND ma.team_slug = $${paramIndex}`
-    params.push(filters.team_slug)
-    paramIndex++
-  }
-
-  if (filters?.environment_name) {
-    sql += ` AND ma.environment_name = $${paramIndex}`
-    params.push(filters.environment_name)
-    paramIndex++
-  }
-
-  if (filters?.start_date) {
-    sql += ` AND d.created_at >= $${paramIndex}`
-    params.push(filters.start_date)
-    paramIndex++
-  }
-
-  if (filters?.end_date) {
-    sql += ` AND d.created_at <= $${paramIndex}`
-    params.push(filters.end_date)
-    paramIndex++
-  }
-
-  if (filters?.four_eyes_status) {
-    sql += ` AND d.four_eyes_status = $${paramIndex}`
-    params.push(filters.four_eyes_status)
-    paramIndex++
-  }
-
-  if (filters?.only_missing_four_eyes) {
-    sql += ' AND d.has_four_eyes = false'
-  }
-
-  if (filters?.only_repository_mismatch) {
-    sql += ` AND d.four_eyes_status = $${paramIndex}`
-    params.push('repository_mismatch')
-    paramIndex++
-  }
-
-  sql += ' ORDER BY d.created_at DESC'
-
-  const result = await pool.query(sql, params)
-  return result.rows
 }
 
 export async function getDeploymentById(id: number): Promise<DeploymentWithApp | null> {

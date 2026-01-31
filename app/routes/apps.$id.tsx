@@ -218,7 +218,7 @@ export default function AppDetail() {
           </div>
         </div>
         <div className={`${styles.flexRowGap1} ${styles.marginTop1}`}>
-          <Button as={Link} to={`/deployments?app=${app.id}&period=${currentPeriod}`} variant="secondary" size="small">
+          <Button as={Link} to={`/apps/${app.id}/deployments`} variant="secondary" size="small">
             Se alle deployments →
           </Button>
           <Button
