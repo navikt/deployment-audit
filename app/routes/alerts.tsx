@@ -6,9 +6,11 @@ import {
   Button,
   Detail,
   Heading,
+  Hide,
   HStack,
   Modal,
-  Table,
+  Show,
+  Tag,
   Textarea,
   VStack,
 } from '@navikt/ds-react'
@@ -59,6 +61,35 @@ export async function action({ request }: Route.ActionArgs) {
   return { success: null, error: 'Ugyldig handling' }
 }
 
+function getAlertTypeTag(alertType: string) {
+  switch (alertType) {
+    case 'repository_mismatch':
+      return (
+        <Tag data-color="danger" variant="outline" size="small">
+          Ukjent repo
+        </Tag>
+      )
+    case 'pending_approval':
+      return (
+        <Tag data-color="warning" variant="outline" size="small">
+          Venter godkjenning
+        </Tag>
+      )
+    case 'historical_repository':
+      return (
+        <Tag data-color="info" variant="outline" size="small">
+          Historisk repo
+        </Tag>
+      )
+    default:
+      return (
+        <Tag data-color="neutral" variant="outline" size="small">
+          {alertType}
+        </Tag>
+      )
+  }
+}
+
 export default function Alerts({ loaderData, actionData }: Route.ComponentProps) {
   const { alerts } = loaderData
   const [resolveModalOpen, setResolveModalOpen] = useState(false)
@@ -101,87 +132,101 @@ export default function Alerts({ loaderData, actionData }: Route.ComponentProps)
             Du har <strong>{alerts.length} uløste varsel(er)</strong> som krever oppmerksomhet.
           </Alert>
 
-          <Box padding="space-20" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
-            <Table>
-              <Table.Header>
-                <Table.Row>
-                  <Table.HeaderCell scope="col">Type</Table.HeaderCell>
-                  <Table.HeaderCell scope="col">Applikasjon</Table.HeaderCell>
-                  <Table.HeaderCell scope="col">Miljø</Table.HeaderCell>
-                  <Table.HeaderCell scope="col">Forventet repo</Table.HeaderCell>
-                  <Table.HeaderCell scope="col">Detektert repo</Table.HeaderCell>
-                  <Table.HeaderCell scope="col">Deployment</Table.HeaderCell>
-                  <Table.HeaderCell scope="col">Opprettet</Table.HeaderCell>
-                  <Table.HeaderCell scope="col">Handlinger</Table.HeaderCell>
-                </Table.Row>
-              </Table.Header>
-              <Table.Body>
-                {alerts.map((alert) => {
-                  const alertTypeLabel =
-                    {
-                      repository_mismatch: 'Ukjent repo',
-                      pending_approval: 'Venter godkjenning',
-                      historical_repository: 'Historisk repo',
-                    }[alert.alert_type] || alert.alert_type
+          {alerts.map((alert) => (
+            <Box
+              key={alert.id}
+              padding="space-20"
+              borderRadius="8"
+              background="raised"
+              borderColor="danger-subtle"
+              borderWidth="1"
+            >
+              <VStack gap="space-12">
+                {/* First row: App name (desktop), type tag, timestamp */}
+                <HStack gap="space-8" align="center" justify="space-between" wrap>
+                  <HStack gap="space-12" align="center" style={{ flex: 1 }}>
+                    <Show above="md">
+                      <BodyShort weight="semibold">{alert.app_name}</BodyShort>
+                      <Detail textColor="subtle">{alert.environment_name}</Detail>
+                    </Show>
+                    <Hide above="md">
+                      <Detail textColor="subtle">
+                        {new Date(alert.created_at).toLocaleDateString('nb-NO', {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </Detail>
+                    </Hide>
+                  </HStack>
+                  <HStack gap="space-8" align="center">
+                    {getAlertTypeTag(alert.alert_type)}
+                    <Show above="md">
+                      <Detail textColor="subtle">
+                        {new Date(alert.created_at).toLocaleDateString('nb-NO', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </Detail>
+                    </Show>
+                  </HStack>
+                </HStack>
 
-                  return (
-                    <Table.Row key={alert.id}>
-                      <Table.DataCell>
-                        <Detail textColor="subtle">{alertTypeLabel}</Detail>
-                      </Table.DataCell>
-                      <Table.DataCell>
-                        <strong>{alert.app_name}</strong>
-                        <br />
-                        <Detail textColor="subtle">Team: {alert.team_slug}</Detail>
-                      </Table.DataCell>
-                      <Table.DataCell>{alert.environment_name}</Table.DataCell>
-                      <Table.DataCell>
-                        <Link
-                          to={`https://github.com/${alert.expected_github_owner}/${alert.expected_github_repo_name}`}
-                          target="_blank"
-                        >
-                          {alert.expected_github_owner}/{alert.expected_github_repo_name}
-                        </Link>
-                      </Table.DataCell>
-                      <Table.DataCell>
-                        <Link
-                          to={`https://github.com/${alert.detected_github_owner}/${alert.detected_github_repo_name}`}
-                          target="_blank"
-                          data-color="danger"
-                        >
-                          {alert.detected_github_owner}/{alert.detected_github_repo_name}
-                        </Link>
-                      </Table.DataCell>
-                      <Table.DataCell>
-                        <code style={{ fontSize: '0.75rem' }}>{alert.deployment_nais_id.substring(0, 16)}...</code>
-                      </Table.DataCell>
-                      <Table.DataCell>
-                        <Detail textColor="subtle">
-                          {new Date(alert.created_at).toLocaleDateString('nb-NO', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </Detail>
-                      </Table.DataCell>
-                      <Table.DataCell>
-                        <Button
-                          size="small"
-                          variant="secondary"
-                          icon={<CheckmarkIcon aria-hidden />}
-                          onClick={() => openResolveModal(alert)}
-                        >
-                          Løs
-                        </Button>
-                      </Table.DataCell>
-                    </Table.Row>
-                  )
-                })}
-              </Table.Body>
-            </Table>
-          </Box>
+                {/* App name on mobile */}
+                <Hide above="md">
+                  <HStack gap="space-8" align="center">
+                    <BodyShort weight="semibold">{alert.app_name}</BodyShort>
+                    <Detail textColor="subtle">{alert.environment_name}</Detail>
+                  </HStack>
+                </Hide>
+
+                {/* Repository comparison */}
+                <VStack gap="space-4">
+                  <HStack gap="space-8" align="center" wrap>
+                    <Detail textColor="subtle">Forventet:</Detail>
+                    <Link
+                      to={`https://github.com/${alert.expected_github_owner}/${alert.expected_github_repo_name}`}
+                      target="_blank"
+                      style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}
+                    >
+                      {alert.expected_github_owner}/{alert.expected_github_repo_name}
+                    </Link>
+                  </HStack>
+                  <HStack gap="space-8" align="center" wrap>
+                    <Detail textColor="subtle">Detektert:</Detail>
+                    <Link
+                      to={`https://github.com/${alert.detected_github_owner}/${alert.detected_github_repo_name}`}
+                      target="_blank"
+                      style={{
+                        fontFamily: 'monospace',
+                        fontSize: '0.875rem',
+                        color: 'var(--ax-text-danger)',
+                      }}
+                    >
+                      {alert.detected_github_owner}/{alert.detected_github_repo_name}
+                    </Link>
+                  </HStack>
+                </VStack>
+
+                {/* Team and action button */}
+                <HStack gap="space-16" align="center" justify="space-between" wrap>
+                  <Detail textColor="subtle">Team: {alert.team_slug}</Detail>
+                  <Button
+                    size="small"
+                    variant="secondary"
+                    icon={<CheckmarkIcon aria-hidden />}
+                    onClick={() => openResolveModal(alert)}
+                  >
+                    Løs
+                  </Button>
+                </HStack>
+              </VStack>
+            </Box>
+          ))}
         </VStack>
       )}
 
