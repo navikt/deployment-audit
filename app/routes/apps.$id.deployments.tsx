@@ -265,12 +265,12 @@ export default function AppDeployments() {
         {/* Deployments list */}
         <VStack gap="space-16">
           {deployments.length === 0 ? (
-            <Box padding="space-24" borderRadius="8" background="raised">
+            <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
               <BodyShort>Ingen deployments funnet med valgte filtre.</BodyShort>
             </Box>
           ) : (
             deployments.map((deployment) => (
-              <Box key={deployment.id} padding="space-20" borderRadius="8" background="raised">
+              <Box key={deployment.id} padding="space-20" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
                 <VStack gap="space-12">
                   {/* First row: Time, Title (on desktop), Tags (right-aligned) */}
                   <HStack gap="space-8" align="center" justify="space-between" wrap>
