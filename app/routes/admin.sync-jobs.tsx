@@ -1,5 +1,19 @@
 import { ArrowsCirclepathIcon, CheckmarkCircleIcon, ClockIcon, XMarkOctagonIcon } from '@navikt/aksel-icons'
-import { Alert, BodyShort, Box, Button, Heading, HGrid, HStack, Select, Table, Tag, VStack } from '@navikt/ds-react'
+import {
+  Alert,
+  BodyShort,
+  Box,
+  Button,
+  Detail,
+  Heading,
+  HGrid,
+  Hide,
+  HStack,
+  Select,
+  Show,
+  Tag,
+  VStack,
+} from '@navikt/ds-react'
 import { Form } from 'react-router'
 import {
   cleanupOldSyncJobs,
@@ -9,6 +23,7 @@ import {
   type SyncJobStatus,
   type SyncJobType,
 } from '~/db/sync-jobs.server'
+import styles from '~/styles/common.module.css'
 import type { Route } from './+types/admin.sync-jobs'
 
 export function meta(_args: Route.MetaArgs) {
@@ -249,69 +264,51 @@ export default function AdminSyncJobs({ loaderData, actionData }: Route.Componen
       {jobs.length === 0 ? (
         <Alert variant="info">Ingen sync-jobber funnet med de valgte filtrene.</Alert>
       ) : (
-        <Box background="raised" borderRadius="8" style={{ overflow: 'auto' }}>
-          <Table size="small">
-            <Table.Header>
-              <Table.Row>
-                <Table.HeaderCell>ID</Table.HeaderCell>
-                <Table.HeaderCell>Type</Table.HeaderCell>
-                <Table.HeaderCell>App</Table.HeaderCell>
-                <Table.HeaderCell>Status</Table.HeaderCell>
-                <Table.HeaderCell>Startet</Table.HeaderCell>
-                <Table.HeaderCell>Varighet</Table.HeaderCell>
-                <Table.HeaderCell>Pod</Table.HeaderCell>
-                <Table.HeaderCell>Resultat/Feil</Table.HeaderCell>
-              </Table.Row>
-            </Table.Header>
-            <Table.Body>
-              {jobs.map((job) => (
-                <Table.Row key={job.id}>
-                  <Table.DataCell>{job.id}</Table.DataCell>
-                  <Table.DataCell>
-                    <JobTypeTag type={job.job_type} />
-                  </Table.DataCell>
-                  <Table.DataCell>
-                    <VStack gap="space-2">
-                      <BodyShort size="small" weight="semibold">
-                        {job.app_name}
-                      </BodyShort>
-                      <BodyShort size="small" textColor="subtle">
+        <div>
+          {jobs.map((job) => (
+            <Box key={job.id} padding="space-16" background="raised" className={styles.stackedListItem}>
+              <VStack gap="space-12">
+                {/* First row: ID, App name, Status/Type tags */}
+                <HStack gap="space-8" align="center" justify="space-between" wrap>
+                  <HStack gap="space-12" align="center" style={{ flex: 1 }}>
+                    <Detail textColor="subtle">#{job.id}</Detail>
+                    <BodyShort weight="semibold">{job.app_name}</BodyShort>
+                    <Show above="md">
+                      <Detail textColor="subtle">
                         {job.team_slug} / {job.environment_name}
-                      </BodyShort>
-                    </VStack>
-                  </Table.DataCell>
-                  <Table.DataCell>
+                      </Detail>
+                    </Show>
+                  </HStack>
+                  <HStack gap="space-8">
+                    <JobTypeTag type={job.job_type} />
                     <StatusTag status={job.status} />
-                  </Table.DataCell>
-                  <Table.DataCell>
-                    <BodyShort size="small">{formatDate(job.started_at)}</BodyShort>
-                  </Table.DataCell>
-                  <Table.DataCell>
-                    <BodyShort size="small">{formatDuration(job.started_at, job.completed_at)}</BodyShort>
-                  </Table.DataCell>
-                  <Table.DataCell>
-                    <BodyShort size="small" textColor="subtle">
-                      {job.locked_by || '-'}
-                    </BodyShort>
-                  </Table.DataCell>
-                  <Table.DataCell style={{ maxWidth: '200px' }}>
-                    {job.error ? (
-                      <BodyShort size="small" textColor="subtle" style={{ wordBreak: 'break-word' }}>
-                        ❌ {job.error}
-                      </BodyShort>
-                    ) : job.result ? (
-                      <BodyShort size="small" textColor="subtle" style={{ wordBreak: 'break-word' }}>
-                        {JSON.stringify(job.result)}
-                      </BodyShort>
-                    ) : (
-                      '-'
-                    )}
-                  </Table.DataCell>
-                </Table.Row>
-              ))}
-            </Table.Body>
-          </Table>
-        </Box>
+                  </HStack>
+                </HStack>
+
+                {/* Team/env on mobile */}
+                <Hide above="md">
+                  <Detail textColor="subtle">
+                    {job.team_slug} / {job.environment_name}
+                  </Detail>
+                </Hide>
+
+                {/* Second row: Details */}
+                <HStack gap="space-16" wrap>
+                  <Detail textColor="subtle">Startet: {formatDate(job.started_at)}</Detail>
+                  <Detail textColor="subtle">Varighet: {formatDuration(job.started_at, job.completed_at)}</Detail>
+                  {job.locked_by && <Detail textColor="subtle">Pod: {job.locked_by}</Detail>}
+                </HStack>
+
+                {/* Error/Result row */}
+                {(job.error || job.result) && (
+                  <BodyShort size="small" textColor="subtle" style={{ wordBreak: 'break-word' }}>
+                    {job.error ? `❌ ${job.error}` : JSON.stringify(job.result)}
+                  </BodyShort>
+                )}
+              </VStack>
+            </Box>
+          ))}
+        </div>
       )}
     </VStack>
   )
