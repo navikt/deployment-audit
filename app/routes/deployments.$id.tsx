@@ -414,7 +414,21 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           <Heading size="small" spacing>
             Uverifiserte commits ({deployment.unverified_commits.length})
           </Heading>
-          <BodyShort spacing>Følgende commits mellom forrige og dette deploymentet har ikke godkjent PR:</BodyShort>
+          <BodyShort spacing>
+            Følgende commits mellom forrige og dette deploymentet har ikke godkjent PR.
+            {previousDeployment?.commit_sha && deployment.commit_sha && (
+              <>
+                {' '}
+                <a
+                  href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/compare/${previousDeployment.commit_sha}...${deployment.commit_sha}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Se endringer på GitHub
+                </a>
+              </>
+            )}
+          </BodyShort>
           <ul style={{ margin: 0, paddingLeft: '1.5rem' }}>
             {deployment.unverified_commits.map((commit: any) => (
               <li key={commit.sha} style={{ marginBottom: '0.5rem' }}>
