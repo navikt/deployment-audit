@@ -1,8 +1,8 @@
 import { PencilIcon, PlusIcon, TrashIcon } from '@navikt/aksel-icons'
 import { Alert, BodyShort, Box, Button, Heading, HStack, Modal, Table, TextField, VStack } from '@navikt/ds-react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router'
-import { Form, useLoaderData, useNavigation } from 'react-router'
+import { Form, useActionData, useLoaderData, useNavigation } from 'react-router'
 import { deleteUserMapping, getAllUserMappings, type UserMapping, upsertUserMapping } from '~/db/user-mappings.server'
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -42,13 +42,21 @@ export async function action({ request }: ActionFunctionArgs) {
 
 export default function AdminUsers() {
   const { mappings } = useLoaderData<typeof loader>()
+  const actionData = useActionData<typeof action>()
   const navigation = useNavigation()
   const isSubmitting = navigation.state === 'submitting'
 
   const [editMapping, setEditMapping] = useState<UserMapping | null>(null)
-  const [_isAddOpen, setIsAddOpen] = useState(false)
+  const [addFormKey, setAddFormKey] = useState(0)
   const modalRef = useRef<HTMLDialogElement>(null)
   const addModalRef = useRef<HTMLDialogElement>(null)
+
+  // Reset add form when action succeeds
+  useEffect(() => {
+    if (actionData?.success && navigation.state === 'idle') {
+      setAddFormKey((k) => k + 1)
+    }
+  }, [actionData, navigation.state])
 
   const openEdit = (mapping: UserMapping) => {
     setEditMapping(mapping)
@@ -56,7 +64,6 @@ export default function AdminUsers() {
   }
 
   const openAdd = () => {
-    setIsAddOpen(true)
     addModalRef.current?.showModal()
   }
 
@@ -133,9 +140,9 @@ export default function AdminUsers() {
         )}
 
         {/* Add Modal */}
-        <Modal ref={addModalRef} header={{ heading: 'Legg til brukermapping' }} onClose={() => setIsAddOpen(false)}>
+        <Modal ref={addModalRef} header={{ heading: 'Legg til brukermapping' }}>
           <Modal.Body>
-            <Form method="post" id="add-form">
+            <Form method="post" id="add-form" key={addFormKey}>
               <input type="hidden" name="intent" value="upsert" />
               <VStack gap="space-16">
                 <TextField label="GitHub brukernavn" name="github_username" required />
