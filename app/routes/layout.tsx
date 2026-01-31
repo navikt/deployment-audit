@@ -20,7 +20,7 @@ export default function Layout() {
     { path: '/apps', label: 'Applikasjoner' },
     { path: '/deployments', label: 'Deployments' },
     { path: '/alerts', label: 'Varsler' },
-    { path: '/admin/users', label: 'Admin' },
+    { path: '/admin', label: 'Admin' },
   ]
 
   return (
