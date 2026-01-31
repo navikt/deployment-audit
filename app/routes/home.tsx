@@ -1,5 +1,4 @@
-import { BellIcon, RocketIcon, TableIcon } from '@navikt/aksel-icons'
-import { Alert, BodyShort, Box, Heading, HGrid, LinkPanel, VStack } from '@navikt/ds-react'
+import { Alert, BodyShort, Box, Heading, HGrid, VStack } from '@navikt/ds-react'
 import { Link } from 'react-router'
 import { getUnresolvedAlerts } from '../db/alerts.server'
 import { getAllDeployments, getDeploymentStats } from '../db/deployments.server'
@@ -28,14 +27,14 @@ export async function loader() {
       (d) => d.four_eyes_status === 'pending' || d.four_eyes_status === 'error',
     ).length
 
-    return { stats, appsCount: apps.length, alerts, pendingCount }
+    return { stats, appsCount: apps.length, alertsCount: alerts.length, pendingCount }
   } catch (_error) {
-    return { stats: null, appsCount: 0, alerts: [], pendingCount: 0 }
+    return { stats: null, appsCount: 0, alertsCount: 0, pendingCount: 0 }
   }
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { stats, appsCount, alerts, pendingCount } = loaderData
+  const { stats, appsCount, alertsCount, pendingCount } = loaderData
 
   return (
     <VStack gap="space-32">
@@ -44,9 +43,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       </BodyShort>
 
       {/* Security Alerts */}
-      {alerts && alerts.length > 0 && (
+      {alertsCount > 0 && (
         <Alert variant="error">
-          <strong>{alerts.length} repository-varsler</strong> krever oppmerksomhet. <Link to="/alerts">Se varsler</Link>
+          <strong>{alertsCount} repository-varsler</strong> krever oppmerksomhet. <Link to="/alerts">Se varsler</Link>
         </Alert>
       )}
 
@@ -60,7 +59,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
       {/* Stats - clickable cards */}
       {stats && stats.total > 0 && (
-        <HGrid gap="space-16" columns={{ xs: 1, sm: 2, lg: 4 }} align="stretch">
+        <HGrid gap="space-16" columns={{ xs: 1, sm: 2, lg: 5 }} align="stretch">
           <Link to="/deployments" className={styles.statCardLink}>
             <Box
               padding="space-20"
@@ -127,9 +126,26 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               className={styles.clickableCard}
             >
               <BodyShort size="small" textColor="subtle">
-                Overvåkede applikasjoner
+                Applikasjoner
               </BodyShort>
               <Heading size="large">{appsCount}</Heading>
+            </Box>
+          </Link>
+
+          <Link to="/alerts" className={styles.statCardLink}>
+            <Box
+              padding="space-20"
+              borderRadius="8"
+              background="raised"
+              borderColor={alertsCount > 0 ? 'warning-subtle' : 'neutral-subtle'}
+              borderWidth="1"
+              data-color={alertsCount > 0 ? 'warning' : undefined}
+              className={styles.clickableCard}
+            >
+              <BodyShort size="small" textColor="subtle">
+                Varsler
+              </BodyShort>
+              <Heading size="large">{alertsCount}</Heading>
             </Box>
           </Link>
         </HGrid>
@@ -140,33 +156,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           Ingen deployments funnet. <Link to="/apps">Legg til applikasjoner</Link> for å komme i gang.
         </Alert>
       )}
-
-      {/* Navigation Panels */}
-      <HGrid gap="space-16" columns={{ xs: 1, md: 2, lg: 3 }}>
-        <LinkPanel as={Link} to="/apps">
-          <LinkPanel.Title>
-            <TableIcon aria-hidden />
-            Applikasjoner
-          </LinkPanel.Title>
-          <LinkPanel.Description>Se og administrer overvåkede applikasjoner</LinkPanel.Description>
-        </LinkPanel>
-
-        <LinkPanel as={Link} to="/deployments">
-          <LinkPanel.Title>
-            <RocketIcon aria-hidden />
-            Deployments
-          </LinkPanel.Title>
-          <LinkPanel.Description>Se alle deployments med godkjenningsstatus</LinkPanel.Description>
-        </LinkPanel>
-
-        <LinkPanel as={Link} to="/alerts">
-          <LinkPanel.Title>
-            <BellIcon aria-hidden />
-            Repository-varsler {alerts && alerts.length > 0 && `(${alerts.length})`}
-          </LinkPanel.Title>
-          <LinkPanel.Description>Varsler om endrede repositories (sikkerhet)</LinkPanel.Description>
-        </LinkPanel>
-      </HGrid>
     </VStack>
   )
 }
