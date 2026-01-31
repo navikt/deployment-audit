@@ -14,6 +14,7 @@ export default [
     route('deployments', 'routes/deployments.tsx'),
     route('deployments/verify', 'routes/deployments.verify.tsx'),
     route('deployments/:id', 'routes/deployments.$id.tsx'),
+    route('users/:username', 'routes/users.$username.tsx'),
     route('alerts', 'routes/alerts.tsx'),
     route('admin', 'routes/admin.tsx'),
     route('admin/users', 'routes/admin.users.tsx'),

@@ -240,14 +240,9 @@ export default function Deployments({ loaderData }: Route.ComponentProps) {
                   <HStack gap="space-16" wrap>
                     <Detail textColor="subtle">
                       {deployment.deployer_username ? (
-                        <a
-                          href={`https://github.com/${deployment.deployer_username}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title={deployment.deployer_username}
-                        >
+                        <Link to={`/users/${deployment.deployer_username}`}>
                           {userMappings[deployment.deployer_username] || deployment.deployer_username}
-                        </a>
+                        </Link>
                       ) : (
                         '(ukjent)'
                       )}

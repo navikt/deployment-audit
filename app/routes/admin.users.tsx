@@ -17,6 +17,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router'
 import { Form, Link, useActionData, useLoaderData, useNavigation } from 'react-router'
 import { deleteUserMapping, getAllUserMappings, type UserMapping, upsertUserMapping } from '~/db/user-mappings.server'
+import styles from '~/styles/common.module.css'
 
 export async function loader(_args: LoaderFunctionArgs) {
   const mappings = await getAllUserMappings()
@@ -85,7 +86,7 @@ export default function AdminUsers() {
       <VStack gap="space-24">
         <HStack justify="space-between" align="center">
           <Heading size="large">Brukermappinger</Heading>
-          <Button variant="primary" icon={<PlusIcon aria-hidden />} onClick={openAdd}>
+          <Button variant="secondary" size="small" icon={<PlusIcon aria-hidden />} onClick={openAdd}>
             Legg til
           </Button>
         </HStack>
@@ -99,15 +100,13 @@ export default function AdminUsers() {
             Ingen brukermappinger er lagt til ennå. Klikk "Legg til" for å opprette den første.
           </Alert>
         ) : (
-          <VStack gap="space-12">
+          <div>
             {mappings.map((mapping) => (
               <Box
                 key={mapping.github_username}
                 padding="space-16"
-                borderRadius="8"
                 background="raised"
-                borderColor="neutral-subtle"
-                borderWidth="1"
+                className={styles.stackedListItem}
               >
                 <VStack gap="space-12">
                   {/* First row: GitHub username, name (desktop), actions */}
@@ -159,7 +158,7 @@ export default function AdminUsers() {
                 </VStack>
               </Box>
             ))}
-          </VStack>
+          </div>
         )}
 
         {/* Add Modal */}

@@ -623,3 +623,33 @@ export async function getAppDeploymentStats(
     four_eyes_percentage: percentage,
   }
 }
+
+/**
+ * Get deployment count for a specific deployer
+ */
+export async function getDeploymentCountByDeployer(deployerUsername: string): Promise<number> {
+  const result = await pool.query('SELECT COUNT(*) as count FROM deployments WHERE deployer_username = $1', [
+    deployerUsername,
+  ])
+  return parseInt(result.rows[0].count, 10) || 0
+}
+
+/**
+ * Get recent deployments for a specific deployer
+ */
+export async function getDeploymentsByDeployer(deployerUsername: string, limit = 5): Promise<DeploymentWithApp[]> {
+  const result = await pool.query(
+    `SELECT 
+      d.*,
+      ma.team_slug,
+      ma.environment_name,
+      ma.app_name
+    FROM deployments d
+    JOIN monitored_applications ma ON d.monitored_app_id = ma.id
+    WHERE d.deployer_username = $1
+    ORDER BY d.created_at DESC
+    LIMIT $2`,
+    [deployerUsername, limit],
+  )
+  return result.rows
+}
