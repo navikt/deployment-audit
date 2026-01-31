@@ -473,20 +473,6 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
         </VStack>
 
         <VStack gap="space-4">
-          <Detail>Repository (detektert)</Detail>
-          <BodyShort>
-            <a
-              href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={styles.linkExternal}
-            >
-              {deployment.detected_github_owner}/{deployment.detected_github_repo_name}
-            </a>
-          </BodyShort>
-        </VStack>
-
-        <VStack gap="space-4">
           <Detail>Commit SHA</Detail>
           <BodyShort>
             {deployment.commit_sha ? (
@@ -551,15 +537,6 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
             </BodyShort>
           </VStack>
         )}
-
-        <VStack gap="space-4">
-          <Detail>Nais Console</Detail>
-          <BodyShort>
-            <a href={naisConsoleUrl} target="_blank" rel="noopener noreferrer">
-              Åpne i Nais Console
-            </a>
-          </BodyShort>
-        </VStack>
 
         <VStack gap="space-4">
           <Detail>Nais Deployment ID</Detail>
