@@ -2,8 +2,10 @@ import {
   BarChartIcon,
   CheckmarkCircleIcon,
   CheckmarkIcon,
+  DownloadIcon,
   ExclamationmarkTriangleIcon,
   ExternalLinkIcon,
+  FileTextIcon,
   PackageIcon,
   XMarkIcon,
   XMarkOctagonIcon,
@@ -39,6 +41,7 @@ import {
   rejectRepository,
   setRepositoryAsActive,
 } from '~/db/application-repositories.server'
+import { checkAuditReadiness, getAuditReportsForApp } from '~/db/audit-reports.server'
 import { getAppDeploymentStats } from '~/db/deployments.server'
 import { getMonitoredApplicationById } from '~/db/monitored-applications.server'
 import { getDateRangeForPeriod, TIME_PERIOD_OPTIONS, type TimePeriod } from '~/lib/time-periods'
@@ -61,10 +64,13 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     throw new Response('Application not found', { status: 404 })
   }
 
-  const [repositories, deploymentStats, alerts] = await Promise.all([
+  const [repositories, deploymentStats, alerts, auditReports, currentYearReadiness] = await Promise.all([
     getRepositoriesByAppId(id),
     getAppDeploymentStats(id, startDate, endDate),
     getUnresolvedAlertsByApp(id),
+    getAuditReportsForApp(id),
+    // Check readiness for current year if it's a production app
+    app.environment_name.startsWith('prod-') ? checkAuditReadiness(id, new Date().getFullYear()) : null,
   ])
 
   const activeRepo = repositories.find((r) => r.status === 'active')
@@ -79,6 +85,8 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     historicalRepos,
     deploymentStats,
     alerts,
+    auditReports,
+    currentYearReadiness,
   }
 }
 
@@ -119,8 +127,17 @@ export async function action({ request, params }: ActionFunctionArgs) {
 }
 
 export default function AppDetail() {
-  const { app, repositories, activeRepo, pendingRepos, historicalRepos, deploymentStats, alerts } =
-    useLoaderData<typeof loader>()
+  const {
+    app,
+    repositories,
+    activeRepo,
+    pendingRepos,
+    historicalRepos,
+    deploymentStats,
+    alerts,
+    auditReports,
+    currentYearReadiness,
+  } = useLoaderData<typeof loader>()
   const actionData = useActionData<typeof action>()
   const [searchParams] = useSearchParams()
   const currentPeriod = searchParams.get('period') || 'current-month'
@@ -246,6 +263,94 @@ export default function AppDetail() {
           </HStack>
         </VStack>
       </Box>
+
+      {/* Audit Reports Section - Only for production apps */}
+      {app.environment_name.startsWith('prod-') && (
+        <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
+          <VStack gap="space-20">
+            <HStack justify="space-between" align="center" wrap>
+              <Heading size="medium">
+                <FileTextIcon aria-hidden /> Revisjonsbevis
+              </Heading>
+              <Button as={Link} to="/admin/audit-reports" variant="tertiary" size="small">
+                Administrer →
+              </Button>
+            </HStack>
+
+            {/* Current year status */}
+            {currentYearReadiness && (
+              <Box
+                padding="space-16"
+                borderRadius="4"
+                background={currentYearReadiness.is_ready ? 'success-soft' : 'warning-soft'}
+              >
+                <HStack gap="space-16" align="center" justify="space-between" wrap>
+                  <VStack gap="space-4">
+                    <HStack gap="space-8" align="center">
+                      {currentYearReadiness.is_ready ? (
+                        <CheckmarkCircleIcon aria-hidden fontSize="1.25rem" />
+                      ) : (
+                        <ExclamationmarkTriangleIcon aria-hidden fontSize="1.25rem" />
+                      )}
+                      <BodyShort weight="semibold">
+                        {new Date().getFullYear()}:{' '}
+                        {currentYearReadiness.is_ready ? 'Klar for revisjonsbevis' : 'Ikke klar'}
+                      </BodyShort>
+                    </HStack>
+                    <Detail>
+                      {currentYearReadiness.approved_count} av {currentYearReadiness.total_deployments} deployments
+                      godkjent
+                      {currentYearReadiness.legacy_count > 0 && ` (${currentYearReadiness.legacy_count} legacy)`}
+                      {currentYearReadiness.pending_count > 0 && ` (${currentYearReadiness.pending_count} venter)`}
+                    </Detail>
+                  </VStack>
+                  {currentYearReadiness.is_ready && (
+                    <Button as={Link} to="/admin/audit-reports" size="small" variant="primary">
+                      Generer revisjonsbevis
+                    </Button>
+                  )}
+                </HStack>
+              </Box>
+            )}
+
+            {/* Existing reports */}
+            {auditReports.length > 0 ? (
+              <VStack gap="space-12">
+                <Label>Utstedte revisjonsbevis</Label>
+                {auditReports.map((report) => (
+                  <Box key={report.id} padding="space-16" borderRadius="8" background="sunken">
+                    <HStack gap="space-16" align="center" justify="space-between" wrap>
+                      <VStack gap="space-4">
+                        <HStack gap="space-8" align="center">
+                          <Tag data-color="success" size="xsmall" variant="moderate">
+                            {report.year}
+                          </Tag>
+                          <BodyShort weight="semibold">{report.total_deployments} deployments</BodyShort>
+                        </HStack>
+                        <Detail textColor="subtle">
+                          Generert: {new Date(report.generated_at).toLocaleDateString('nb-NO')} •{' '}
+                          {report.pr_approved_count} PR, {report.manually_approved_count} manuell
+                        </Detail>
+                      </VStack>
+                      <Button
+                        as="a"
+                        href={`/admin/audit-reports/${report.id}/pdf`}
+                        size="small"
+                        variant="secondary"
+                        icon={<DownloadIcon aria-hidden />}
+                      >
+                        Last ned PDF
+                      </Button>
+                    </HStack>
+                  </Box>
+                ))}
+              </VStack>
+            ) : (
+              <BodyShort textColor="subtle">Ingen revisjonsbevis er generert for denne applikasjonen.</BodyShort>
+            )}
+          </VStack>
+        </Box>
+      )}
 
       {/* Alerts Section */}
       {alerts.length > 0 && (

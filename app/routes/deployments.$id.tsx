@@ -103,24 +103,30 @@ export async function action({ request, params }: Route.ActionArgs) {
   if (intent === 'manual_approval') {
     const approvedBy = formData.get('approved_by') as string
     const reason = formData.get('reason') as string
+    const slackLink = formData.get('slack_link') as string
 
     if (!approvedBy || approvedBy.trim() === '') {
       return { error: 'Godkjenner må oppgis' }
     }
 
+    if (!slackLink || slackLink.trim() === '') {
+      return { error: 'Slack-lenke er påkrevd for manuell godkjenning' }
+    }
+
     try {
-      // Create manual approval comment
+      // Create manual approval comment with slack link
       await createComment({
         deployment_id: deploymentId,
-        comment_text: reason || 'Manuelt godkjent etter gjennomgang av unreviewed commits',
+        comment_text: reason || 'Manuelt godkjent etter gjennomgang',
+        slack_link: slackLink.trim(),
         comment_type: 'manual_approval',
         approved_by: approvedBy.trim(),
       })
 
-      // Update deployment to mark as approved
+      // Update deployment to mark as manually approved
       await updateDeploymentFourEyes(deploymentId, {
         hasFourEyes: true,
-        fourEyesStatus: 'approved_pr_with_unreviewed',
+        fourEyesStatus: 'manually_approved',
         githubPrNumber: null,
         githubPrUrl: null,
       })
@@ -240,6 +246,12 @@ function getFourEyesStatus(deployment: any): {
         variant: 'success',
         description: 'Dette deploymentet er eldre enn 1 år og mangler informasjon om commit. Deploymentet er ignorert.',
       }
+    case 'manually_approved':
+      return {
+        text: 'Manuelt godkjent',
+        variant: 'success',
+        description: 'Dette deploymentet er manuelt godkjent med dokumentasjon i Slack.',
+      }
     case 'direct_push':
       return {
         text: 'Direct push',
@@ -279,7 +291,21 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
   const [slackLink, setSlackLink] = useState('')
   const [approvedBy, setApprovedBy] = useState('')
   const [approvalReason, setApprovalReason] = useState('')
+  const [approvalSlackLink, setApprovalSlackLink] = useState('')
   const [showApprovalForm, setShowApprovalForm] = useState(false)
+
+  // Statuses that require manual approval (when no manualApproval exists)
+  const statusesRequiringApproval = [
+    'direct_push',
+    'missing',
+    'unverified_commits',
+    'approved_pr_with_unreviewed',
+    'error',
+    'pending',
+    'pr_not_approved',
+  ]
+  const requiresManualApproval =
+    statusesRequiringApproval.includes(deployment.four_eyes_status ?? '') && !manualApproval
   const commentDialogRef = useRef<HTMLDialogElement>(null)
 
   const status = getFourEyesStatus(deployment)
@@ -1079,80 +1105,98 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
               </Box>
             ))}
           </div>
-
-          {/* Manual approval section */}
-          {manualApproval ? (
-            <Alert variant="success">
-              <Heading size="small">
-                <CheckmarkIcon aria-hidden /> Manuelt godkjent
-              </Heading>
-              <BodyShort>
-                Godkjent av <strong>{manualApproval.approved_by}</strong> den{' '}
-                {manualApproval.approved_at
-                  ? new Date(manualApproval.approved_at).toLocaleDateString('no-NO', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })
-                  : 'ukjent dato'}
-              </BodyShort>
-              {manualApproval.comment_text && (
-                <BodyShort style={{ marginTop: '0.5rem', fontStyle: 'italic' }}>
-                  "{manualApproval.comment_text}"
-                </BodyShort>
-              )}
-            </Alert>
-          ) : (
-            <Box background="warning-soft" padding="space-16" borderRadius="8">
-              <Heading size="small" spacing>
-                Krever manuell godkjenning
-              </Heading>
-              <BodyShort spacing>
-                Gjennomgå de unreviewed commits over. Hvis endringene er OK (f.eks. hotfix eller revert), godkjenn
-                manuelt.
-              </BodyShort>
-
-              {!showApprovalForm ? (
-                <Button variant="primary" size="small" onClick={() => setShowApprovalForm(true)}>
-                  Godkjenn etter gjennomgang
-                </Button>
-              ) : (
-                <Form method="post">
-                  <input type="hidden" name="intent" value="manual_approval" />
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    <TextField
-                      label="Godkjenner (ditt navn)"
-                      name="approved_by"
-                      value={approvedBy}
-                      onChange={(e) => setApprovedBy(e.target.value)}
-                      required
-                      size="small"
-                    />
-                    <Textarea
-                      label="Begrunnelse (valgfritt)"
-                      name="reason"
-                      value={approvalReason}
-                      onChange={(e) => setApprovalReason(e.target.value)}
-                      description="F.eks: 'Hotfix godkjent i Slack' eller 'Revert av feil deployment'"
-                      size="small"
-                      rows={2}
-                    />
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <Button type="submit" variant="primary" size="small">
-                        Godkjenn
-                      </Button>
-                      <Button type="button" variant="secondary" size="small" onClick={() => setShowApprovalForm(false)}>
-                        Avbryt
-                      </Button>
-                    </div>
-                  </div>
-                </Form>
-              )}
-            </Box>
-          )}
         </div>
+      )}
+      {/* Manual approval section - for deployments needing manual approval */}
+      {requiresManualApproval && (
+        <Box background="warning-moderate" padding="space-24" borderRadius="8">
+          <VStack gap="space-16">
+            <Heading size="small">
+              <ExclamationmarkTriangleIcon aria-hidden /> Krever manuell godkjenning
+            </Heading>
+            <BodyShort>
+              Dette deploymentet har status "{status.text}" og krever manuell godkjenning for å oppfylle
+              fire-øyne-prinsippet. Legg ved Slack-lenke som dokumenterer at koden er blitt reviewet.
+            </BodyShort>
+
+            {!showApprovalForm ? (
+              <Button variant="primary" onClick={() => setShowApprovalForm(true)}>
+                Godkjenn manuelt
+              </Button>
+            ) : (
+              <Form method="post">
+                <input type="hidden" name="intent" value="manual_approval" />
+                <VStack gap="space-16">
+                  <TextField
+                    label="Godkjent av (ditt navn)"
+                    name="approved_by"
+                    value={approvedBy}
+                    onChange={(e) => setApprovedBy(e.target.value)}
+                    description="Navn på personen som godkjenner"
+                    size="small"
+                    required
+                  />
+                  <TextField
+                    label="Slack-lenke"
+                    name="slack_link"
+                    value={approvalSlackLink}
+                    onChange={(e) => setApprovalSlackLink(e.target.value)}
+                    description="Lenke til Slack-tråd hvor kode-review er dokumentert"
+                    size="small"
+                    required
+                  />
+                  <Textarea
+                    label="Begrunnelse (valgfritt)"
+                    name="reason"
+                    value={approvalReason}
+                    onChange={(e) => setApprovalReason(e.target.value)}
+                    description="F.eks: 'Hotfix reviewet i Slack av kollega'"
+                    size="small"
+                    rows={2}
+                  />
+                  <HStack gap="space-8">
+                    <Button type="submit" variant="primary" size="small">
+                      Godkjenn
+                    </Button>
+                    <Button type="button" variant="secondary" size="small" onClick={() => setShowApprovalForm(false)}>
+                      Avbryt
+                    </Button>
+                  </HStack>
+                </VStack>
+              </Form>
+            )}
+          </VStack>
+        </Box>
+      )}
+      {/* Show existing manual approval if present */}
+      {manualApproval && (
+        <Alert variant="success">
+          <Heading size="small">
+            <CheckmarkIcon aria-hidden /> Manuelt godkjent
+          </Heading>
+          <BodyShort>
+            Godkjent av <strong>{manualApproval.approved_by}</strong> den{' '}
+            {manualApproval.approved_at
+              ? new Date(manualApproval.approved_at).toLocaleDateString('no-NO', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })
+              : 'ukjent dato'}
+          </BodyShort>
+          {manualApproval.comment_text && (
+            <BodyShort style={{ marginTop: '0.5rem', fontStyle: 'italic' }}>"{manualApproval.comment_text}"</BodyShort>
+          )}
+          {manualApproval.slack_link && (
+            <BodyShort size="small" style={{ marginTop: '0.5rem' }}>
+              <a href={manualApproval.slack_link} target="_blank" rel="noopener noreferrer">
+                Se Slack-dokumentasjon
+              </a>
+            </BodyShort>
+          )}
+        </Alert>
       )}
       {/* Comments section */}
       <VStack gap="space-16">

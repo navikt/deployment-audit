@@ -1,4 +1,4 @@
-import { ArchiveIcon, ArrowsCirclepathIcon, PersonGroupIcon } from '@navikt/aksel-icons'
+import { ArchiveIcon, ArrowsCirclepathIcon, FileTextIcon, PersonGroupIcon } from '@navikt/aksel-icons'
 import { Alert, BodyShort, Box, Button, Heading, HGrid, VStack } from '@navikt/ds-react'
 import { Form, Link, useActionData } from 'react-router'
 import { resolveAlertsForLegacyDeployments } from '~/db/alerts.server'
@@ -51,6 +51,29 @@ export default function AdminIndex() {
       {actionData?.error && <Alert variant="error">{actionData.error}</Alert>}
 
       <HGrid gap="space-16" columns={{ xs: 1, md: 2, lg: 3 }}>
+        <Link to="/admin/audit-reports" style={{ textDecoration: 'none' }}>
+          <Box
+            padding="space-24"
+            borderRadius="8"
+            background="raised"
+            borderColor="neutral-subtle"
+            borderWidth="1"
+            className="admin-card"
+          >
+            <VStack gap="space-12">
+              <FileTextIcon fontSize="2rem" aria-hidden />
+              <div>
+                <Heading size="small" spacing>
+                  Revisjonsbevis
+                </Heading>
+                <BodyShort textColor="subtle">
+                  Generer revisjonsbevis for Riksrevisjonen som dokumenterer four-eyes-prinsippet.
+                </BodyShort>
+              </div>
+            </VStack>
+          </Box>
+        </Link>
+
         <Link to="/admin/users" style={{ textDecoration: 'none' }}>
           <Box
             padding="space-24"

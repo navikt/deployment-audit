@@ -1,0 +1,555 @@
+import { createHash } from 'node:crypto'
+import { pool } from './connection.server'
+import type { DeploymentWithApp } from './deployments.server'
+
+// ============================================================================
+// Types
+// ============================================================================
+
+export interface AuditReport {
+  id: number
+  report_id: string
+  monitored_app_id: number
+  app_name: string
+  team_slug: string
+  environment_name: string
+  repository: string
+  year: number
+  period_start: Date
+  period_end: Date
+  total_deployments: number
+  pr_approved_count: number
+  manually_approved_count: number
+  unique_deployers: number
+  unique_reviewers: number
+  report_data: AuditReportData
+  content_hash: string
+  pdf_data: Buffer | null
+  generated_at: Date
+  generated_by: string | null
+}
+
+export interface AuditReportData {
+  deployments: AuditDeploymentEntry[]
+  manual_approvals: ManualApprovalEntry[]
+  contributors: ContributorEntry[]
+  reviewers: ReviewerEntry[]
+  legacy_count: number
+}
+
+export interface AuditDeploymentEntry {
+  id: number
+  date: string
+  commit_sha: string
+  method: 'pr' | 'manual' | 'legacy'
+  deployer: string
+  approver: string
+  pr_number?: number
+  pr_url?: string
+  slack_link?: string
+}
+
+export interface ManualApprovalEntry {
+  deployment_id: number
+  date: string
+  commit_sha: string
+  deployer: string
+  reason: string
+  approved_by: string
+  approved_at: string
+  slack_link: string
+  comment: string
+}
+
+export interface ContributorEntry {
+  github_username: string
+  display_name: string | null
+  nav_ident: string | null
+  deployment_count: number
+}
+
+export interface ReviewerEntry {
+  github_username: string
+  display_name: string | null
+  review_count: number
+}
+
+export interface AuditReportSummary {
+  id: number
+  report_id: string
+  app_name: string
+  team_slug: string
+  environment_name: string
+  year: number
+  total_deployments: number
+  pr_approved_count: number
+  manually_approved_count: number
+  generated_at: Date
+}
+
+export interface AuditReadinessCheck {
+  is_ready: boolean
+  total_deployments: number
+  approved_count: number
+  legacy_count: number
+  pending_count: number
+  pending_deployments: Array<{
+    id: number
+    created_at: Date
+    commit_sha: string
+    deployer_username: string
+    four_eyes_status: string
+  }>
+}
+
+// ============================================================================
+// Core Functions
+// ============================================================================
+
+/**
+ * Check if all production deployments for an app in a year are approved
+ */
+export async function checkAuditReadiness(monitoredAppId: number, year: number): Promise<AuditReadinessCheck> {
+  const startDate = new Date(year, 0, 1) // Jan 1
+  const endDate = new Date(year, 11, 31, 23, 59, 59, 999) // Dec 31
+
+  // Get all deployments for the year in production environments
+  const result = await pool.query<{
+    id: number
+    created_at: Date
+    commit_sha: string
+    deployer_username: string
+    four_eyes_status: string
+    environment_name: string
+  }>(
+    `SELECT d.id, d.created_at, d.commit_sha, d.deployer_username, d.four_eyes_status, ma.environment_name
+     FROM deployments d
+     JOIN monitored_applications ma ON d.monitored_app_id = ma.id
+     WHERE d.monitored_app_id = $1
+       AND d.created_at >= $2
+       AND d.created_at <= $3
+       AND ma.environment_name IN ('prod-fss', 'prod-gcp')
+     ORDER BY d.created_at ASC`,
+    [monitoredAppId, startDate, endDate],
+  )
+
+  const deployments = result.rows
+  // Legacy deployments are accepted (pre-2025 without verification)
+  const approvedStatuses = ['approved_pr', 'manually_approved', 'legacy']
+
+  const approved = deployments.filter(
+    (d) => d.four_eyes_status === 'approved_pr' || d.four_eyes_status === 'manually_approved',
+  )
+  const legacy = deployments.filter((d) => d.four_eyes_status === 'legacy')
+  const pending = deployments.filter((d) => !approvedStatuses.includes(d.four_eyes_status))
+
+  return {
+    is_ready: pending.length === 0 && deployments.length > 0,
+    total_deployments: deployments.length,
+    approved_count: approved.length,
+    legacy_count: legacy.length,
+    pending_count: pending.length,
+    pending_deployments: pending.slice(0, 10), // Return first 10 for display
+  }
+}
+
+/**
+ * Get all data needed for an audit report
+ */
+export async function getAuditReportData(
+  monitoredAppId: number,
+  year: number,
+): Promise<{
+  app: { app_name: string; team_slug: string; environment_name: string }
+  repository: string
+  deployments: DeploymentWithApp[]
+  manual_approvals: Array<{
+    deployment_id: number
+    comment_text: string
+    slack_link: string
+    approved_by: string
+    approved_at: Date
+  }>
+  user_mappings: Map<string, { display_name: string | null; nav_ident: string | null }>
+}> {
+  const startDate = new Date(year, 0, 1)
+  const endDate = new Date(year, 11, 31, 23, 59, 59, 999)
+
+  // Get app info
+  const appResult = await pool.query(
+    `SELECT app_name, team_slug, environment_name FROM monitored_applications WHERE id = $1`,
+    [monitoredAppId],
+  )
+  if (appResult.rows.length === 0) {
+    throw new Error(`App not found: ${monitoredAppId}`)
+  }
+  const app = appResult.rows[0]
+
+  // Get all production deployments for the year
+  const deploymentsResult = await pool.query<DeploymentWithApp>(
+    `SELECT d.*, ma.team_slug, ma.environment_name, ma.app_name
+     FROM deployments d
+     JOIN monitored_applications ma ON d.monitored_app_id = ma.id
+     WHERE d.monitored_app_id = $1
+       AND d.created_at >= $2
+       AND d.created_at <= $3
+       AND ma.environment_name IN ('prod-fss', 'prod-gcp')
+     ORDER BY d.created_at ASC`,
+    [monitoredAppId, startDate, endDate],
+  )
+  const deployments = deploymentsResult.rows
+
+  // Determine repository from first deployment
+  const repository =
+    deployments.length > 0
+      ? `${deployments[0].detected_github_owner}/${deployments[0].detected_github_repo_name}`
+      : 'unknown'
+
+  // Get manual approvals for these deployments
+  const deploymentIds = deployments.map((d) => d.id)
+  let manual_approvals: Array<{
+    deployment_id: number
+    comment_text: string
+    slack_link: string
+    approved_by: string
+    approved_at: Date
+  }> = []
+
+  if (deploymentIds.length > 0) {
+    const approvalsResult = await pool.query(
+      `SELECT deployment_id, comment_text, slack_link, approved_by, approved_at
+       FROM deployment_comments
+       WHERE deployment_id = ANY($1) AND comment_type = 'manual_approval'
+       ORDER BY approved_at ASC`,
+      [deploymentIds],
+    )
+    manual_approvals = approvalsResult.rows
+  }
+
+  // Get user mappings for all deployers and reviewers
+  const usernames = new Set<string>()
+  for (const d of deployments) {
+    if (d.deployer_username) usernames.add(d.deployer_username)
+    if (d.github_pr_data?.reviewers) {
+      for (const r of d.github_pr_data.reviewers) {
+        if (r.state === 'APPROVED') usernames.add(r.username)
+      }
+    }
+  }
+  for (const a of manual_approvals) {
+    if (a.approved_by) usernames.add(a.approved_by)
+  }
+
+  const user_mappings = new Map<string, { display_name: string | null; nav_ident: string | null }>()
+  if (usernames.size > 0) {
+    const mappingsResult = await pool.query(
+      `SELECT github_username, display_name, nav_ident FROM user_mappings WHERE github_username = ANY($1)`,
+      [Array.from(usernames)],
+    )
+    for (const row of mappingsResult.rows) {
+      user_mappings.set(row.github_username, {
+        display_name: row.display_name,
+        nav_ident: row.nav_ident,
+      })
+    }
+  }
+
+  return { app, repository, deployments, manual_approvals, user_mappings }
+}
+
+/**
+ * Build the structured report data from raw data
+ */
+export function buildReportData(rawData: Awaited<ReturnType<typeof getAuditReportData>>): AuditReportData {
+  const { deployments, manual_approvals, user_mappings } = rawData
+  const manualApprovalMap = new Map(manual_approvals.map((a) => [a.deployment_id, a]))
+
+  // Build deployments list
+  const deploymentEntries: AuditDeploymentEntry[] = deployments.map((d) => {
+    const isManual = d.four_eyes_status === 'manually_approved'
+    const isLegacy = d.four_eyes_status === 'legacy'
+    const manualApproval = manualApprovalMap.get(d.id)
+
+    // Find approver
+    let approver = ''
+    if (isManual && manualApproval) {
+      approver = manualApproval.approved_by
+    } else if (isLegacy) {
+      approver = 'Legacy'
+    } else if (d.github_pr_data?.reviewers) {
+      const approvedReviewer = d.github_pr_data.reviewers.find((r) => r.state === 'APPROVED')
+      if (approvedReviewer) approver = approvedReviewer.username
+    }
+
+    // Determine method
+    let method: 'pr' | 'manual' | 'legacy' = 'pr'
+    if (isLegacy) {
+      method = 'legacy'
+    } else if (isManual) {
+      method = 'manual'
+    }
+
+    return {
+      id: d.id,
+      date: d.created_at.toISOString(),
+      commit_sha: d.commit_sha || '',
+      method,
+      deployer: d.deployer_username || '',
+      approver,
+      pr_number: d.github_pr_number || undefined,
+      pr_url: d.github_pr_url || undefined,
+      slack_link: manualApproval?.slack_link || undefined,
+    }
+  })
+
+  // Build manual approvals list
+  const manualApprovalEntries: ManualApprovalEntry[] = manual_approvals.map((a) => {
+    const deployment = deployments.find((d) => d.id === a.deployment_id)
+    return {
+      deployment_id: a.deployment_id,
+      date: deployment?.created_at.toISOString() || '',
+      commit_sha: deployment?.commit_sha || '',
+      deployer: deployment?.deployer_username || '',
+      reason:
+        deployment?.four_eyes_status === 'direct_push' ? 'Direct push til main' : 'Ekstra commits etter godkjenning',
+      approved_by: a.approved_by,
+      approved_at: a.approved_at.toISOString(),
+      slack_link: a.slack_link,
+      comment: a.comment_text,
+    }
+  })
+
+  // Build contributors list
+  const contributorCounts = new Map<string, number>()
+  for (const d of deployments) {
+    if (d.deployer_username) {
+      contributorCounts.set(d.deployer_username, (contributorCounts.get(d.deployer_username) || 0) + 1)
+    }
+  }
+  const contributors: ContributorEntry[] = Array.from(contributorCounts.entries())
+    .map(([username, count]) => ({
+      github_username: username,
+      display_name: user_mappings.get(username)?.display_name || null,
+      nav_ident: user_mappings.get(username)?.nav_ident || null,
+      deployment_count: count,
+    }))
+    .sort((a, b) => b.deployment_count - a.deployment_count)
+
+  // Build reviewers list
+  const reviewerCounts = new Map<string, number>()
+  for (const d of deployments) {
+    if (d.github_pr_data?.reviewers) {
+      for (const r of d.github_pr_data.reviewers) {
+        if (r.state === 'APPROVED') {
+          reviewerCounts.set(r.username, (reviewerCounts.get(r.username) || 0) + 1)
+        }
+      }
+    }
+  }
+  // Also count manual approvers
+  for (const a of manual_approvals) {
+    if (a.approved_by) {
+      reviewerCounts.set(a.approved_by, (reviewerCounts.get(a.approved_by) || 0) + 1)
+    }
+  }
+  const reviewers: ReviewerEntry[] = Array.from(reviewerCounts.entries())
+    .map(([username, count]) => ({
+      github_username: username,
+      display_name: user_mappings.get(username)?.display_name || null,
+      review_count: count,
+    }))
+    .sort((a, b) => b.review_count - a.review_count)
+
+  // Count legacy deployments
+  const legacyCount = deploymentEntries.filter((d) => d.method === 'legacy').length
+
+  return {
+    deployments: deploymentEntries,
+    manual_approvals: manualApprovalEntries,
+    contributors,
+    reviewers,
+    legacy_count: legacyCount,
+  }
+}
+
+/**
+ * Calculate SHA256 hash of report data for integrity verification
+ */
+export function calculateReportHash(reportData: AuditReportData): string {
+  const json = JSON.stringify(reportData)
+  return createHash('sha256').update(json).digest('hex')
+}
+
+/**
+ * Generate a unique report ID
+ */
+export function generateReportId(year: number, appName: string, environment: string, hash: string): string {
+  const shortHash = hash.substring(0, 8)
+  return `AUDIT-${year}-${appName}-${environment}-${shortHash}`
+}
+
+/**
+ * Save an audit report to the database
+ */
+export async function saveAuditReport(params: {
+  monitoredAppId: number
+  appName: string
+  teamSlug: string
+  environmentName: string
+  repository: string
+  year: number
+  reportData: AuditReportData
+  generatedBy?: string
+}): Promise<AuditReport> {
+  const { monitoredAppId, appName, teamSlug, environmentName, repository, year, reportData, generatedBy } = params
+
+  const periodStart = new Date(year, 0, 1)
+  const periodEnd = new Date(year, 11, 31)
+
+  const contentHash = calculateReportHash(reportData)
+  const reportId = generateReportId(year, appName, environmentName, contentHash)
+
+  const prApprovedCount = reportData.deployments.filter((d) => d.method === 'pr').length
+  const manuallyApprovedCount = reportData.deployments.filter((d) => d.method === 'manual').length
+
+  const result = await pool.query<AuditReport>(
+    `INSERT INTO audit_reports (
+      report_id, monitored_app_id, app_name, team_slug, environment_name, repository,
+      year, period_start, period_end,
+      total_deployments, pr_approved_count, manually_approved_count,
+      unique_deployers, unique_reviewers,
+      report_data, content_hash, generated_by
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+    ON CONFLICT (monitored_app_id, year) DO UPDATE SET
+      report_id = EXCLUDED.report_id,
+      app_name = EXCLUDED.app_name,
+      team_slug = EXCLUDED.team_slug,
+      environment_name = EXCLUDED.environment_name,
+      repository = EXCLUDED.repository,
+      period_start = EXCLUDED.period_start,
+      period_end = EXCLUDED.period_end,
+      total_deployments = EXCLUDED.total_deployments,
+      pr_approved_count = EXCLUDED.pr_approved_count,
+      manually_approved_count = EXCLUDED.manually_approved_count,
+      unique_deployers = EXCLUDED.unique_deployers,
+      unique_reviewers = EXCLUDED.unique_reviewers,
+      report_data = EXCLUDED.report_data,
+      content_hash = EXCLUDED.content_hash,
+      generated_at = NOW(),
+      generated_by = EXCLUDED.generated_by
+    RETURNING *`,
+    [
+      reportId,
+      monitoredAppId,
+      appName,
+      teamSlug,
+      environmentName,
+      repository,
+      year,
+      periodStart,
+      periodEnd,
+      reportData.deployments.length,
+      prApprovedCount,
+      manuallyApprovedCount,
+      reportData.contributors.length,
+      reportData.reviewers.length,
+      JSON.stringify(reportData),
+      contentHash,
+      generatedBy || null,
+    ],
+  )
+
+  return result.rows[0]
+}
+
+/**
+ * Get an audit report by ID
+ */
+export async function getAuditReportById(id: number): Promise<AuditReport | null> {
+  const result = await pool.query<AuditReport>('SELECT * FROM audit_reports WHERE id = $1', [id])
+  return result.rows[0] || null
+}
+
+/**
+ * Get an audit report by report_id
+ */
+export async function getAuditReportByReportId(reportId: string): Promise<AuditReport | null> {
+  const result = await pool.query<AuditReport>('SELECT * FROM audit_reports WHERE report_id = $1', [reportId])
+  return result.rows[0] || null
+}
+
+/**
+ * Get audit report for a specific app and year
+ */
+export async function getAuditReportForAppYear(monitoredAppId: number, year: number): Promise<AuditReport | null> {
+  const result = await pool.query<AuditReport>(
+    'SELECT * FROM audit_reports WHERE monitored_app_id = $1 AND year = $2',
+    [monitoredAppId, year],
+  )
+  return result.rows[0] || null
+}
+
+/**
+ * Get all audit reports (summary)
+ */
+export async function getAllAuditReports(): Promise<AuditReportSummary[]> {
+  const result = await pool.query<AuditReportSummary>(
+    `SELECT id, report_id, app_name, team_slug, environment_name, year,
+            total_deployments, pr_approved_count, manually_approved_count, generated_at
+     FROM audit_reports
+     ORDER BY generated_at DESC`,
+  )
+  return result.rows
+}
+
+/**
+ * Get audit reports for a specific app
+ */
+export async function getAuditReportsForApp(monitoredAppId: number): Promise<AuditReportSummary[]> {
+  const result = await pool.query<AuditReportSummary>(
+    `SELECT id, report_id, app_name, team_slug, environment_name, year,
+            total_deployments, pr_approved_count, manually_approved_count, generated_at
+     FROM audit_reports
+     WHERE monitored_app_id = $1
+     ORDER BY year DESC`,
+    [monitoredAppId],
+  )
+  return result.rows
+}
+
+/**
+ * Update PDF data for an audit report
+ */
+export async function updateAuditReportPdf(reportId: number, pdfData: Buffer): Promise<void> {
+  await pool.query('UPDATE audit_reports SET pdf_data = $1 WHERE id = $2', [pdfData, reportId])
+}
+
+/**
+ * Delete an audit report
+ */
+export async function deleteAuditReport(id: number): Promise<boolean> {
+  const result = await pool.query('DELETE FROM audit_reports WHERE id = $1', [id])
+  return (result.rowCount ?? 0) > 0
+}
+
+/**
+ * Get available years for an app (years with production deployments)
+ */
+export async function getAvailableYearsForApp(
+  monitoredAppId: number,
+): Promise<Array<{ year: number; deployment_count: number }>> {
+  const result = await pool.query<{ year: number; deployment_count: string }>(
+    `SELECT EXTRACT(YEAR FROM d.created_at)::integer as year, COUNT(*)::text as deployment_count
+     FROM deployments d
+     JOIN monitored_applications ma ON d.monitored_app_id = ma.id
+     WHERE d.monitored_app_id = $1
+       AND ma.environment_name IN ('prod-fss', 'prod-gcp')
+     GROUP BY year
+     ORDER BY year DESC`,
+    [monitoredAppId],
+  )
+  return result.rows.map((r) => ({
+    year: r.year,
+    deployment_count: parseInt(r.deployment_count, 10),
+  }))
+}

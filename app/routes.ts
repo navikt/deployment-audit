@@ -19,5 +19,7 @@ export default [
     route('admin', 'routes/admin.tsx'),
     route('admin/users', 'routes/admin.users.tsx'),
     route('admin/sync-jobs', 'routes/admin.sync-jobs.tsx'),
+    route('admin/audit-reports', 'routes/admin.audit-reports.tsx'),
+    route('admin/audit-reports/:id/pdf', 'routes/admin.audit-reports.$id.pdf.ts'),
   ]),
 ] satisfies RouteConfig
