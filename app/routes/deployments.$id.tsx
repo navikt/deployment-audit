@@ -268,7 +268,7 @@ function getFourEyesStatus(deployment: any): {
       return {
         text: 'Ukjent status',
         variant: 'info',
-        description: `Status for four-eyes kunne ikke fastslås (${deployment.four_eyes_status}).`,
+        description: `Godkjenningsstatus kunne ikke fastslås (${deployment.four_eyes_status}).`,
       }
   }
 }
@@ -334,7 +334,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
             {deployment.github_pr_data?.title || `${deployment.app_name} @ ${deployment.environment_name}`}
           </Heading>
           <HStack gap="space-8" align="center">
-            {/* Four-eyes status tag (only shown for OK/approved states) */}
+            {/* Godkjenning status tag (only shown for OK/approved states) */}
             {(deployment.four_eyes_status === 'approved' || deployment.four_eyes_status === 'manually_approved') && (
               <Tag data-color="success" variant="outline" size="small">
                 Godkjent
@@ -367,7 +367,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                     size="small"
                     variant="tertiary"
                     icon={<ArrowsCirclepathIcon aria-hidden />}
-                    title="Verifiser four-eyes status mot GitHub"
+                    title="Verifiser godkjenningsstatus mot GitHub"
                   >
                     Verifiser
                   </Button>

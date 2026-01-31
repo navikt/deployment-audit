@@ -96,7 +96,7 @@ export default function DeploymentsVerify({ loaderData, actionData }: Route.Comp
           Batch GitHub-verifisering{appId ? ' for applikasjon' : ''}
         </Heading>
         <BodyShort textColor="subtle">
-          Verifiser four-eyes status for flere deployments samtidig. Dette kaller GitHub API og bruker rate limit.
+          Verifiser godkjenningsstatus for flere deployments samtidig. Dette kaller GitHub API og bruker rate limit.
         </BodyShort>
       </div>
 

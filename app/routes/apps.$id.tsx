@@ -150,7 +150,7 @@ export default function AppDetail() {
   if (deploymentStats.without_four_eyes > 0) {
     statusColor = 'danger'
     statusIcon = <XMarkOctagonIcon />
-    statusText = `${deploymentStats.without_four_eyes} deployment${deploymentStats.without_four_eyes > 1 ? 's' : ''} mangler four-eyes`
+    statusText = `${deploymentStats.without_four_eyes} deployment${deploymentStats.without_four_eyes > 1 ? 's' : ''} mangler godkjenning`
   } else if (deploymentStats.pending_verification > 0) {
     statusColor = 'warning'
     statusIcon = <ExclamationmarkTriangleIcon />

@@ -9,7 +9,7 @@ import type { Route } from './+types/home'
 export function meta(_args: Route.MetaArgs) {
   return [
     { title: 'Pensjon Deployment Audit' },
-    { name: 'description', content: 'Audit Nais deployments for four-eyes principle' },
+    { name: 'description', content: 'Audit Nais deployments for godkjenningsstatus' },
   ]
 }
 
@@ -82,7 +82,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             data-color="success"
           >
             <BodyShort size="small" textColor="subtle">
-              Med four-eyes
+              Godkjent
             </BodyShort>
             <Heading size="large">{stats.with_four_eyes}</Heading>
             <BodyShort size="small" textColor="subtle">
@@ -99,7 +99,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             data-color="danger"
           >
             <BodyShort size="small" textColor="subtle">
-              Mangler four-eyes
+              Mangler godkjenning
             </BodyShort>
             <Heading size="large">{stats.without_four_eyes}</Heading>
             <BodyShort size="small" textColor="subtle">
@@ -145,7 +145,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             <RocketIcon aria-hidden />
             Deployments
           </LinkPanel.Title>
-          <LinkPanel.Description>Se alle deployments med four-eyes status</LinkPanel.Description>
+          <LinkPanel.Description>Se alle deployments med godkjenningsstatus</LinkPanel.Description>
         </LinkPanel>
 
         <LinkPanel as={Link} to="/deployments/verify">
@@ -153,7 +153,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             <CheckmarkCircleIcon aria-hidden />
             Verifiser deployments {pendingCount > 0 && `(${pendingCount})`}
           </LinkPanel.Title>
-          <LinkPanel.Description>Kjør GitHub-verifisering av four-eyes status</LinkPanel.Description>
+          <LinkPanel.Description>Kjør GitHub-verifisering av godkjenningsstatus</LinkPanel.Description>
         </LinkPanel>
 
         <LinkPanel as={Link} to="/alerts">
@@ -167,7 +167,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
       {stats && stats.without_four_eyes > 0 && (
         <Alert variant="warning">
-          Du har {stats.without_four_eyes} deployment{stats.without_four_eyes !== 1 ? 's' : ''} som mangler four-eyes.{' '}
+          Du har {stats.without_four_eyes} deployment{stats.without_four_eyes !== 1 ? 's' : ''} som mangler godkjenning.{' '}
           <Link to="/deployments?only_missing=true">Se oversikt</Link>
         </Alert>
       )}

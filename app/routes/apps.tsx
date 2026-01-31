@@ -50,7 +50,7 @@ export async function action({ request }: Route.ActionArgs) {
       const result = await syncDeploymentsFromNais(teamSlug, environmentName, appName)
 
       return {
-        success: `Hentet ${result.newCount} nye deployments fra Nais. ${result.alertsCreated > 0 ? `${result.alertsCreated} nye varsler opprettet.` : ''} Kjør GitHub-verifisering for å sjekke four-eyes.`,
+        success: `Hentet ${result.newCount} nye deployments fra Nais. ${result.alertsCreated > 0 ? `${result.alertsCreated} nye varsler opprettet.` : ''} Kjør GitHub-verifisering for å sjekke godkjenning.`,
         error: null,
       }
     } catch (error) {
@@ -270,7 +270,7 @@ export default function Apps({ loaderData, actionData }: Route.ComponentProps) {
                             size="small"
                             variant="tertiary"
                             icon={<CheckmarkCircleIcon aria-hidden />}
-                            title="Verifiser four-eyes med GitHub"
+                            title="Verifiser godkjenning med GitHub"
                           >
                             <Show above="sm">Verifiser</Show>
                           </Button>

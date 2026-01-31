@@ -158,8 +158,8 @@ export default function Deployments({ loaderData }: Route.ComponentProps) {
           Deployments
         </Heading>
         <BodyShort textColor="subtle">
-          {stats.total} deployments totalt • {stats.withFourEyes} med four-eyes ({percentage}%) •{' '}
-          {stats.withoutFourEyes} mangler four-eyes
+          {stats.total} deployments totalt • {stats.withFourEyes} godkjent ({percentage}%) • {stats.withoutFourEyes}{' '}
+          mangler godkjenning
         </BodyShort>
       </div>
 
@@ -204,7 +204,7 @@ export default function Deployments({ loaderData }: Route.ComponentProps) {
             </HGrid>
 
             <Checkbox name="only_missing" value="true" defaultChecked={onlyMissing}>
-              Vis kun deployments som mangler four-eyes
+              Vis kun deployments som mangler godkjenning
             </Checkbox>
           </VStack>
         </Form>
