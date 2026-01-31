@@ -364,6 +364,24 @@ export async function createDeployment(data: CreateDeploymentParams): Promise<De
   return result.rows[0]
 }
 
+/**
+ * Get the latest (most recent) deployment for an app by Nais deployment ID
+ * Used for incremental sync to know where to stop
+ */
+export async function getLatestDeploymentForApp(
+  monitoredAppId: number,
+): Promise<{ nais_deployment_id: string; created_at: string } | null> {
+  const result = await pool.query(
+    `SELECT nais_deployment_id, created_at 
+     FROM deployments 
+     WHERE monitored_app_id = $1 
+     ORDER BY created_at DESC 
+     LIMIT 1`,
+    [monitoredAppId],
+  )
+  return result.rows[0] || null
+}
+
 export async function getDeploymentStats(monitoredAppId?: number): Promise<{
   total: number
   with_four_eyes: number

@@ -17,6 +17,7 @@ import {
   type DeploymentFilters,
   getAllDeployments,
   getDeploymentByNaisId,
+  getLatestDeploymentForApp,
   getPreviousDeployment,
   type UnverifiedCommit,
   updateDeploymentFourEyes,
@@ -28,7 +29,7 @@ import {
   getPullRequestForCommit,
   verifyPullRequestFourEyes,
 } from '~/lib/github.server'
-import { fetchApplicationDeployments } from '~/lib/nais.server'
+import { fetchApplicationDeployments, fetchNewDeployments } from '~/lib/nais.server'
 
 /**
  * Step 1: Sync deployments from Nais API to database
@@ -213,6 +214,130 @@ export async function syncDeploymentsFromNais(
     alertsCreated,
     totalProcessed,
   }
+}
+
+/**
+ * Incremental sync - only fetches new deployments since last sync
+ * Stops as soon as it finds a deployment already in the database
+ * Much faster for periodic syncs
+ */
+export async function syncNewDeploymentsFromNais(
+  teamSlug: string,
+  environmentName: string,
+  appName: string,
+  monitoredAppId: number,
+): Promise<{
+  newCount: number
+  alertsCreated: number
+  stoppedEarly: boolean
+}> {
+  console.log('📥 Incremental sync - fetching only new deployments:', {
+    team: teamSlug,
+    environment: environmentName,
+    app: appName,
+  })
+
+  // Get the latest deployment we have for this app
+  const latestDeployment = await getLatestDeploymentForApp(monitoredAppId)
+
+  if (!latestDeployment) {
+    // No deployments yet - fall back to full sync
+    console.log('📋 No existing deployments - performing full sync instead')
+    const result = await syncDeploymentsFromNais(teamSlug, environmentName, appName)
+    return {
+      newCount: result.newCount,
+      alertsCreated: result.alertsCreated,
+      stoppedEarly: false,
+    }
+  }
+
+  console.log(`🔍 Looking for deployments newer than ${latestDeployment.nais_deployment_id.substring(0, 20)}...`)
+
+  // Fetch only new deployments
+  const { deployments, stoppedEarly } = await fetchNewDeployments(
+    teamSlug,
+    environmentName,
+    appName,
+    latestDeployment.nais_deployment_id,
+    100, // Smaller page size for incremental
+  )
+
+  if (deployments.length === 0) {
+    console.log('✅ No new deployments found')
+    return { newCount: 0, alertsCreated: 0, stoppedEarly }
+  }
+
+  console.log(`📦 Processing ${deployments.length} new deployments`)
+
+  let newCount = 0
+  const alertsCreated = 0
+  let detectedRepository: { owner: string; repo: string } | null = null
+
+  for (const deployment of deployments) {
+    // Double-check it doesn't exist (in case of race condition)
+    const existing = await getDeploymentByNaisId(deployment.id)
+    if (existing) {
+      console.log(`⏭️  Already exists: ${deployment.id}`)
+      continue
+    }
+
+    // Parse repository from Nais data
+    if (deployment.repository) {
+      const match = deployment.repository.match(/github\.com\/([^/]+)\/([^/]+)/)
+      if (match) {
+        detectedRepository = { owner: match[1], repo: match[2] }
+      } else if (deployment.repository.includes('/')) {
+        const parts = deployment.repository.split('/')
+        detectedRepository = { owner: parts[0], repo: parts[1] }
+      }
+    }
+
+    // Extract resources
+    const resources = deployment.resources?.nodes?.map((r) => ({
+      id: r.id,
+      kind: r.kind,
+      name: r.name,
+    }))
+
+    console.log(`➕ Creating new deployment: ${deployment.id}`)
+    await createDeployment({
+      monitoredApplicationId: monitoredAppId,
+      naisDeploymentId: deployment.id,
+      createdAt: new Date(deployment.createdAt),
+      teamSlug: deployment.teamSlug,
+      environmentName: deployment.environmentName,
+      appName,
+      deployerUsername: deployment.deployerUsername,
+      commitSha: deployment.commitSha,
+      triggerUrl: deployment.triggerUrl,
+      detectedGithubOwner: detectedRepository?.owner || '',
+      detectedGithubRepoName: detectedRepository?.repo || '',
+      resources,
+    })
+    newCount++
+  }
+
+  // Check for repository mismatches if we detected a repo
+  if (detectedRepository) {
+    const existingRepos = await getRepositoriesByAppId(monitoredAppId)
+    const matchingRepo = existingRepos.find(
+      (r) => r.github_owner === detectedRepository!.owner && r.github_repo_name === detectedRepository!.repo,
+    )
+
+    if (!matchingRepo) {
+      // New repository detected - create it (but skip alert for incremental sync)
+      await upsertApplicationRepository({
+        monitoredAppId,
+        githubOwner: detectedRepository.owner,
+        githubRepoName: detectedRepository.repo,
+        status: 'active',
+      })
+      console.log(`📌 New repository detected: ${detectedRepository.owner}/${detectedRepository.repo}`)
+    }
+  }
+
+  console.log(`✅ Incremental sync complete: ${newCount} new, ${alertsCreated} alerts`)
+  return { newCount, alertsCreated, stoppedEarly }
 }
 
 /**
@@ -627,7 +752,7 @@ export async function syncAndVerifyDeployments(
 import { acquireSyncLock, cleanupOldSyncJobs, releaseSyncLock } from '~/db/sync-jobs.server'
 
 /**
- * Sync deployments from Nais with distributed locking
+ * Full sync from Nais with distributed locking (for manual sync or initial setup)
  * Only one pod will run sync for a given app at a time
  */
 export async function syncDeploymentsFromNaisWithLock(
@@ -643,6 +768,36 @@ export async function syncDeploymentsFromNaisWithLock(
 
   try {
     const result = await syncDeploymentsFromNais(teamSlug, environmentName, appName)
+    await releaseSyncLock(lockId, 'completed', result)
+    return { success: true, result }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    await releaseSyncLock(lockId, 'failed', undefined, errorMessage)
+    throw error
+  }
+}
+
+/**
+ * Incremental sync from Nais with distributed locking (for periodic sync)
+ * Only fetches new deployments - much faster than full sync
+ */
+export async function syncNewDeploymentsWithLock(
+  monitoredAppId: number,
+  teamSlug: string,
+  environmentName: string,
+  appName: string,
+): Promise<{
+  success: boolean
+  result?: Awaited<ReturnType<typeof syncNewDeploymentsFromNais>>
+  locked?: boolean
+}> {
+  const lockId = await acquireSyncLock('nais_sync', monitoredAppId)
+  if (!lockId) {
+    return { success: false, locked: true }
+  }
+
+  try {
+    const result = await syncNewDeploymentsFromNais(teamSlug, environmentName, appName, monitoredAppId)
     await releaseSyncLock(lockId, 'completed', result)
     return { success: true, result }
   } catch (error) {
@@ -709,22 +864,19 @@ async function runPeriodicSync(): Promise<void> {
     console.log(`📋 Found ${apps.length} monitored applications`)
 
     let syncedCount = 0
+    let newDeploymentsCount = 0
     let verifiedCount = 0
     let lockedCount = 0
 
     for (const app of apps) {
-      // Try Nais sync
-      const syncResult = await syncDeploymentsFromNaisWithLock(
-        app.id,
-        app.team_slug,
-        app.environment_name,
-        app.app_name,
-      )
+      // Try incremental Nais sync (only fetches new deployments)
+      const syncResult = await syncNewDeploymentsWithLock(app.id, app.team_slug, app.environment_name, app.app_name)
 
       if (syncResult.locked) {
         lockedCount++
       } else if (syncResult.success) {
         syncedCount++
+        newDeploymentsCount += syncResult.result?.newCount || 0
       }
 
       // Try GitHub verification
@@ -745,7 +897,7 @@ async function runPeriodicSync(): Promise<void> {
     }
 
     console.log(
-      `✅ Periodic sync complete: synced ${syncedCount} apps, verified ${verifiedCount} deployments, ${lockedCount} locked`,
+      `✅ Periodic sync complete: synced ${syncedCount} apps (${newDeploymentsCount} new deployments), verified ${verifiedCount} deployments, ${lockedCount} locked`,
     )
   } catch (error) {
     console.error('❌ Periodic sync error:', error)

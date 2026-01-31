@@ -270,6 +270,81 @@ export async function fetchApplicationDeployments(
 }
 
 /**
+ * Fetch new deployments incrementally - stops when finding a known deployment
+ * Returns only deployments newer than the stopAtDeploymentId
+ */
+export async function fetchNewDeployments(
+  teamSlug: string,
+  environmentName: string,
+  appName: string,
+  stopAtDeploymentId: string,
+  pageSize: number = 100,
+): Promise<{ deployments: NaisDeployment[]; stoppedEarly: boolean }> {
+  const client = getNaisClient()
+
+  console.log('📡 Fetching new deployments incrementally:', {
+    team: teamSlug,
+    environment: environmentName,
+    app: appName,
+    stopAt: stopAtDeploymentId.substring(0, 20) + '...',
+  })
+
+  const newDeployments: NaisDeployment[] = []
+  let after: string | undefined
+  let pageCount = 0
+  let hasMore = true
+  let stoppedEarly = false
+
+  try {
+    while (hasMore) {
+      pageCount++
+      console.log(`📄 Fetching page ${pageCount}${after ? ` (cursor: ${after.substring(0, 20)}...)` : ''}`)
+
+      const response: TeamEnvironmentResponse = await client.request(APP_DEPLOYMENTS_QUERY, {
+        team: teamSlug,
+        env: environmentName,
+        app: appName,
+        first: pageSize,
+        after: after,
+        last: null,
+        before: null,
+      })
+
+      if (!response.team?.environment?.application) {
+        console.warn('⚠️  Application not found or no access')
+        break
+      }
+
+      const deployments = response.team.environment.application.deployments
+
+      // Check each deployment - stop when we find a known one
+      for (const deployment of deployments.nodes) {
+        if (deployment.id === stopAtDeploymentId) {
+          console.log(`🛑 Found known deployment ${stopAtDeploymentId.substring(0, 20)}... - stopping`)
+          stoppedEarly = true
+          hasMore = false
+          break
+        }
+        newDeployments.push(deployment)
+      }
+
+      if (!stoppedEarly) {
+        after = deployments.pageInfo.endCursor
+        hasMore = deployments.pageInfo.hasNextPage
+      }
+    }
+
+    console.log(
+      `✨ Found ${newDeployments.length} new deployments (${pageCount} page(s), stopped early: ${stoppedEarly})`,
+    )
+    return { deployments: newDeployments, stoppedEarly }
+  } catch (error) {
+    console.error('❌ Error fetching new deployments from Nais:', error)
+    throw error
+  }
+}
+
+/**
  * Discover available environments and applications for a team
  */
 export async function discoverTeamApplications(teamSlug: string): Promise<{
