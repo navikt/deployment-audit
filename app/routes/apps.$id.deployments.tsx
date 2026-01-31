@@ -5,8 +5,10 @@ import {
   Button,
   Detail,
   Heading,
+  Hide,
   HStack,
   Select,
+  Show,
   Tag,
   TextField,
   VStack,
@@ -232,25 +234,44 @@ export default function AppDeployments() {
                 borderRadius="8"
                 background="raised"
               >
-                <HStack gap="space-16" align="center" justify="space-between" wrap>
-                  {/* Left side: Time and info */}
-                  <VStack gap="space-4" style={{ flex: 1, minWidth: '200px' }}>
-                    <HStack gap="space-8" align="center" wrap>
-                      <BodyShort weight="semibold">
+                <VStack gap="space-8">
+                  {/* First row: Time, Title (on desktop), Tags (right-aligned) */}
+                  <HStack gap="space-8" align="center" justify="space-between" wrap>
+                    <HStack gap="space-8" align="center" style={{ flex: 1 }}>
+                      <BodyShort weight="semibold" style={{ whiteSpace: 'nowrap' }}>
                         {new Date(deployment.created_at).toLocaleString('no-NO', {
                           dateStyle: 'short',
                           timeStyle: 'short',
                         })}
                       </BodyShort>
+                      {/* Title on desktop - inline with time */}
+                      <Show above="md">
+                        {deployment.title && (
+                          <BodyShort style={{ flex: 1 }} truncate>
+                            {deployment.github_pr_number ? `#${deployment.github_pr_number}` : deployment.commit_sha?.substring(0, 7)} - {deployment.title}
+                          </BodyShort>
+                        )}
+                      </Show>
+                    </HStack>
+                    <HStack gap="space-8">
                       {getMethodTag(deployment)}
                       {getStatusTag(deployment)}
                     </HStack>
+                  </HStack>
+
+                  {/* Title on mobile - separate line */}
+                  <Hide above="md">
                     {deployment.title && (
-                      <BodyShort>{deployment.title}</BodyShort>
+                      <BodyShort>
+                        {deployment.github_pr_number ? `#${deployment.github_pr_number}` : deployment.commit_sha?.substring(0, 7)} - {deployment.title}
+                      </BodyShort>
                     )}
+                  </Hide>
+
+                  {/* Second row: Details and View button */}
+                  <HStack gap="space-16" align="center" justify="space-between" wrap>
                     <HStack gap="space-16" wrap>
                       <Detail>
-                        Deployer:{' '}
                         {deployment.deployer_username ? (
                           <a
                             href={`https://github.com/${deployment.deployer_username}`}
@@ -264,7 +285,6 @@ export default function AppDeployments() {
                         )}
                       </Detail>
                       <Detail>
-                        Commit:{' '}
                         {deployment.commit_sha ? (
                           <a
                             href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/commit/${deployment.commit_sha}`}
@@ -280,29 +300,26 @@ export default function AppDeployments() {
                       </Detail>
                       {deployment.github_pr_number && (
                         <Detail>
-                          PR:{' '}
                           <a
                             href={deployment.github_pr_url || '#'}
                             target="_blank"
                             rel="noopener noreferrer"
                           >
-                            #{deployment.github_pr_number}
+                            PR #{deployment.github_pr_number}
                           </a>
                         </Detail>
                       )}
                     </HStack>
-                  </VStack>
-
-                  {/* Right side: View button */}
-                  <Button
-                    as={Link}
-                    to={`/deployments/${deployment.id}`}
-                    variant="tertiary"
-                    size="small"
-                  >
-                    Vis
-                  </Button>
-                </HStack>
+                    <Button
+                      as={Link}
+                      to={`/deployments/${deployment.id}`}
+                      variant="tertiary"
+                      size="small"
+                    >
+                      Vis
+                    </Button>
+                  </HStack>
+                </VStack>
               </Box>
             ))
           )}
