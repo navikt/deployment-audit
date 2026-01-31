@@ -154,3 +154,80 @@ export async function cleanupOldSyncJobs(keepPerApp: number = 50): Promise<numbe
   )
   return result.rowCount || 0
 }
+
+export interface SyncJobWithApp extends SyncJob {
+  app_name: string
+  team_slug: string
+  environment_name: string
+}
+
+/**
+ * Get all sync jobs with app information for admin view
+ */
+export async function getAllSyncJobs(filters?: {
+  status?: SyncJobStatus
+  jobType?: SyncJobType
+  limit?: number
+}): Promise<SyncJobWithApp[]> {
+  const whereClauses: string[] = []
+  const params: (string | number)[] = []
+  let paramIndex = 1
+
+  if (filters?.status) {
+    whereClauses.push(`sj.status = $${paramIndex}`)
+    params.push(filters.status)
+    paramIndex++
+  }
+
+  if (filters?.jobType) {
+    whereClauses.push(`sj.job_type = $${paramIndex}`)
+    params.push(filters.jobType)
+    paramIndex++
+  }
+
+  const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : ''
+  const limit = filters?.limit || 100
+
+  const result = await pool.query(
+    `SELECT 
+       sj.*,
+       ma.app_name,
+       ma.team_slug,
+       ma.environment_name
+     FROM sync_jobs sj
+     JOIN monitored_applications ma ON sj.monitored_app_id = ma.id
+     ${whereClause}
+     ORDER BY sj.created_at DESC
+     LIMIT $${paramIndex}`,
+    [...params, limit],
+  )
+  return result.rows
+}
+
+/**
+ * Get sync job stats
+ */
+export async function getSyncJobStats(): Promise<{
+  total: number
+  running: number
+  completed: number
+  failed: number
+  lastHour: number
+}> {
+  const result = await pool.query(`
+    SELECT 
+      COUNT(*) as total,
+      COUNT(CASE WHEN status = 'running' THEN 1 END) as running,
+      COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed,
+      COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed,
+      COUNT(CASE WHEN created_at > NOW() - INTERVAL '1 hour' THEN 1 END) as last_hour
+    FROM sync_jobs
+  `)
+  return {
+    total: parseInt(result.rows[0].total, 10),
+    running: parseInt(result.rows[0].running, 10),
+    completed: parseInt(result.rows[0].completed, 10),
+    failed: parseInt(result.rows[0].failed, 10),
+    lastHour: parseInt(result.rows[0].last_hour, 10),
+  }
+}

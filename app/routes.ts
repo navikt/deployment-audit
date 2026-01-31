@@ -16,5 +16,6 @@ export default [
     route('deployments/:id', 'routes/deployments.$id.tsx'),
     route('alerts', 'routes/alerts.tsx'),
     route('admin/users', 'routes/admin.users.tsx'),
+    route('admin/sync-jobs', 'routes/admin.sync-jobs.tsx'),
   ]),
 ] satisfies RouteConfig
