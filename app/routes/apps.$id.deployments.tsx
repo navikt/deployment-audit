@@ -16,6 +16,7 @@ import {
 import { Form, Link, type LoaderFunctionArgs, useLoaderData, useSearchParams } from 'react-router'
 import { type DeploymentFilters, getDeploymentsPaginated } from '~/db/deployments.server'
 import { getMonitoredApplicationById } from '~/db/monitored-applications.server'
+import { getUserMappings } from '~/db/user-mappings.server'
 import styles from '~/styles/common.module.css'
 import type { Route } from './+types/apps.$id.deployments'
 
@@ -69,8 +70,21 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
 
   const result = await getDeploymentsPaginated(filters)
 
+  // Get display names for deployers
+  const deployerUsernames = [...new Set(result.deployments.map((d) => d.deployer_username).filter(Boolean))] as string[]
+  const userMappings = await getUserMappings(deployerUsernames)
+
+  // Convert Map to plain object for serialization
+  const userMappingsObject: Record<string, string> = {}
+  for (const [username, mapping] of userMappings) {
+    if (mapping.display_name) {
+      userMappingsObject[username] = mapping.display_name
+    }
+  }
+
   return {
     app,
+    userMappings: userMappingsObject,
     ...result,
   }
 }
@@ -136,7 +150,7 @@ function getStatusTag(deployment: { four_eyes_status: string; has_four_eyes: boo
 }
 
 export default function AppDeployments() {
-  const { app, deployments, total, page, per_page, total_pages } = useLoaderData<typeof loader>()
+  const { app, deployments, total, page, total_pages, userMappings } = useLoaderData<typeof loader>()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const currentStatus = searchParams.get('status') || ''
@@ -306,8 +320,9 @@ export default function AppDeployments() {
                             href={`https://github.com/${deployment.deployer_username}`}
                             target="_blank"
                             rel="noopener noreferrer"
+                            title={deployment.deployer_username}
                           >
-                            {deployment.deployer_username}
+                            {userMappings[deployment.deployer_username] || deployment.deployer_username}
                           </a>
                         ) : (
                           '(ukjent)'
