@@ -17,6 +17,7 @@ import { MethodTag, StatusTag } from '~/components/deployment-tags'
 import { type DeploymentFilters, getDeploymentsPaginated } from '~/db/deployments.server'
 import { getMonitoredApplicationById } from '~/db/monitored-applications.server'
 import { getUserMappings } from '~/db/user-mappings.server'
+import { getDateRangeForPeriod, TIME_PERIOD_OPTIONS, type TimePeriod } from '~/lib/time-periods'
 import styles from '~/styles/common.module.css'
 import type { Route } from './+types/apps.$id.deployments'
 
@@ -41,20 +42,9 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   const method = url.searchParams.get('method') as 'pr' | 'direct_push' | 'legacy' | undefined
   const deployer = url.searchParams.get('deployer') || undefined
   const sha = url.searchParams.get('sha') || undefined
-  const period = url.searchParams.get('period') || undefined
+  const period = (url.searchParams.get('period') || 'current-month') as TimePeriod
 
-  // Calculate date range based on period
-  let start_date: Date | undefined
-  let end_date: Date | undefined
-  const now = new Date()
-
-  if (period === 'week') {
-    start_date = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-  } else if (period === 'month') {
-    start_date = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-  } else if (period === '3months') {
-    start_date = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
-  }
+  const range = getDateRangeForPeriod(period)
 
   const filters: DeploymentFilters = {
     monitored_app_id: id,
@@ -64,8 +54,8 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     method: method && ['pr', 'direct_push', 'legacy'].includes(method) ? method : undefined,
     deployer_username: deployer,
     commit_sha: sha,
-    start_date,
-    end_date,
+    start_date: range?.startDate,
+    end_date: range?.endDate,
   }
 
   const result = await getDeploymentsPaginated(filters)
@@ -97,7 +87,7 @@ export default function AppDeployments() {
   const currentMethod = searchParams.get('method') || ''
   const currentDeployer = searchParams.get('deployer') || ''
   const currentSha = searchParams.get('sha') || ''
-  const currentPeriod = searchParams.get('period') || ''
+  const currentPeriod = searchParams.get('period') || 'current-month'
 
   const updateFilter = (key: string, value: string) => {
     const newParams = new URLSearchParams(searchParams)
@@ -123,12 +113,7 @@ export default function AppDeployments() {
         <Detail textColor="subtle">
           <Link to="/apps">Applikasjoner</Link> / <Link to={`/apps/${app.id}`}>{app.app_name}</Link> / Deployments
         </Detail>
-        <Heading size="large" spacing>
-          Deployments for {app.app_name}
-        </Heading>
-        <BodyShort textColor="subtle">
-          {total} deployment{total !== 1 ? 's' : ''} totalt
-        </BodyShort>
+        <Heading size="large">Deployments for {app.app_name}</Heading>
       </div>
 
       {/* Filters */}
@@ -136,6 +121,19 @@ export default function AppDeployments() {
         <Form method="get">
           <VStack gap="space-16">
             <HStack gap="space-16" wrap>
+              <Select
+                label="Tidsperiode"
+                size="small"
+                value={currentPeriod}
+                onChange={(e) => updateFilter('period', e.target.value)}
+              >
+                {TIME_PERIOD_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </Select>
+
               <Select
                 label="Status"
                 size="small"
@@ -163,18 +161,6 @@ export default function AppDeployments() {
                 <option value="legacy">Legacy</option>
               </Select>
 
-              <Select
-                label="Periode"
-                size="small"
-                value={currentPeriod}
-                onChange={(e) => updateFilter('period', e.target.value)}
-              >
-                <option value="">Alle</option>
-                <option value="week">Siste uke</option>
-                <option value="month">Siste måned</option>
-                <option value="3months">Siste 3 måneder</option>
-              </Select>
-
               <TextField
                 label="Deployer"
                 size="small"
@@ -194,6 +180,10 @@ export default function AppDeployments() {
           </VStack>
         </Form>
       </Box>
+
+      <BodyShort textColor="subtle">
+        {total} deployment{total !== 1 ? 's' : ''} funnet
+      </BodyShort>
 
       {/* Deployments list */}
       <div>

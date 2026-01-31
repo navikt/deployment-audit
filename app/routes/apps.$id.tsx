@@ -41,7 +41,7 @@ import {
 } from '~/db/application-repositories.server'
 import { getAppDeploymentStats } from '~/db/deployments.server'
 import { getMonitoredApplicationById } from '~/db/monitored-applications.server'
-import { getDateRange } from '~/lib/nais.server'
+import { getDateRangeForPeriod, TIME_PERIOD_OPTIONS, type TimePeriod } from '~/lib/time-periods'
 
 export async function loader({ params, request }: LoaderFunctionArgs) {
   const id = parseInt(params.id || '', 10)
@@ -50,16 +50,11 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   }
 
   const url = new URL(request.url)
-  const period = url.searchParams.get('period') || 'all'
+  const period = (url.searchParams.get('period') || 'current-month') as TimePeriod
 
-  let startDate: Date | undefined
-  let endDate: Date | undefined
-
-  if (period !== 'all') {
-    const range = getDateRange(period)
-    startDate = range.startDate
-    endDate = range.endDate
-  }
+  const range = getDateRangeForPeriod(period)
+  const startDate = range?.startDate
+  const endDate = range?.endDate
 
   const app = await getMonitoredApplicationById(id)
   if (!app) {
@@ -128,7 +123,7 @@ export default function AppDetail() {
     useLoaderData<typeof loader>()
   const actionData = useActionData<typeof action>()
   const [searchParams] = useSearchParams()
-  const currentPeriod = searchParams.get('period') || 'all'
+  const currentPeriod = searchParams.get('period') || 'current-month'
 
   // Status badge based on deployment stats and alerts
   // Priority: 1. Missing four-eyes (error), 2. Pending verification (warning), 3. Alerts (warning), 4. OK (success)
@@ -182,11 +177,11 @@ export default function AppDetail() {
             </Heading>
             <Form method="get" onChange={(e) => e.currentTarget.submit()}>
               <Select label="Tidsperiode" name="period" defaultValue={currentPeriod} size="small" hideLabel>
-                <option value="last-month">Siste måned</option>
-                <option value="last-12-months">Siste 12 måneder</option>
-                <option value="this-year">I år</option>
-                <option value="year-2025">Hele 2025</option>
-                <option value="all">Alle</option>
+                {TIME_PERIOD_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
               </Select>
             </Form>
           </HStack>

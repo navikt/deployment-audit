@@ -1,11 +1,24 @@
 import { ChevronLeftIcon, ChevronRightIcon } from '@navikt/aksel-icons'
-import { BodyShort, Box, Button, Detail, Heading, HGrid, Hide, HStack, Select, Show, VStack } from '@navikt/ds-react'
+import {
+  BodyShort,
+  Box,
+  Button,
+  Detail,
+  Heading,
+  HGrid,
+  Hide,
+  HStack,
+  Select,
+  Show,
+  TextField,
+  VStack,
+} from '@navikt/ds-react'
 import { Form, Link, useSearchParams } from 'react-router'
 import { MethodTag, StatusTag } from '~/components/deployment-tags'
 import { getDeploymentsPaginated } from '~/db/deployments.server'
 import { getAllMonitoredApplications } from '~/db/monitored-applications.server'
 import { getUserMappings } from '~/db/user-mappings.server'
-import { getDateRange } from '~/lib/nais.server'
+import { getDateRangeForPeriod, TIME_PERIOD_OPTIONS, type TimePeriod } from '~/lib/time-periods'
 import styles from '~/styles/common.module.css'
 import type { Route } from './+types/deployments'
 
@@ -13,20 +26,17 @@ export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url)
   const appId = url.searchParams.get('app')
   const teamSlug = url.searchParams.get('team')
-  const period = url.searchParams.get('period') || 'last-month'
+  const period = (url.searchParams.get('period') || 'last-month') as TimePeriod
   const environment = url.searchParams.get('environment')
   const status = url.searchParams.get('status') || undefined
   const method = url.searchParams.get('method') as 'pr' | 'direct_push' | 'legacy' | undefined
+  const deployer = url.searchParams.get('deployer') || undefined
+  const sha = url.searchParams.get('sha') || undefined
   const page = parseInt(url.searchParams.get('page') || '1', 10)
 
-  let startDate: Date | undefined
-  let endDate: Date | undefined
-
-  if (period !== 'all') {
-    const range = getDateRange(period as any)
-    startDate = range.startDate
-    endDate = range.endDate
-  }
+  const range = getDateRangeForPeriod(period)
+  const startDate = range?.startDate
+  const endDate = range?.endDate
 
   const result = await getDeploymentsPaginated({
     monitored_app_id: appId ? parseInt(appId, 10) : undefined,
@@ -36,6 +46,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     environment_name: environment || undefined,
     four_eyes_status: status,
     method: method && ['pr', 'direct_push', 'legacy'].includes(method) ? method : undefined,
+    deployer_username: deployer,
+    commit_sha: sha,
     page,
     per_page: 50,
   })
@@ -78,6 +90,8 @@ export default function Deployments({ loaderData }: Route.ComponentProps) {
   const currentEnvironment = searchParams.get('environment')
   const currentStatus = searchParams.get('status') || ''
   const currentMethod = searchParams.get('method') || ''
+  const currentDeployer = searchParams.get('deployer') || ''
+  const currentSha = searchParams.get('sha') || ''
 
   const goToPage = (newPage: number) => {
     const newParams = new URLSearchParams(searchParams)
@@ -87,20 +101,12 @@ export default function Deployments({ loaderData }: Route.ComponentProps) {
 
   return (
     <VStack gap="space-32">
-      <div>
-        <Heading size="large" spacing>
-          Deployments
-        </Heading>
-        <BodyShort textColor="subtle">
-          {total} deployments totalt
-          {total_pages > 1 && ` • Side ${page} av ${total_pages}`}
-        </BodyShort>
-      </div>
+      <Heading size="large">Deployments</Heading>
 
       <Box padding="space-20" borderRadius="8" background="sunken">
         <Form method="get" onChange={(e) => e.currentTarget.submit()}>
           <VStack gap="space-16">
-            <HGrid gap="space-16" columns={{ xs: 1, sm: 2, lg: 3 }}>
+            <HGrid gap="space-16" columns={{ xs: 1, sm: 2, md: 4, lg: 4 }}>
               <Select label="Team" name="team" size="small" defaultValue={currentTeam || ''}>
                 <option value="">Alle teams</option>
                 {teams.map((team) => (
@@ -129,11 +135,11 @@ export default function Deployments({ loaderData }: Route.ComponentProps) {
               </Select>
 
               <Select label="Tidsperiode" name="period" size="small" defaultValue={currentPeriod}>
-                <option value="last-month">Siste måned</option>
-                <option value="last-12-months">Siste 12 måneder</option>
-                <option value="this-year">I år</option>
-                <option value="year-2025">Hele 2025</option>
-                <option value="all">Alle</option>
+                {TIME_PERIOD_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
               </Select>
 
               <Select label="Status" name="status" size="small" defaultValue={currentStatus}>
@@ -152,10 +158,24 @@ export default function Deployments({ loaderData }: Route.ComponentProps) {
                 <option value="direct_push">Direct Push</option>
                 <option value="legacy">Legacy</option>
               </Select>
+
+              <TextField
+                label="Deployer"
+                name="deployer"
+                size="small"
+                defaultValue={currentDeployer}
+                placeholder="Søk..."
+              />
+
+              <TextField label="Commit SHA" name="sha" size="small" defaultValue={currentSha} placeholder="Søk..." />
             </HGrid>
           </VStack>
         </Form>
       </Box>
+
+      <BodyShort textColor="subtle">
+        {total} deployment{total !== 1 ? 's' : ''} funnet
+      </BodyShort>
 
       {deployments.length === 0 ? (
         <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
