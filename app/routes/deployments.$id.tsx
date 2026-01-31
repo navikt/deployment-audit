@@ -330,7 +330,6 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           )}
         </HStack>
       </div>
-
       {/* Main header */}
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
@@ -340,21 +339,22 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           <HStack gap="space-8" align="center">
             {/* Four-eyes status tag (only shown for OK/approved states) */}
             {(deployment.four_eyes_status === 'approved' || deployment.four_eyes_status === 'manually_approved') && (
-              <Tag variant="success" size="small">
+              <Tag data-color="success" variant="outline" size="small">
                 Godkjent
               </Tag>
             )}
             {/* Method tag */}
             {deployment.github_pr_number ? (
-              <Tag variant="info" size="small">
+              <Tag data-color="info" variant="outline" size="small">
                 Pull Request
               </Tag>
-            ) : deployment.four_eyes_status === 'direct_push' || deployment.four_eyes_status === 'unverified_commits' ? (
-              <Tag variant="warning" size="small">
+            ) : deployment.four_eyes_status === 'direct_push' ||
+              deployment.four_eyes_status === 'unverified_commits' ? (
+              <Tag data-color="warning" variant="outline" size="small">
                 Direct Push
               </Tag>
             ) : deployment.four_eyes_status === 'legacy' ? (
-              <Tag variant="neutral" size="small">
+              <Tag data-color="neutral" variant="outline" size="small">
                 Legacy
               </Tag>
             ) : null}
@@ -394,10 +394,8 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           )}
         </BodyShort>
       </div>
-
       {actionData?.success && <Alert variant="success">{actionData.success}</Alert>}
       {actionData?.error && <Alert variant="error">{actionData.error}</Alert>}
-
       {/* Four-eyes Alert - only shown for non-OK states */}
       {deployment.four_eyes_status !== 'approved' && deployment.four_eyes_status !== 'manually_approved' && (
         <Alert variant={status.variant}>
@@ -407,7 +405,6 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           <BodyShort>{status.description}</BodyShort>
         </Alert>
       )}
-
       {/* Unverified commits section */}
       {deployment.unverified_commits && deployment.unverified_commits.length > 0 && (
         <Alert variant="error">
@@ -446,7 +443,6 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           </ul>
         </Alert>
       )}
-
       {/* Deployment Details Section */}
       <Heading size="medium">Detaljer</Heading>
       <HGrid gap="space-16" columns={{ xs: 1, sm: 2, md: 3 }}>
@@ -645,27 +641,27 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
               <Detail>PR Status</Detail>
               <HStack gap="space-8" wrap>
                 {deployment.github_pr_data.draft && (
-                  <Tag variant="warning" size="small">
+                  <Tag data-color="warning" variant="outline" size="small">
                     Draft
                   </Tag>
                 )}
                 {deployment.github_pr_data.locked && (
-                  <Tag variant="neutral" size="small">
+                  <Tag data-color="neutral" variant="outline" size="small">
                     🔒 Låst
                   </Tag>
                 )}
                 {deployment.github_pr_data.auto_merge && (
-                  <Tag variant="info" size="small">
+                  <Tag data-color="info" variant="outline" size="small">
                     Auto-merge ({deployment.github_pr_data.auto_merge.merge_method})
                   </Tag>
                 )}
                 {deployment.github_pr_data.checks_passed === true && (
-                  <Tag variant="neutral" size="small">
+                  <Tag data-color="neutral" variant="outline" size="small">
                     <CheckmarkIcon aria-hidden style={{ color: 'var(--ax-text-success)' }} /> Checks OK
                   </Tag>
                 )}
                 {deployment.github_pr_data.checks_passed === false && (
-                  <Tag variant="error" size="small">
+                  <Tag data-color="danger" variant="outline" size="small">
                     ✗ Checks failed
                   </Tag>
                 )}
@@ -677,7 +673,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                 <Detail>Tildelt</Detail>
                 <HStack gap="space-8" wrap>
                   {deployment.github_pr_data.assignees.map((a) => (
-                    <Tag key={a.username} variant="neutral" size="small">
+                    <Tag data-color="neutral" key={a.username} variant="outline" size="small">
                       {a.username}
                     </Tag>
                   ))}
@@ -688,7 +684,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
             {deployment.github_pr_data.milestone && (
               <VStack gap="space-4">
                 <Detail>Milestone</Detail>
-                <Tag variant="info" size="small">
+                <Tag data-color="info" variant="outline" size="small">
                   {deployment.github_pr_data.milestone.title} ({deployment.github_pr_data.milestone.state})
                 </Tag>
               </VStack>
@@ -696,13 +692,13 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           </>
         )}
       </HGrid>
-
       {/* PR Details Accordion - Reviewers, Checks, Commits */}
       {deployment.github_pr_data && (
         <Accordion>
           {/* Reviewers - includes requested and completed reviews */}
           {((deployment.github_pr_data.reviewers && deployment.github_pr_data.reviewers.length > 0) ||
-            (deployment.github_pr_data.requested_reviewers && deployment.github_pr_data.requested_reviewers.length > 0) ||
+            (deployment.github_pr_data.requested_reviewers &&
+              deployment.github_pr_data.requested_reviewers.length > 0) ||
             (deployment.github_pr_data.requested_teams && deployment.github_pr_data.requested_teams.length > 0)) && (
             <Accordion.Item>
               <Accordion.Header>
@@ -773,7 +769,9 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                       check.conclusion === 'timed_out' ||
                       check.conclusion === 'action_required'
                     const isSkipped =
-                      check.conclusion === 'skipped' || check.conclusion === 'neutral' || check.conclusion === 'cancelled'
+                      check.conclusion === 'skipped' ||
+                      check.conclusion === 'neutral' ||
+                      check.conclusion === 'cancelled'
                     const isInProgress = check.status === 'in_progress' || check.status === 'queued'
 
                     return (
@@ -915,7 +913,6 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           )}
         </Accordion>
       )}
-
       {/* Resources section */}
       {deployment.resources && deployment.resources.length > 0 && (
         <div>
@@ -924,14 +921,13 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           </Heading>
           <div className={styles.actionButtons}>
             {deployment.resources.map((resource: any) => (
-              <Tag key={`${resource.kind}:${resource.name}`} variant="info" size="small">
+              <Tag data-color="info" key={`${resource.kind}:${resource.name}`} variant="outline" size="small">
                 {resource.kind}: {resource.name}
               </Tag>
             ))}
           </div>
         </div>
       )}
-
       {/* PR Details section */}
       {deployment.github_pr_data && (
         <Box>
@@ -947,7 +943,6 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                 </Box>
               </div>
             )}
-
           </div>
 
           {/* PR Stats */}
@@ -1000,7 +995,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
               <Detail>Labels</Detail>
               <div className={styles.actionButtons}>
                 {deployment.github_pr_data.labels.map((label) => (
-                  <Tag key={label} variant="neutral" size="small">
+                  <Tag data-color="neutral" key={label} variant="outline" size="small">
                     {label}
                   </Tag>
                 ))}
@@ -1009,7 +1004,6 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           )}
         </Box>
       )}
-
       {/* Unreviewed commits warning */}
       {deployment.github_pr_data?.unreviewed_commits && deployment.github_pr_data.unreviewed_commits.length > 0 && (
         <div>
@@ -1036,112 +1030,111 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div
                       style={{
-                      display: 'flex',
-                      gap: '0.5rem',
-                      alignItems: 'baseline',
-                      flexWrap: 'wrap',
-                    }}
-                  >
-                    <a
-                      href={commit.html_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}
+                        display: 'flex',
+                        gap: '0.5rem',
+                        alignItems: 'baseline',
+                        flexWrap: 'wrap',
+                      }}
                     >
-                      {commit.sha.substring(0, 7)}
-                    </a>
-                    <span className={styles.textSubtle}>{commit.author}</span>
-                    <span className={styles.textSubtle}>
-                      {new Date(commit.date).toLocaleDateString('no-NO', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </span>
+                      <a
+                        href={commit.html_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}
+                      >
+                        {commit.sha.substring(0, 7)}
+                      </a>
+                      <span className={styles.textSubtle}>{commit.author}</span>
+                      <span className={styles.textSubtle}>
+                        {new Date(commit.date).toLocaleDateString('no-NO', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                    <BodyShort size="small" style={{ marginTop: '0.25rem' }}>
+                      {commit.message.split('\n')[0]}
+                    </BodyShort>
+                    <Detail style={{ marginTop: '0.5rem', color: 'var(--ax-text-danger)' }}>{commit.reason}</Detail>
                   </div>
-                  <BodyShort size="small" style={{ marginTop: '0.25rem' }}>
-                    {commit.message.split('\n')[0]}
-                  </BodyShort>
-                  <Detail style={{ marginTop: '0.5rem', color: 'var(--a-text-danger)' }}>{commit.reason}</Detail>
                 </div>
-              </div>
-            </Box>
-          ))}
-        </div>
+              </Box>
+            ))}
+          </div>
 
-        {/* Manual approval section */}
-        {manualApproval ? (
-          <Alert variant="success">
-            <Heading size="small">✅ Manuelt godkjent</Heading>
-            <BodyShort>
-              Godkjent av <strong>{manualApproval.approved_by}</strong> den{' '}
-              {new Date(manualApproval.approved_at!).toLocaleDateString('no-NO', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
-            </BodyShort>
-            {manualApproval.comment_text && (
-              <BodyShort style={{ marginTop: '0.5rem', fontStyle: 'italic' }}>
-                "{manualApproval.comment_text}"
+          {/* Manual approval section */}
+          {manualApproval ? (
+            <Alert variant="success">
+              <Heading size="small">✅ Manuelt godkjent</Heading>
+              <BodyShort>
+                Godkjent av <strong>{manualApproval.approved_by}</strong> den{' '}
+                {new Date(manualApproval.approved_at!).toLocaleDateString('no-NO', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
               </BodyShort>
-            )}
-          </Alert>
-        ) : (
-          <Box background="warning-soft" padding="space-16" borderRadius="8">
-            <Heading size="small" spacing>
-              Krever manuell godkjenning
-            </Heading>
-            <BodyShort spacing>
-              Gjennomgå de unreviewed commits over. Hvis endringene er OK (f.eks. hotfix eller revert), godkjenn
-              manuelt.
-            </BodyShort>
+              {manualApproval.comment_text && (
+                <BodyShort style={{ marginTop: '0.5rem', fontStyle: 'italic' }}>
+                  "{manualApproval.comment_text}"
+                </BodyShort>
+              )}
+            </Alert>
+          ) : (
+            <Box background="warning-soft" padding="space-16" borderRadius="8">
+              <Heading size="small" spacing>
+                Krever manuell godkjenning
+              </Heading>
+              <BodyShort spacing>
+                Gjennomgå de unreviewed commits over. Hvis endringene er OK (f.eks. hotfix eller revert), godkjenn
+                manuelt.
+              </BodyShort>
 
-            {!showApprovalForm ? (
-              <Button variant="primary" size="small" onClick={() => setShowApprovalForm(true)}>
-                Godkjenn etter gjennomgang
-              </Button>
-            ) : (
-              <Form method="post">
-                <input type="hidden" name="intent" value="manual_approval" />
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  <TextField
-                    label="Godkjenner (ditt navn)"
-                    name="approved_by"
-                    value={approvedBy}
-                    onChange={(e) => setApprovedBy(e.target.value)}
-                    required
-                    size="small"
-                  />
-                  <Textarea
-                    label="Begrunnelse (valgfritt)"
-                    name="reason"
-                    value={approvalReason}
-                    onChange={(e) => setApprovalReason(e.target.value)}
-                    description="F.eks: 'Hotfix godkjent i Slack' eller 'Revert av feil deployment'"
-                    size="small"
-                    rows={2}
-                  />
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <Button type="submit" variant="primary" size="small">
-                      Godkjenn
-                    </Button>
-                    <Button type="button" variant="secondary" size="small" onClick={() => setShowApprovalForm(false)}>
-                      Avbryt
-                    </Button>
+              {!showApprovalForm ? (
+                <Button variant="primary" size="small" onClick={() => setShowApprovalForm(true)}>
+                  Godkjenn etter gjennomgang
+                </Button>
+              ) : (
+                <Form method="post">
+                  <input type="hidden" name="intent" value="manual_approval" />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <TextField
+                      label="Godkjenner (ditt navn)"
+                      name="approved_by"
+                      value={approvedBy}
+                      onChange={(e) => setApprovedBy(e.target.value)}
+                      required
+                      size="small"
+                    />
+                    <Textarea
+                      label="Begrunnelse (valgfritt)"
+                      name="reason"
+                      value={approvalReason}
+                      onChange={(e) => setApprovalReason(e.target.value)}
+                      description="F.eks: 'Hotfix godkjent i Slack' eller 'Revert av feil deployment'"
+                      size="small"
+                      rows={2}
+                    />
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <Button type="submit" variant="primary" size="small">
+                        Godkjenn
+                      </Button>
+                      <Button type="button" variant="secondary" size="small" onClick={() => setShowApprovalForm(false)}>
+                        Avbryt
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </Form>
-            )}
-          </Box>
-        )}
-      </div>
+                </Form>
+              )}
+            </Box>
+          )}
+        </div>
       )}
-
       {/* Comments section */}
       <div>
         <Heading size="medium" spacing>
@@ -1184,20 +1177,10 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           </div>
         )}
       </div>
-
-      <Button
-        variant="tertiary"
-        icon={<ChatIcon aria-hidden />}
-        onClick={() => commentDialogRef.current?.showModal()}
-      >
+      <Button variant="tertiary" icon={<ChatIcon aria-hidden />} onClick={() => commentDialogRef.current?.showModal()}>
         Legg til kommentar
       </Button>
-
-      <Modal
-        ref={commentDialogRef}
-        header={{ heading: 'Legg til kommentar' }}
-        closeOnBackdropClick
-      >
+      <Modal ref={commentDialogRef} header={{ heading: 'Legg til kommentar' }} closeOnBackdropClick>
         <Modal.Body>
           <Form method="post" onSubmit={() => commentDialogRef.current?.close()}>
             <input type="hidden" name="intent" value="add_comment" />

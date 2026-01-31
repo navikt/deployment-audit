@@ -14,45 +14,45 @@
 
 .statCard {
   padding: 1.5rem;
-  border: 1px solid var(--a-border-default);
-  border-radius: var(--a-border-radius-medium);
-  background: var(--a-surface-subtle);
+  border: 1px solid var(--ax-border-neutral-subtle);
+  border-radius: var(--ax-radius-8);
+  background: var(--ax-bg-neutral-soft);
 }
 
 .statCardSuccess {
   composes: statCard;
-  background: var(--a-surface-success-subtle);
+  background: var(--ax-bg-success-soft);
 }
 
 .statCardDanger {
   composes: statCard;
-  background: var(--a-surface-danger-subtle);
+  background: var(--ax-bg-danger-soft);
 }
 
 .statCardWarning {
   composes: statCard;
-  background: var(--a-surface-warning-subtle);
+  background: var(--ax-bg-warning-soft);
 }
 
 .statLabel {
-  color: var(--a-text-subtle);
+  color: var(--ax-text-neutral-subtle);
   margin-bottom: 0.5rem;
   font-size: 0.875rem;
 }
 
 .statLabelSuccess {
   composes: statLabel;
-  color: var(--a-text-success);
+  color: var(--ax-text-success);
 }
 
 .statLabelDanger {
   composes: statLabel;
-  color: var(--a-text-danger);
+  color: var(--ax-text-danger);
 }
 
 .statLabelWarning {
   composes: statLabel;
-  color: var(--a-text-warning);
+  color: var(--ax-text-warning);
 }
 
 .navLinksGrid {
@@ -75,7 +75,7 @@
 
 .detailLabel {
   font-weight: 600;
-  color: var(--a-text-subtle);
+  color: var(--ax-text-neutral-subtle);
   font-size: 0.875rem;
 }
 
@@ -94,23 +94,23 @@
   width: 100%;
   padding: 1rem;
   overflow-x: auto;
-  background: var(--a-surface-subtle);
-  border-radius: var(--a-border-radius-medium);
-  border: 1px solid var(--a-border-default);
+  background: var(--ax-bg-neutral-soft);
+  border-radius: var(--ax-radius-8);
+  border: 1px solid var(--ax-border-neutral-subtle);
 }
 
 .infoBox {
   padding: 1.5rem;
-  background: var(--a-surface-neutral-subtle);
-  border-radius: var(--a-border-radius-medium);
-  border: 1px solid var(--a-border-default);
+  background: var(--ax-bg-neutral-soft);
+  border-radius: var(--ax-radius-8);
+  border: 1px solid var(--ax-border-neutral-subtle);
 }
 
 .loadingCenter {
   text-align: center;
   padding: 2rem;
-  background: var(--a-surface-info-subtle);
-  border-radius: var(--a-border-radius-medium);
+  background: var(--ax-bg-info-soft);
+  border-radius: var(--ax-radius-8);
 }
 
 .navLink {
@@ -120,21 +120,21 @@
 
 .navLinkActive {
   composes: navLink;
-  color: var(--a-blue-600);
+  color: var(--ax-accent-600);
   font-weight: 600;
 }
 
 .teamSection {
-  border: 1px solid var(--a-border-default);
-  border-radius: var(--a-border-radius-medium);
+  border: 1px solid var(--ax-border-neutral-subtle);
+  border-radius: var(--ax-radius-8);
   overflow: hidden;
-  background: var(--a-surface-default);
+  background: var(--ax-bg-default);
 }
 
 .teamHeader {
   padding: 1rem 1.5rem;
-  background: var(--a-surface-subtle);
-  border-bottom: 1px solid var(--a-border-default);
+  background: var(--ax-bg-neutral-soft);
+  border-bottom: 1px solid var(--ax-border-neutral-subtle);
 }
 
 .maxWidth300 {
@@ -142,7 +142,7 @@
 }
 
 .textSubtle {
-  color: var(--a-text-subtle);
+  color: var(--ax-text-neutral-subtle);
 }
 
 .textSubtleItalic {
@@ -151,24 +151,24 @@
 }
 
 .linkExternal {
-  color: var(--a-blue-600);
+  color: var(--ax-accent-600);
   text-decoration: underline;
 }
 
 .linkExternal:hover {
-  color: var(--a-blue-800);
+  color: var(--ax-accent-800);
 }
 
 .textSuccess {
-  color: var(--a-text-success);
+  color: var(--ax-text-success);
 }
 
 .textDanger {
-  color: var(--a-text-danger);
+  color: var(--ax-text-danger);
 }
 
 .textWarning {
-  color: var(--a-text-warning);
+  color: var(--ax-text-warning);
 }
 
 /* Layout container styles */
@@ -243,16 +243,16 @@
 
 .textSmallSubtle {
   font-size: 0.875rem;
-  color: var(--a-text-subtle);
+  color: var(--ax-text-neutral-subtle);
 }
 
 .textDangerBold {
-  color: var(--a-text-danger);
+  color: var(--ax-text-danger);
   font-weight: bold;
 }
 
 .linkDanger {
-  color: var(--a-text-danger);
+  color: var(--ax-text-danger);
   font-weight: bold;
 }
 
@@ -290,9 +290,9 @@
 /* Status box with stats */
 .statusBox {
   padding: 1.5rem;
-  background: var(--a-surface-subtle);
-  border-radius: var(--a-border-radius-medium);
-  border: 1px solid var(--a-border-default);
+  background: var(--ax-bg-neutral-soft);
+  border-radius: var(--ax-radius-8);
+  border: 1px solid var(--ax-border-neutral-subtle);
 }
 
 .statusGrid {
@@ -372,7 +372,7 @@
 
 /* Danger zone styles */
 .dangerZone {
-  border-top: 1px solid var(--a-border-default);
+  border-top: 1px solid var(--ax-border-neutral-subtle);
   padding-top: 2rem;
 }
 
@@ -406,7 +406,7 @@
 /* Panel style */
 .panel {
   padding: 1.5rem;
-  border: 1px solid var(--a-border-default);
-  border-radius: var(--a-border-radius-medium);
-  background: var(--a-surface-default);
+  border: 1px solid var(--ax-border-neutral-subtle);
+  border-radius: var(--ax-radius-8);
+  background: var(--ax-bg-default);
 }

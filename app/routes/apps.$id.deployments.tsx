@@ -14,7 +14,7 @@ import {
   VStack,
 } from '@navikt/ds-react'
 import { Form, Link, type LoaderFunctionArgs, useLoaderData, useSearchParams } from 'react-router'
-import { getDeploymentsPaginated, type DeploymentFilters } from '~/db/deployments.server'
+import { type DeploymentFilters, getDeploymentsPaginated } from '~/db/deployments.server'
 import { getMonitoredApplicationById } from '~/db/monitored-applications.server'
 import styles from '~/styles/common.module.css'
 import type { Route } from './+types/apps.$id.deployments'
@@ -75,34 +75,63 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   }
 }
 
-function getMethodTag(deployment: {
-  github_pr_number: number | null
-  four_eyes_status: string
-}) {
+function getMethodTag(deployment: { github_pr_number: number | null; four_eyes_status: string }) {
   if (deployment.github_pr_number) {
-    return <Tag variant="info" size="small">Pull Request</Tag>
+    return (
+      <Tag data-color="info" variant="outline" size="small">
+        Pull Request
+      </Tag>
+    )
   }
   if (deployment.four_eyes_status === 'legacy') {
-    return <Tag variant="neutral" size="small">Legacy</Tag>
+    return (
+      <Tag data-color="neutral" variant="outline" size="small">
+        Legacy
+      </Tag>
+    )
   }
-  return <Tag variant="warning" size="small">Direct Push</Tag>
+  return (
+    <Tag data-color="warning" variant="outline" size="small">
+      Direct Push
+    </Tag>
+  )
 }
 
 function getStatusTag(deployment: { four_eyes_status: string; has_four_eyes: boolean }) {
   if (deployment.has_four_eyes) {
-    return <Tag variant="success" size="small">Godkjent</Tag>
+    return (
+      <Tag data-color="success" variant="outline" size="small">
+        Godkjent
+      </Tag>
+    )
   }
   switch (deployment.four_eyes_status) {
     case 'pending':
-      return <Tag variant="neutral" size="small">Venter</Tag>
+      return (
+        <Tag data-color="neutral" variant="outline" size="small">
+          Venter
+        </Tag>
+      )
     case 'direct_push':
     case 'unverified_commits':
-      return <Tag variant="warning" size="small">Ikke godkjent</Tag>
+      return (
+        <Tag data-color="warning" variant="outline" size="small">
+          Ikke godkjent
+        </Tag>
+      )
     case 'error':
     case 'missing':
-      return <Tag variant="error" size="small">Feil</Tag>
+      return (
+        <Tag data-color="danger" variant="outline" size="small">
+          Feil
+        </Tag>
+      )
     default:
-      return <Tag variant="neutral" size="small">{deployment.four_eyes_status}</Tag>
+      return (
+        <Tag data-color="neutral" variant="outline" size="small">
+          {deployment.four_eyes_status}
+        </Tag>
+      )
   }
 }
 
@@ -227,13 +256,7 @@ export default function AppDeployments() {
             </Box>
           ) : (
             deployments.map((deployment) => (
-              <Box
-                key={deployment.id}
-                padding="space-16"
-                borderWidth="1"
-                borderRadius="8"
-                background="raised"
-              >
+              <Box key={deployment.id} padding="space-16" borderWidth="1" borderRadius="8" background="raised">
                 <VStack gap="space-8">
                   {/* First row: Time, Title (on desktop), Tags (right-aligned) */}
                   <HStack gap="space-8" align="center" justify="space-between" wrap>
@@ -248,7 +271,10 @@ export default function AppDeployments() {
                       <Show above="md">
                         {deployment.title && (
                           <BodyShort style={{ flex: 1 }} truncate>
-                            {deployment.github_pr_number ? `#${deployment.github_pr_number}` : deployment.commit_sha?.substring(0, 7)} - {deployment.title}
+                            {deployment.github_pr_number
+                              ? `#${deployment.github_pr_number}`
+                              : deployment.commit_sha?.substring(0, 7)}{' '}
+                            - {deployment.title}
                           </BodyShort>
                         )}
                       </Show>
@@ -263,7 +289,10 @@ export default function AppDeployments() {
                   <Hide above="md">
                     {deployment.title && (
                       <BodyShort>
-                        {deployment.github_pr_number ? `#${deployment.github_pr_number}` : deployment.commit_sha?.substring(0, 7)} - {deployment.title}
+                        {deployment.github_pr_number
+                          ? `#${deployment.github_pr_number}`
+                          : deployment.commit_sha?.substring(0, 7)}{' '}
+                        - {deployment.title}
                       </BodyShort>
                     )}
                   </Hide>
@@ -300,22 +329,13 @@ export default function AppDeployments() {
                       </Detail>
                       {deployment.github_pr_number && (
                         <Detail>
-                          <a
-                            href={deployment.github_pr_url || '#'}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
+                          <a href={deployment.github_pr_url || '#'} target="_blank" rel="noopener noreferrer">
                             PR #{deployment.github_pr_number}
                           </a>
                         </Detail>
                       )}
                     </HStack>
-                    <Button
-                      as={Link}
-                      to={`/deployments/${deployment.id}`}
-                      variant="tertiary"
-                      size="small"
-                    >
+                    <Button as={Link} to={`/deployments/${deployment.id}`} variant="tertiary" size="small">
                       Vis
                     </Button>
                   </HStack>

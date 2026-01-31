@@ -11,7 +11,7 @@ body {
   width: 100%;
   padding: 1rem;
   overflow-x: auto;
-  background: var(--a-surface-subtle);
-  border: 1px solid var(--a-border-default);
-  border-radius: var(--a-border-radius-medium);
+  background: var(--ax-bg-neutral-soft);
+  border: 1px solid var(--ax-border-neutral-subtle);
+  border-radius: var(--ax-radius-8);
 }

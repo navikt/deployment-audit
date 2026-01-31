@@ -120,20 +120,20 @@ export default function AppDetail() {
 
   // Status badge based on deployment stats and alerts
   // Priority: 1. Missing four-eyes (error), 2. Pending verification (warning), 3. Alerts (warning), 4. OK (success)
-  let statusVariant: 'success' | 'warning' | 'error' = 'success'
+  let statusColor: 'success' | 'warning' | 'danger' = 'success'
   let statusIcon = <CheckmarkCircleIcon />
   let statusText = 'Alt OK'
 
   if (deploymentStats.without_four_eyes > 0) {
-    statusVariant = 'error'
+    statusColor = 'danger'
     statusIcon = <XMarkOctagonIcon />
     statusText = `${deploymentStats.without_four_eyes} deployment${deploymentStats.without_four_eyes > 1 ? 's' : ''} mangler four-eyes`
   } else if (deploymentStats.pending_verification > 0) {
-    statusVariant = 'warning'
+    statusColor = 'warning'
     statusIcon = <ExclamationmarkTriangleIcon />
     statusText = `${deploymentStats.pending_verification} deployment${deploymentStats.pending_verification > 1 ? 's' : ''} venter verifisering`
   } else if (alerts.length > 0) {
-    statusVariant = 'warning'
+    statusColor = 'warning'
     statusIcon = <ExclamationmarkTriangleIcon />
     statusText = `${alerts.length} åpne varsler`
   }
@@ -152,12 +152,11 @@ export default function AppDetail() {
           </BodyShort>
         </div>
         <div className={styles.flexColumnEnd}>
-          <Tag variant={statusVariant} size="medium">
+          <Tag data-color={statusColor} variant="moderate" size="medium">
             {statusIcon} {statusText}
           </Tag>
         </div>
       </div>
-
       {actionData?.success && (
         <Alert variant="success" className={styles.marginTop1}>
           {actionData.success}
@@ -168,7 +167,6 @@ export default function AppDetail() {
           {actionData.error}
         </Alert>
       )}
-
       {/* Time Period Filter */}
       <Form method="get" className={styles.marginTop2} onChange={(e) => e.currentTarget.submit()}>
         <Select label="Tidsperiode" name="period" defaultValue={currentPeriod} className={styles.filterSelect}>
@@ -179,7 +177,6 @@ export default function AppDetail() {
           <option value="all">Alle</option>
         </Select>
       </Form>
-
       {/* Statistics Section */}
       <Box background="neutral-soft" padding="space-16" borderRadius="12" className={styles.marginTop2}>
         <Heading size="medium" spacing>
@@ -233,7 +230,6 @@ export default function AppDetail() {
           </Button>
         </div>
       </Box>
-
       {/* Quick Actions */}
       <Box background="neutral-soft" padding="space-16" borderRadius="12" className={styles.marginTop2}>
         <Heading size="medium" spacing>
@@ -251,7 +247,6 @@ export default function AppDetail() {
           </Button>
         </div>
       </Box>
-
       {/* Alerts Section */}
       {alerts.length > 0 && (
         <Box background="neutral-soft" padding="space-16" borderRadius="12" className={styles.marginTop2}>
@@ -273,7 +268,7 @@ export default function AppDetail() {
                 <Table.Row key={alert.id}>
                   <Table.DataCell>{new Date(alert.created_at).toLocaleDateString('no-NO')}</Table.DataCell>
                   <Table.DataCell>
-                    <Tag size="xsmall" variant="warning">
+                    <Tag data-color="warning" size="xsmall" variant="outline">
                       {alert.alert_type === 'repository_mismatch' && 'Ukjent repo'}
                       {alert.alert_type === 'pending_approval' && 'Venter godkjenning'}
                       {alert.alert_type === 'historical_repository' && 'Historisk repo'}
@@ -305,7 +300,6 @@ export default function AppDetail() {
           </div>
         </Box>
       )}
-
       {/* Repositories Section */}
       <Box background="neutral-soft" padding="space-16" borderRadius="12" className={styles.marginTop2}>
         <Heading size="medium" spacing>
@@ -327,7 +321,7 @@ export default function AppDetail() {
                 >
                   {activeRepo.github_owner}/{activeRepo.github_repo_name}
                 </a>
-                <Tag size="xsmall" variant="success">
+                <Tag data-color="success" size="xsmall" variant="outline">
                   AKTIV
                 </Tag>
               </div>
@@ -429,7 +423,7 @@ export default function AppDetail() {
                         {repo.github_owner}/{repo.github_repo_name}
                       </a>
                       {repo.redirects_to_owner && (
-                        <Tag size="xsmall" variant="info" className={styles.marginLeft05}>
+                        <Tag data-color="info" size="xsmall" variant="outline" className={styles.marginLeft05}>
                           → {repo.redirects_to_owner}/{repo.redirects_to_repo}
                         </Tag>
                       )}
@@ -453,7 +447,6 @@ export default function AppDetail() {
 
         {repositories.length === 0 && <BodyShort>Ingen repositories registrert for denne applikasjonen</BodyShort>}
       </Box>
-
       <div className={styles.marginTop2}>
         <Button as={Link} to="/apps" variant="tertiary" size="small">
           ← Tilbake til applikasjoner

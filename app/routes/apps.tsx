@@ -184,20 +184,20 @@ export default function Apps({ loaderData, actionData }: Route.ComponentProps) {
             <Table.Body>
               {teamApps.map((app) => {
                 // Determine status based on deployment stats
-                let statusVariant: 'success' | 'warning' | 'error' = 'success'
+                let statusColor: 'success' | 'warning' | 'danger' = 'success'
                 let statusIcon = <CheckmarkCircleIcon />
                 let statusText = 'OK'
 
                 if (app.stats.without_four_eyes > 0) {
-                  statusVariant = 'error'
+                  statusColor = 'danger'
                   statusIcon = <XMarkOctagonIcon />
                   statusText = `${app.stats.without_four_eyes} mangler`
                 } else if (app.stats.pending_verification > 0) {
-                  statusVariant = 'warning'
+                  statusColor = 'warning'
                   statusIcon = <ExclamationmarkTriangleIcon />
                   statusText = `${app.stats.pending_verification} venter`
                 } else if (app.stats.total === 0) {
-                  statusVariant = 'warning'
+                  statusColor = 'warning'
                   statusIcon = <ExclamationmarkTriangleIcon />
                   statusText = 'Ingen data'
                 }
@@ -213,12 +213,12 @@ export default function Apps({ loaderData, actionData }: Route.ComponentProps) {
                     <Table.DataCell>
                       {app.stats.without_four_eyes > 0 ? (
                         <Link to={`/deployments?app=${app.id}&only_missing=true`} style={{ textDecoration: 'none' }}>
-                          <Tag variant={statusVariant} size="small">
+                          <Tag data-color={statusColor} variant="outline" size="small">
                             {statusIcon} {statusText}
                           </Tag>
                         </Link>
                       ) : (
-                        <Tag variant={statusVariant} size="small">
+                        <Tag data-color={statusColor} variant="outline" size="small">
                           {statusIcon} {statusText}
                         </Tag>
                       )}

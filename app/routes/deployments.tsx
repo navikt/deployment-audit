@@ -43,36 +43,36 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 function getFourEyesLabel(deployment: DeploymentWithApp): {
   text: string
-  variant: 'success' | 'warning' | 'error' | 'info'
+  color: 'success' | 'warning' | 'danger' | 'info' | 'neutral'
 } {
   if (deployment.has_four_eyes) {
-    return { text: 'Godkjent PR', variant: 'success' }
+    return { text: 'Godkjent PR', color: 'success' }
   }
 
   switch (deployment.four_eyes_status) {
     case 'approved':
     case 'approved_pr':
-      return { text: 'Godkjent PR', variant: 'success' }
+      return { text: 'Godkjent PR', color: 'success' }
     case 'baseline':
-      return { text: 'Baseline', variant: 'success' }
+      return { text: 'Baseline', color: 'success' }
     case 'no_changes':
-      return { text: 'Ingen endringer', variant: 'success' }
+      return { text: 'Ingen endringer', color: 'success' }
     case 'unverified_commits':
-      return { text: 'Uverifiserte commits', variant: 'error' }
+      return { text: 'Uverifiserte commits', color: 'danger' }
     case 'approved_pr_with_unreviewed':
-      return { text: 'Ureviewed i merge', variant: 'error' }
+      return { text: 'Ureviewed i merge', color: 'danger' }
     case 'legacy':
-      return { text: 'Legacy (ignorert)', variant: 'success' }
+      return { text: 'Legacy (ignorert)', color: 'success' }
     case 'direct_push':
-      return { text: 'Direct push', variant: 'warning' }
+      return { text: 'Direct push', color: 'warning' }
     case 'missing':
-      return { text: 'Mangler godkjenning', variant: 'error' }
+      return { text: 'Mangler godkjenning', color: 'danger' }
     case 'error':
-      return { text: 'Feil ved sjekk', variant: 'error' }
+      return { text: 'Feil ved sjekk', color: 'danger' }
     case 'pending':
-      return { text: 'Venter', variant: 'info' }
+      return { text: 'Venter', color: 'info' }
     default:
-      return { text: 'Ukjent status', variant: 'info' }
+      return { text: 'Ukjent status', color: 'neutral' }
   }
 }
 
@@ -151,7 +151,6 @@ export default function Deployments({ loaderData }: Route.ComponentProps) {
           {stats.withoutFourEyes} mangler four-eyes
         </Detail>
       </div>
-
       <Form method="get" onChange={(e) => e.currentTarget.submit()}>
         <div className={styles.filterForm}>
           <div className={styles.filterRow}>
@@ -201,7 +200,6 @@ export default function Deployments({ loaderData }: Route.ComponentProps) {
           </Checkbox>
         </div>
       </Form>
-
       {deployments.length === 0 ? (
         <Alert variant="info">
           Ingen deployments funnet med de valgte filtrene. Prøv å endre filtrene eller synkroniser deployments fra
@@ -248,12 +246,12 @@ export default function Deployments({ loaderData }: Route.ComponentProps) {
                   <Table.DataCell>
                     {method.type === 'pr' && method.prUrl ? (
                       <a href={method.prUrl} target="_blank" rel="noopener noreferrer" className={styles.linkExternal}>
-                        <Tag variant="info" size="small">
+                        <Tag data-color="info" variant="outline" size="small">
                           {method.label}
                         </Tag>
                       </a>
                     ) : method.type === 'direct' ? (
-                      <Tag variant="warning" size="small">
+                      <Tag data-color="warning" variant="outline" size="small">
                         {method.label}
                       </Tag>
                     ) : (
@@ -276,7 +274,7 @@ export default function Deployments({ loaderData }: Route.ComponentProps) {
                     )}
                   </Table.DataCell>
                   <Table.DataCell>
-                    <Tag variant={status.variant} size="small">
+                    <Tag data-color={status.color} variant="outline" size="small">
                       {deployment.has_four_eyes ? '✓' : '✗'} {status.text}
                     </Tag>
                   </Table.DataCell>
