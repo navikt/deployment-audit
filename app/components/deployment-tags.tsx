@@ -25,6 +25,13 @@ export function MethodTag({
       </Tag>
     )
   }
+  if (four_eyes_status === 'pending') {
+    return (
+      <Tag data-color="neutral" variant="outline" size="small">
+        Ukjent
+      </Tag>
+    )
+  }
   return (
     <Tag data-color="warning" variant="outline" size="small">
       Direct Push
