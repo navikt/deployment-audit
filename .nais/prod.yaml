@@ -1,0 +1,56 @@
+apiVersion: nais.io/v1alpha1
+kind: Application
+metadata:
+  name: pensjon-deployment-audit
+  namespace: pensjon-revisjon
+  labels:
+    team: pensjon-revisjon
+spec:
+  image: {{ image }}
+  port: 3000
+
+  ingresses:
+    - https://pensjon-deployment-audit.ansatt.nav.no
+
+  liveness:
+    path: /api/isalive
+    port: 3000
+    initialDelay: 20
+    timeout: 60
+
+  readiness:
+    path: /api/isready
+    port: 3000
+    initialDelay: 20
+    timeout: 60
+
+  replicas:
+    min: 2
+    max: 4
+    cpuThresholdPercentage: 80
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+  gcp:
+    sqlInstances:
+      - type: POSTGRES_15
+        tier: db-f1-micro
+        diskAutoresize: true
+        databases:
+          - name: pensjon-deployment-audit
+            envVarPrefix: DB
+
+  env:
+    - name: NODE_ENV
+      value: production
+
+  accessPolicy:
+    outbound:
+      external:
+        - host: api.github.com
+        - host: console.nav.cloud.nais.io

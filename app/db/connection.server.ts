@@ -2,16 +2,41 @@ import { Pool, type PoolClient, type QueryResult } from 'pg'
 
 let poolInstance: Pool | null = null
 
+function buildConnectionConfig() {
+  // Nais injects individual DB_* environment variables
+  const host = process.env.DB_HOST
+  const port = process.env.DB_PORT
+  const database = process.env.DB_DATABASE
+  const user = process.env.DB_USERNAME
+  const password = process.env.DB_PASSWORD
+
+  // If Nais variables are present, use them
+  if (host && database && user && password) {
+    return {
+      host,
+      port: port ? parseInt(port, 10) : 5432,
+      database,
+      user,
+      password,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    }
+  }
+
+  // Fall back to DATABASE_URL for local development
+  const connectionString = process.env.DATABASE_URL
+  if (connectionString) {
+    return { connectionString }
+  }
+
+  throw new Error('Database configuration missing. Set either DB_* variables (Nais) or DATABASE_URL (local)')
+}
+
 export function getPool(): Pool {
   if (!poolInstance) {
-    const connectionString = process.env.DATABASE_URL
-
-    if (!connectionString) {
-      throw new Error('DATABASE_URL environment variable is not set')
-    }
+    const config = buildConnectionConfig()
 
     poolInstance = new Pool({
-      connectionString,
+      ...config,
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 2000,
