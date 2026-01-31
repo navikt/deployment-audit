@@ -7,6 +7,11 @@ Font.register({
   fonts: [
     { src: 'https://fonts.gstatic.com/s/sourcesanspro/v22/6xK3dSBYKcSV-LCoeQqfX1RYOo3qOK7l.woff2', fontWeight: 400 },
     {
+      src: 'https://fonts.gstatic.com/s/sourcesanspro/v22/6xK1dSBYKcSV-LCoeQqfX1RYOo3qPZ7nsDI.woff2',
+      fontWeight: 400,
+      fontStyle: 'italic',
+    },
+    {
       src: 'https://fonts.gstatic.com/s/sourcesanspro/v22/6xKydSBYKcSV-LCoeQqfX1RYOo3ig4vwlxdu.woff2',
       fontWeight: 600,
     },
