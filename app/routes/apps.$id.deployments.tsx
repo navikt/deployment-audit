@@ -9,11 +9,11 @@ import {
   HStack,
   Select,
   Show,
-  Tag,
   TextField,
   VStack,
 } from '@navikt/ds-react'
 import { Form, Link, type LoaderFunctionArgs, useLoaderData, useSearchParams } from 'react-router'
+import { MethodTag, StatusTag } from '~/components/deployment-tags'
 import { type DeploymentFilters, getDeploymentsPaginated } from '~/db/deployments.server'
 import { getMonitoredApplicationById } from '~/db/monitored-applications.server'
 import { getUserMappings } from '~/db/user-mappings.server'
@@ -86,66 +86,6 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     app,
     userMappings: userMappingsObject,
     ...result,
-  }
-}
-
-function getMethodTag(deployment: { github_pr_number: number | null; four_eyes_status: string }) {
-  if (deployment.github_pr_number) {
-    return (
-      <Tag data-color="info" variant="outline" size="small">
-        Pull Request
-      </Tag>
-    )
-  }
-  if (deployment.four_eyes_status === 'legacy') {
-    return (
-      <Tag data-color="neutral" variant="outline" size="small">
-        Legacy
-      </Tag>
-    )
-  }
-  return (
-    <Tag data-color="warning" variant="outline" size="small">
-      Direct Push
-    </Tag>
-  )
-}
-
-function getStatusTag(deployment: { four_eyes_status: string; has_four_eyes: boolean }) {
-  if (deployment.has_four_eyes) {
-    return (
-      <Tag data-color="success" variant="outline" size="small">
-        Godkjent
-      </Tag>
-    )
-  }
-  switch (deployment.four_eyes_status) {
-    case 'pending':
-      return (
-        <Tag data-color="neutral" variant="outline" size="small">
-          Venter
-        </Tag>
-      )
-    case 'direct_push':
-    case 'unverified_commits':
-      return (
-        <Tag data-color="warning" variant="outline" size="small">
-          Ikke godkjent
-        </Tag>
-      )
-    case 'error':
-    case 'missing':
-      return (
-        <Tag data-color="danger" variant="outline" size="small">
-          Feil
-        </Tag>
-      )
-    default:
-      return (
-        <Tag data-color="neutral" variant="outline" size="small">
-          {deployment.four_eyes_status}
-        </Tag>
-      )
   }
 }
 
@@ -288,8 +228,14 @@ export default function AppDeployments() {
                     </Show>
                   </HStack>
                   <HStack gap="space-8">
-                    {getMethodTag(deployment)}
-                    {getStatusTag(deployment)}
+                    <MethodTag
+                      github_pr_number={deployment.github_pr_number}
+                      four_eyes_status={deployment.four_eyes_status}
+                    />
+                    <StatusTag
+                      four_eyes_status={deployment.four_eyes_status}
+                      has_four_eyes={deployment.has_four_eyes}
+                    />
                   </HStack>
                 </HStack>
 

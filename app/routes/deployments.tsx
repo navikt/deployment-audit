@@ -1,4 +1,4 @@
-import { CheckmarkIcon, ExclamationmarkTriangleIcon, XMarkIcon } from '@navikt/aksel-icons'
+import { ChevronLeftIcon, ChevronRightIcon } from '@navikt/aksel-icons'
 import {
   Alert,
   BodyShort,
@@ -12,11 +12,11 @@ import {
   HStack,
   Select,
   Show,
-  Tag,
   VStack,
 } from '@navikt/ds-react'
 import { Form, Link, useSearchParams } from 'react-router'
-import { type DeploymentWithApp, getAllDeployments } from '~/db/deployments.server'
+import { MethodTag, StatusTag } from '~/components/deployment-tags'
+import { getDeploymentsPaginated } from '~/db/deployments.server'
 import { getAllMonitoredApplications } from '~/db/monitored-applications.server'
 import { getUserMappings } from '~/db/user-mappings.server'
 import { getDateRange } from '~/lib/nais.server'
@@ -30,6 +30,9 @@ export async function loader({ request }: Route.LoaderArgs) {
   const period = url.searchParams.get('period') || 'last-month'
   const onlyMissing = url.searchParams.get('only_missing') === 'true'
   const environment = url.searchParams.get('environment')
+  const status = url.searchParams.get('status') || undefined
+  const method = url.searchParams.get('method') as 'pr' | 'direct_push' | 'legacy' | undefined
+  const page = parseInt(url.searchParams.get('page') || '1', 10)
 
   let startDate: Date | undefined
   let endDate: Date | undefined
@@ -40,23 +43,27 @@ export async function loader({ request }: Route.LoaderArgs) {
     endDate = range.endDate
   }
 
-  const deployments = await getAllDeployments({
+  const result = await getDeploymentsPaginated({
     monitored_app_id: appId ? parseInt(appId, 10) : undefined,
     team_slug: teamSlug || undefined,
     start_date: startDate,
     end_date: endDate,
     only_missing_four_eyes: onlyMissing,
     environment_name: environment || undefined,
+    four_eyes_status: status,
+    method: method && ['pr', 'direct_push', 'legacy'].includes(method) ? method : undefined,
+    page,
+    per_page: 50,
   })
 
   const apps = await getAllMonitoredApplications()
 
-  // Get unique teams and environments
-  const teams = Array.from(new Set(deployments.map((d) => d.team_slug))).sort()
-  const environments = Array.from(new Set(deployments.map((d) => d.environment_name))).sort()
+  // Get unique teams from all apps (not just current page)
+  const allTeams = Array.from(new Set(apps.map((a) => a.team_slug))).sort()
+  const allEnvironments = Array.from(new Set(apps.map((a) => a.environment_name))).sort()
 
   // Get display names for deployers
-  const deployerUsernames = [...new Set(deployments.map((d) => d.deployer_username).filter(Boolean))] as string[]
+  const deployerUsernames = [...new Set(result.deployments.map((d) => d.deployer_username).filter(Boolean))] as string[]
   const userMappingsMap = await getUserMappings(deployerUsernames)
   const userMappings: Record<string, string> = {}
   for (const [username, mapping] of userMappingsMap) {
@@ -65,92 +72,35 @@ export async function loader({ request }: Route.LoaderArgs) {
     }
   }
 
-  return { deployments, apps, teams, environments, userMappings }
-}
-
-function getMethodTag(deployment: DeploymentWithApp) {
-  if (deployment.github_pr_number) {
-    return (
-      <Tag data-color="info" variant="outline" size="small">
-        #{deployment.github_pr_number}
-      </Tag>
-    )
-  }
-  if (deployment.four_eyes_status === 'legacy') {
-    return (
-      <Tag data-color="neutral" variant="outline" size="small">
-        Legacy
-      </Tag>
-    )
-  }
-  return (
-    <Tag data-color="warning" variant="outline" size="small">
-      Direct Push
-    </Tag>
-  )
-}
-
-function getStatusTag(deployment: DeploymentWithApp) {
-  if (deployment.has_four_eyes) {
-    return (
-      <Tag data-color="success" variant="outline" size="small">
-        <CheckmarkIcon aria-hidden /> Godkjent
-      </Tag>
-    )
-  }
-  switch (deployment.four_eyes_status) {
-    case 'pending':
-      return (
-        <Tag data-color="neutral" variant="outline" size="small">
-          Venter
-        </Tag>
-      )
-    case 'direct_push':
-    case 'unverified_commits':
-      return (
-        <Tag data-color="warning" variant="outline" size="small">
-          <XMarkIcon aria-hidden /> Ikke godkjent
-        </Tag>
-      )
-    case 'approved_pr_with_unreviewed':
-      return (
-        <Tag data-color="warning" variant="outline" size="small">
-          <ExclamationmarkTriangleIcon aria-hidden /> Ureviewed
-        </Tag>
-      )
-    case 'error':
-    case 'missing':
-      return (
-        <Tag data-color="danger" variant="outline" size="small">
-          <XMarkIcon aria-hidden /> Feil
-        </Tag>
-      )
-    default:
-      return (
-        <Tag data-color="neutral" variant="outline" size="small">
-          {deployment.four_eyes_status}
-        </Tag>
-      )
+  return {
+    deployments: result.deployments,
+    total: result.total,
+    page: result.page,
+    total_pages: result.total_pages,
+    apps,
+    teams: allTeams,
+    environments: allEnvironments,
+    userMappings,
   }
 }
 
 export default function Deployments({ loaderData }: Route.ComponentProps) {
-  const { deployments, apps, teams, environments, userMappings } = loaderData
-  const [searchParams] = useSearchParams()
+  const { deployments, total, page, total_pages, apps, teams, environments, userMappings } = loaderData
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const currentApp = searchParams.get('app')
   const currentTeam = searchParams.get('team')
   const currentPeriod = searchParams.get('period') || 'last-month'
   const onlyMissing = searchParams.get('only_missing') === 'true'
   const currentEnvironment = searchParams.get('environment')
+  const currentStatus = searchParams.get('status') || ''
+  const currentMethod = searchParams.get('method') || ''
 
-  const stats = {
-    total: deployments.length,
-    withFourEyes: deployments.filter((d) => d.has_four_eyes).length,
-    withoutFourEyes: deployments.filter((d) => !d.has_four_eyes).length,
+  const goToPage = (newPage: number) => {
+    const newParams = new URLSearchParams(searchParams)
+    newParams.set('page', String(newPage))
+    setSearchParams(newParams)
   }
-
-  const percentage = stats.total > 0 ? Math.round((stats.withFourEyes / stats.total) * 100) : 0
 
   return (
     <VStack gap="space-32">
@@ -159,15 +109,15 @@ export default function Deployments({ loaderData }: Route.ComponentProps) {
           Deployments
         </Heading>
         <BodyShort textColor="subtle">
-          {stats.total} deployments totalt • {stats.withFourEyes} godkjent ({percentage}%) • {stats.withoutFourEyes}{' '}
-          mangler godkjenning
+          {total} deployments totalt
+          {total_pages > 1 && ` • Side ${page} av ${total_pages}`}
         </BodyShort>
       </div>
 
       <Box padding="space-20" borderRadius="8" background="sunken">
         <Form method="get" onChange={(e) => e.currentTarget.submit()}>
           <VStack gap="space-16">
-            <HGrid gap="space-16" columns={{ xs: 1, sm: 2, lg: 4 }}>
+            <HGrid gap="space-16" columns={{ xs: 1, sm: 2, lg: 3 }}>
               <Select label="Team" name="team" defaultValue={currentTeam || ''}>
                 <option value="">Alle teams</option>
                 {teams.map((team) => (
@@ -202,6 +152,24 @@ export default function Deployments({ loaderData }: Route.ComponentProps) {
                 <option value="year-2025">Hele 2025</option>
                 <option value="all">Alle</option>
               </Select>
+
+              <Select label="Status" name="status" defaultValue={currentStatus}>
+                <option value="">Alle</option>
+                <option value="approved">Godkjent</option>
+                <option value="manually_approved">Manuelt godkjent</option>
+                <option value="pending">Venter</option>
+                <option value="direct_push">Direct push</option>
+                <option value="unverified_commits">Uverifiserte commits</option>
+                <option value="legacy">Legacy</option>
+                <option value="error">Feil</option>
+              </Select>
+
+              <Select label="Metode" name="method" defaultValue={currentMethod}>
+                <option value="">Alle</option>
+                <option value="pr">Pull Request</option>
+                <option value="direct_push">Direct Push</option>
+                <option value="legacy">Legacy</option>
+              </Select>
             </HGrid>
 
             <Checkbox name="only_missing" value="true" defaultChecked={onlyMissing}>
@@ -230,30 +198,44 @@ export default function Deployments({ loaderData }: Route.ComponentProps) {
                         timeStyle: 'short',
                       })}
                     </BodyShort>
-                    {/* App name and environment on desktop */}
+                    {/* App name, environment and title on desktop */}
                     <Show above="md">
-                      <HStack gap="space-8" align="center">
+                      <HStack gap="space-8" align="center" style={{ flex: 1 }}>
                         <Link to={`/apps/${deployment.monitored_app_id}`}>
                           <BodyShort weight="semibold">{deployment.app_name}</BodyShort>
                         </Link>
                         <Detail textColor="subtle">{deployment.environment_name}</Detail>
+                        {deployment.title && (
+                          <BodyShort style={{ flex: 1 }} truncate>
+                            - {deployment.title}
+                          </BodyShort>
+                        )}
                       </HStack>
                     </Show>
                   </HStack>
                   <HStack gap="space-8">
-                    {getMethodTag(deployment)}
-                    {getStatusTag(deployment)}
+                    <MethodTag
+                      github_pr_number={deployment.github_pr_number}
+                      four_eyes_status={deployment.four_eyes_status}
+                    />
+                    <StatusTag
+                      four_eyes_status={deployment.four_eyes_status}
+                      has_four_eyes={deployment.has_four_eyes}
+                    />
                   </HStack>
                 </HStack>
 
-                {/* App name on mobile - separate line */}
+                {/* App name and title on mobile - separate line */}
                 <Hide above="md">
-                  <HStack gap="space-8" align="center">
-                    <Link to={`/apps/${deployment.monitored_app_id}`}>
-                      <BodyShort weight="semibold">{deployment.app_name}</BodyShort>
-                    </Link>
-                    <Detail textColor="subtle">{deployment.environment_name}</Detail>
-                  </HStack>
+                  <VStack gap="space-4">
+                    <HStack gap="space-8" align="center">
+                      <Link to={`/apps/${deployment.monitored_app_id}`}>
+                        <BodyShort weight="semibold">{deployment.app_name}</BodyShort>
+                      </Link>
+                      <Detail textColor="subtle">{deployment.environment_name}</Detail>
+                    </HStack>
+                    {deployment.title && <BodyShort truncate>{deployment.title}</BodyShort>}
+                  </VStack>
                 </Hide>
 
                 {/* Second row: Deployer, commit, and View button */}
@@ -303,6 +285,34 @@ export default function Deployments({ loaderData }: Route.ComponentProps) {
             </Box>
           ))}
         </div>
+      )}
+
+      {/* Pagination */}
+      {total_pages > 1 && (
+        <HStack gap="space-16" justify="center" align="center">
+          <Button
+            variant="tertiary"
+            size="small"
+            icon={<ChevronLeftIcon aria-hidden />}
+            disabled={page <= 1}
+            onClick={() => goToPage(page - 1)}
+          >
+            Forrige
+          </Button>
+          <BodyShort>
+            Side {page} av {total_pages}
+          </BodyShort>
+          <Button
+            variant="tertiary"
+            size="small"
+            icon={<ChevronRightIcon aria-hidden />}
+            iconPosition="right"
+            disabled={page >= total_pages}
+            onClick={() => goToPage(page + 1)}
+          >
+            Neste
+          </Button>
+        </HStack>
       )}
     </VStack>
   )
