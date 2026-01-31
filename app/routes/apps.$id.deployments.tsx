@@ -178,22 +178,22 @@ export default function AppDeployments() {
 
   return (
     <div className={styles.pageContainer}>
-      <VStack gap="space-24">
+      <VStack gap="space-32">
         {/* Header */}
         <div>
-          <Detail>
+          <Detail textColor="subtle">
             <Link to="/apps">Applikasjoner</Link> / <Link to={`/apps/${app.id}`}>{app.app_name}</Link> / Deployments
           </Detail>
           <Heading size="large" spacing>
             Deployments for {app.app_name}
           </Heading>
-          <BodyShort className={styles.textSubtle}>
+          <BodyShort textColor="subtle">
             {total} deployment{total !== 1 ? 's' : ''} totalt
           </BodyShort>
         </div>
 
         {/* Filters */}
-        <Box padding="space-16" borderWidth="1" borderRadius="8" background="neutral-soft">
+        <Box padding="space-20" borderRadius="8" background="sunken">
           <Form method="get">
             <VStack gap="space-16">
               <HStack gap="space-16" wrap>
@@ -263,15 +263,15 @@ export default function AppDeployments() {
         </Box>
 
         {/* Deployments list */}
-        <VStack gap="space-12">
+        <VStack gap="space-16">
           {deployments.length === 0 ? (
-            <Box padding="space-24" borderWidth="1" borderRadius="8">
+            <Box padding="space-24" borderRadius="8" background="raised">
               <BodyShort>Ingen deployments funnet med valgte filtre.</BodyShort>
             </Box>
           ) : (
             deployments.map((deployment) => (
-              <Box key={deployment.id} padding="space-16" borderWidth="1" borderRadius="8" background="raised">
-                <VStack gap="space-8">
+              <Box key={deployment.id} padding="space-20" borderRadius="8" background="raised">
+                <VStack gap="space-12">
                   {/* First row: Time, Title (on desktop), Tags (right-aligned) */}
                   <HStack gap="space-8" align="center" justify="space-between" wrap>
                     <HStack gap="space-8" align="center" style={{ flex: 1 }}>
@@ -314,7 +314,7 @@ export default function AppDeployments() {
                   {/* Second row: Details and View button */}
                   <HStack gap="space-16" align="center" justify="space-between" wrap>
                     <HStack gap="space-16" wrap>
-                      <Detail>
+                      <Detail textColor="subtle">
                         {deployment.deployer_username ? (
                           <a
                             href={`https://github.com/${deployment.deployer_username}`}
@@ -328,7 +328,7 @@ export default function AppDeployments() {
                           '(ukjent)'
                         )}
                       </Detail>
-                      <Detail>
+                      <Detail textColor="subtle">
                         {deployment.commit_sha ? (
                           <a
                             href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/commit/${deployment.commit_sha}`}
@@ -343,7 +343,7 @@ export default function AppDeployments() {
                         )}
                       </Detail>
                       {deployment.github_pr_number && (
-                        <Detail>
+                        <Detail textColor="subtle">
                           <a href={deployment.github_pr_url || '#'} target="_blank" rel="noopener noreferrer">
                             PR #{deployment.github_pr_number}
                           </a>
