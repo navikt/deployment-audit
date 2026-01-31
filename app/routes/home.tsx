@@ -1,4 +1,4 @@
-import { BellIcon, CheckmarkCircleIcon, RocketIcon, TableIcon } from '@navikt/aksel-icons'
+import { BellIcon, RocketIcon, TableIcon } from '@navikt/aksel-icons'
 import { Alert, BodyShort, Box, Heading, HGrid, LinkPanel, VStack } from '@navikt/ds-react'
 import { Link } from 'react-router'
 import { getUnresolvedAlerts } from '../db/alerts.server'
@@ -138,14 +138,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             Deployments
           </LinkPanel.Title>
           <LinkPanel.Description>Se alle deployments med godkjenningsstatus</LinkPanel.Description>
-        </LinkPanel>
-
-        <LinkPanel as={Link} to="/deployments/verify">
-          <LinkPanel.Title>
-            <CheckmarkCircleIcon aria-hidden />
-            Verifiser deployments {pendingCount > 0 && `(${pendingCount})`}
-          </LinkPanel.Title>
-          <LinkPanel.Description>Kjør GitHub-verifisering av godkjenningsstatus</LinkPanel.Description>
         </LinkPanel>
 
         <LinkPanel as={Link} to="/alerts">
