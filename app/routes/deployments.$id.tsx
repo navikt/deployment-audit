@@ -337,7 +337,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           <Heading size="large" style={{ flex: 1 }}>
             {deployment.github_pr_data?.title || `${deployment.app_name} @ ${deployment.environment_name}`}
           </Heading>
-          <HStack gap="space-8">
+          <HStack gap="space-8" align="center">
             {/* Four-eyes status tag (only shown for OK/approved states) */}
             {(deployment.four_eyes_status === 'approved' || deployment.four_eyes_status === 'manually_approved') && (
               <Tag variant="success" size="small">
@@ -358,6 +358,24 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                 Legacy
               </Tag>
             ) : null}
+            {/* Verify button for non-OK states */}
+            {deployment.commit_sha &&
+              ['pending', 'error', 'missing', 'direct_push', 'unverified_commits'].includes(
+                deployment.four_eyes_status,
+              ) && (
+                <Form method="post" style={{ display: 'inline' }}>
+                  <input type="hidden" name="intent" value="verify_four_eyes" />
+                  <Button
+                    type="submit"
+                    size="small"
+                    variant="tertiary"
+                    icon={<ArrowsCirclepathIcon aria-hidden />}
+                    title="Verifiser four-eyes status mot GitHub"
+                  >
+                    Verifiser
+                  </Button>
+                </Form>
+              )}
           </HStack>
         </div>
         <BodyShort className={styles.textSubtle}>
@@ -383,38 +401,10 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
       {/* Four-eyes Alert - only shown for non-OK states */}
       {deployment.four_eyes_status !== 'approved' && deployment.four_eyes_status !== 'manually_approved' && (
         <Alert variant={status.variant}>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'flex-start',
-              gap: '1rem',
-            }}
-          >
-            <div style={{ flex: 1 }}>
-              <Heading size="small" spacing>
-                {status.text}
-              </Heading>
-              <BodyShort>{status.description}</BodyShort>
-            </div>
-            {deployment.commit_sha &&
-              ['pending', 'error', 'missing', 'direct_push', 'unverified_commits'].includes(
-                deployment.four_eyes_status,
-              ) && (
-                <Form method="post">
-                  <input type="hidden" name="intent" value="verify_four_eyes" />
-                  <Button
-                    type="submit"
-                    size="small"
-                    variant="secondary"
-                    icon={<ArrowsCirclepathIcon aria-hidden />}
-                    title="Verifiser four-eyes status mot GitHub"
-                  >
-                    Verifiser nå
-                  </Button>
-                </Form>
-              )}
-          </div>
+          <Heading size="small" spacing>
+            {status.text}
+          </Heading>
+          <BodyShort>{status.description}</BodyShort>
         </Alert>
       )}
 
@@ -872,6 +862,59 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                           </span>
                         </HStack>
                         <BodyShort>{commit.message.split('\n')[0]}</BodyShort>
+                      </VStack>
+                    </HStack>
+                  ))}
+                </VStack>
+              </Accordion.Content>
+            </Accordion.Item>
+          )}
+
+          {/* GitHub Comments */}
+          {deployment.github_pr_data.comments && deployment.github_pr_data.comments.length > 0 && (
+            <Accordion.Item>
+              <Accordion.Header>Kommentarer ({deployment.github_pr_data.comments.length})</Accordion.Header>
+              <Accordion.Content>
+                <VStack gap="space-12">
+                  {deployment.github_pr_data.comments.map((comment) => (
+                    <HStack key={comment.id} gap="space-12" align="start">
+                      {comment.user.avatar_url && (
+                        <img
+                          src={comment.user.avatar_url}
+                          alt={comment.user.username}
+                          style={{
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '50%',
+                            flexShrink: 0,
+                          }}
+                        />
+                      )}
+                      <VStack gap="space-4" style={{ flex: 1 }}>
+                        <HStack gap="space-8" align="baseline" wrap>
+                          <a
+                            href={`https://github.com/${comment.user.username}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {comment.user.username}
+                          </a>
+                          <span className={styles.textSubtle}>
+                            {new Date(comment.created_at).toLocaleString('no-NO', {
+                              dateStyle: 'short',
+                              timeStyle: 'short',
+                            })}
+                          </span>
+                          <a
+                            href={comment.html_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={styles.textSubtle}
+                          >
+                            vis på GitHub
+                          </a>
+                        </HStack>
+                        <BodyShort style={{ whiteSpace: 'pre-wrap' }}>{comment.body}</BodyShort>
                       </VStack>
                     </HStack>
                   ))}

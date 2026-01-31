@@ -121,6 +121,16 @@ export interface GitHubPRData {
     html_url: string
     reason: string // Why it's unreviewed: 'no_pr', 'pr_not_approved', etc
   }>
+  comments: Array<{
+    id: number
+    body: string
+    user: {
+      username: string
+      avatar_url: string
+    }
+    created_at: string
+    html_url: string
+  }>
 }
 
 export interface DeploymentWithApp extends Deployment {

@@ -561,6 +561,15 @@ export async function getDetailedPullRequestInfo(
       { username: string; avatar_url: string; state: string; submitted_at: string }
     >()
 
+    // Collect review comments (the body text from reviews)
+    const reviewBodyComments: Array<{
+      id: number
+      body: string
+      user: { username: string; avatar_url: string }
+      created_at: string
+      html_url: string
+    }> = []
+
     for (const review of reviewsResponse.data) {
       if (review.user && review.submitted_at) {
         const existing = reviewsByUser.get(review.user.login)
@@ -571,6 +580,19 @@ export async function getDetailedPullRequestInfo(
             avatar_url: review.user.avatar_url,
             state: review.state,
             submitted_at: review.submitted_at,
+          })
+        }
+        // If review has a body comment, add it to comments
+        if (review.body && review.body.trim()) {
+          reviewBodyComments.push({
+            id: review.id,
+            body: review.body,
+            user: {
+              username: review.user.login,
+              avatar_url: review.user.avatar_url,
+            },
+            created_at: review.submitted_at,
+            html_url: review.html_url,
           })
         }
       }
@@ -634,6 +656,50 @@ export async function getDetailedPullRequestInfo(
       date: commit.commit.author?.date || '',
       html_url: commit.html_url,
     }))
+
+    // Fetch issue comments (general PR discussion comments)
+    const issueCommentsResponse = await client.issues.listComments({
+      owner,
+      repo,
+      issue_number: pull_number,
+      per_page: 100,
+    })
+
+    // Fetch review comments (comments on code lines)
+    const reviewCommentsResponse = await client.pulls.listReviewComments({
+      owner,
+      repo,
+      pull_number,
+      per_page: 100,
+    })
+
+    // Combine both types of comments
+    const issueComments = issueCommentsResponse.data.map((comment) => ({
+      id: comment.id,
+      body: comment.body || '',
+      user: {
+        username: comment.user?.login || 'unknown',
+        avatar_url: comment.user?.avatar_url || '',
+      },
+      created_at: comment.created_at,
+      html_url: comment.html_url,
+    }))
+
+    const reviewComments = reviewCommentsResponse.data.map((comment) => ({
+      id: comment.id,
+      body: comment.body || '',
+      user: {
+        username: comment.user?.login || 'unknown',
+        avatar_url: comment.user?.avatar_url || '',
+      },
+      created_at: comment.created_at,
+      html_url: comment.html_url,
+    }))
+
+    // Merge and sort by created_at
+    const comments = [...issueComments, ...reviewComments, ...reviewBodyComments].sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    )
 
     return {
       title: pr.title,
@@ -703,6 +769,7 @@ export async function getDetailedPullRequestInfo(
       checks_passed,
       checks,
       commits,
+      comments,
     }
   } catch (error) {
     console.error('Error fetching detailed PR info:', error)
