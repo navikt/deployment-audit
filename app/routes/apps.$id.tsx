@@ -173,25 +173,23 @@ export default function AppDetail() {
       {actionData?.success && <Alert variant="success">{actionData.success}</Alert>}
       {actionData?.error && <Alert variant="error">{actionData.error}</Alert>}
 
-      {/* Time Period Filter */}
-      <Box padding="space-20" borderRadius="8" background="sunken">
-        <Form method="get" onChange={(e) => e.currentTarget.submit()}>
-          <Select label="Tidsperiode" name="period" defaultValue={currentPeriod} style={{ maxWidth: '200px' }}>
-            <option value="last-month">Siste måned</option>
-            <option value="last-12-months">Siste 12 måneder</option>
-            <option value="this-year">I år</option>
-            <option value="year-2025">Hele 2025</option>
-            <option value="all">Alle</option>
-          </Select>
-        </Form>
-      </Box>
-
       {/* Statistics Section */}
       <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
         <VStack gap="space-20">
-          <Heading size="medium">
-            <BarChartIcon aria-hidden /> Statistikk
-          </Heading>
+          <HStack justify="space-between" align="center" wrap>
+            <Heading size="medium">
+              <BarChartIcon aria-hidden /> Statistikk
+            </Heading>
+            <Form method="get" onChange={(e) => e.currentTarget.submit()}>
+              <Select label="Tidsperiode" name="period" defaultValue={currentPeriod} size="small" hideLabel>
+                <option value="last-month">Siste måned</option>
+                <option value="last-12-months">Siste 12 måneder</option>
+                <option value="this-year">I år</option>
+                <option value="year-2025">Hele 2025</option>
+                <option value="all">Alle</option>
+              </Select>
+            </Form>
+          </HStack>
           <HGrid gap="space-16" columns={{ xs: 2, md: 3, lg: 5 }}>
             <Box padding="space-12" borderRadius="8" background="sunken">
               <VStack gap="space-4">
