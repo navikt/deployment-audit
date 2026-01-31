@@ -198,42 +198,44 @@ export default function AppsDiscover({ loaderData, actionData }: Route.Component
                           </Detail>
                         </Heading>
 
-                        <Table size="small">
-                          <Table.Header>
-                            <Table.Row>
-                              <Table.HeaderCell scope="col">Velg</Table.HeaderCell>
-                              <Table.HeaderCell scope="col">Applikasjon</Table.HeaderCell>
-                              <Table.HeaderCell scope="col">Team</Table.HeaderCell>
-                            </Table.Row>
-                          </Table.Header>
-                          <Table.Body>
-                            {apps.sort().map((appName) => {
-                              const appKey = `${teamSlug}|${appName}`
-                              const isSelected = selectedApps.has(appKey)
-                              return (
-                                <Table.Row key={appKey}>
-                                  <Table.DataCell>
-                                    <Checkbox
-                                      name="app"
-                                      value={appKey}
-                                      checked={isSelected}
-                                      onChange={() => toggleApp(appKey)}
-                                      hideLabel
-                                    >
-                                      Velg {appName}
-                                    </Checkbox>
-                                  </Table.DataCell>
-                                  <Table.DataCell>
-                                    <strong>{appName}</strong>
-                                  </Table.DataCell>
-                                  <Table.DataCell>
-                                    <Detail textColor="subtle">{teamSlug}</Detail>
-                                  </Table.DataCell>
-                                </Table.Row>
-                              )
-                            })}
-                          </Table.Body>
-                        </Table>
+                        <Box style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                          <Table size="small">
+                            <Table.Header>
+                              <Table.Row>
+                                <Table.HeaderCell scope="col">Velg</Table.HeaderCell>
+                                <Table.HeaderCell scope="col">Applikasjon</Table.HeaderCell>
+                                <Table.HeaderCell scope="col">Team</Table.HeaderCell>
+                              </Table.Row>
+                            </Table.Header>
+                            <Table.Body>
+                              {apps.sort().map((appName) => {
+                                const appKey = `${teamSlug}|${appName}`
+                                const isSelected = selectedApps.has(appKey)
+                                return (
+                                  <Table.Row key={appKey}>
+                                    <Table.DataCell>
+                                      <Checkbox
+                                        name="app"
+                                        value={appKey}
+                                        checked={isSelected}
+                                        onChange={() => toggleApp(appKey)}
+                                        hideLabel
+                                      >
+                                        Velg {appName}
+                                      </Checkbox>
+                                    </Table.DataCell>
+                                    <Table.DataCell>
+                                      <strong>{appName}</strong>
+                                    </Table.DataCell>
+                                    <Table.DataCell>
+                                      <Detail textColor="subtle">{teamSlug}</Detail>
+                                    </Table.DataCell>
+                                  </Table.Row>
+                                )
+                              })}
+                            </Table.Body>
+                          </Table>
+                        </Box>
                       </VStack>
                     </Box>
                   ))}
