@@ -219,10 +219,7 @@ export default function AppDeployments() {
                     <Show above="md">
                       {deployment.title && (
                         <BodyShort style={{ flex: 1 }} truncate>
-                          {deployment.github_pr_number
-                            ? `#${deployment.github_pr_number}`
-                            : deployment.commit_sha?.substring(0, 7)}{' '}
-                          - {deployment.title}
+                          {deployment.title}
                         </BodyShort>
                       )}
                     </Show>
@@ -240,16 +237,7 @@ export default function AppDeployments() {
                 </HStack>
 
                 {/* Title on mobile - separate line */}
-                <Hide above="md">
-                  {deployment.title && (
-                    <BodyShort>
-                      {deployment.github_pr_number
-                        ? `#${deployment.github_pr_number}`
-                        : deployment.commit_sha?.substring(0, 7)}{' '}
-                      - {deployment.title}
-                    </BodyShort>
-                  )}
-                </Hide>
+                <Hide above="md">{deployment.title && <BodyShort>{deployment.title}</BodyShort>}</Hide>
 
                 {/* Second row: Details and View button */}
                 <HStack gap="space-16" align="center" justify="space-between" wrap>

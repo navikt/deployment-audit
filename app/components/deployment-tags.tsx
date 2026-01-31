@@ -14,7 +14,7 @@ export function MethodTag({
   if (github_pr_number) {
     return (
       <Tag data-color="info" variant="outline" size="small">
-        #{github_pr_number}
+        Pull Request
       </Tag>
     )
   }
