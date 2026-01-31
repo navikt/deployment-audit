@@ -1,6 +1,5 @@
 import { ChevronLeftIcon, ChevronRightIcon } from '@navikt/aksel-icons'
 import {
-  Alert,
   BodyShort,
   Box,
   Button,
@@ -180,10 +179,9 @@ export default function Deployments({ loaderData }: Route.ComponentProps) {
       </Box>
 
       {deployments.length === 0 ? (
-        <Alert variant="info">
-          Ingen deployments funnet med de valgte filtrene. Prøv å endre filtrene eller synkroniser deployments fra
-          applikasjoner.
-        </Alert>
+        <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
+          <BodyShort>Ingen deployments funnet med valgte filtre.</BodyShort>
+        </Box>
       ) : (
         <div>
           {deployments.map((deployment) => (
