@@ -16,6 +16,14 @@ const __dirname = dirname(__filename);
 async function runMigrations() {
   console.log('🔄 Running database migrations...');
 
+  // Log available database-related environment variables for debugging
+  console.log('📋 Available database environment variables:');
+  for (const key of Object.keys(process.env)) {
+    if (key.includes('DATABASE') || key.includes('NAIS_DATABASE') || key.includes('DB_') || key.includes('POSTGRES')) {
+      console.log(`  - ${key}`);
+    }
+  }
+
   try {
     // Import runner function from node-pg-migrate
     const { runner } = await import('node-pg-migrate');
@@ -28,6 +36,8 @@ async function runMigrations() {
     const naisDbUrl = process.env.NAIS_DATABASE_PENSJON_DEPLOYMENT_AUDIT_PENSJON_DEPLOYMENT_AUDIT_URL;
     const configDbUrl = process.env[config['database-url-var']];
     const databaseUrl = naisDbUrl || configDbUrl;
+
+    console.log(`🔍 Using database URL from: ${naisDbUrl ? 'NAIS_DATABASE_PENSJON_DEPLOYMENT_AUDIT_PENSJON_DEPLOYMENT_AUDIT_URL' : configDbUrl ? 'DATABASE_URL' : 'NOT FOUND'}`);
 
     if (!databaseUrl) {
       throw new Error(`Environment variable DATABASE_URL is not set`);
