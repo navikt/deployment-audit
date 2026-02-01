@@ -149,7 +149,6 @@ export default function AppDetail() {
     <VStack gap="space-32">
       <HStack justify="space-between" align="start" wrap>
         <div>
-          <Detail textColor="subtle">Applikasjon</Detail>
           <Heading size="large">{app.app_name}</Heading>
           <HStack gap="space-16" align="center">
             <BodyShort textColor="subtle">
@@ -263,7 +262,7 @@ export default function AppDetail() {
                 <FileTextIcon aria-hidden /> Revisjonsbevis
               </Heading>
               <Button as={Link} to="/admin/audit-reports" variant="tertiary" size="small">
-                Administrer →
+                Administrer
               </Button>
             </HStack>
 
