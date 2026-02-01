@@ -134,7 +134,7 @@ export default function AdminUsers() {
                   {/* First row: GitHub username, name (desktop), actions */}
                   <HStack gap="space-8" align="center" justify="space-between" wrap>
                     <HStack gap="space-12" align="center" style={{ flex: 1 }}>
-                      <Link to={`https://github.com/${mapping.github_username}`} target="_blank">
+                      <Link to={`/users/${mapping.github_username}`}>
                         <BodyShort weight="semibold">{mapping.github_username}</BodyShort>
                       </Link>
                       <Show above="md">{mapping.display_name && <BodyShort>{mapping.display_name}</BodyShort>}</Show>
@@ -197,7 +197,7 @@ export default function AdminUsers() {
                 >
                   <HStack justify="space-between" align="center">
                     <HStack gap="space-12" align="center">
-                      <Link to={`https://github.com/${user.github_username}`} target="_blank">
+                      <Link to={`/users/${user.github_username}`}>
                         <BodyShort weight="semibold">{user.github_username}</BodyShort>
                       </Link>
                       <Detail textColor="subtle">{user.deployment_count} deployments</Detail>
