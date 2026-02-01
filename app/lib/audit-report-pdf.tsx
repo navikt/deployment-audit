@@ -253,11 +253,6 @@ function formatDate(date: Date | string): string {
   return `${day}.${month}.`
 }
 
-function truncateText(text: string, maxLength: number): string {
-  if (text.length <= maxLength) return text
-  return text.substring(0, maxLength - 1) + '…'
-}
-
 function formatDateTime(date: Date | string): string {
   const d = typeof date === 'string' ? new Date(date) : date
   return d.toLocaleString('nb-NO', {

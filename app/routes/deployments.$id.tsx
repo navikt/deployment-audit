@@ -208,7 +208,6 @@ export async function action({ request, params }: Route.ActionArgs) {
     const registeredBy = formData.get('registered_by') as string
     const slackLink = formData.get('slack_link') as string
     const commitSha = formData.get('commit_sha') as string
-    const commitMessage = formData.get('commit_message') as string
     const commitAuthor = formData.get('commit_author') as string
     const prNumber = formData.get('pr_number') as string
     const prTitle = formData.get('pr_title') as string
