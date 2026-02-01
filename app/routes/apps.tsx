@@ -111,7 +111,10 @@ export default function Apps({ loaderData }: Route.ComponentProps) {
                       </Show>
                     </HStack>
                     {app.stats.without_four_eyes > 0 ? (
-                      <Link to={`/deployments?app=${app.id}&status=not_approved`} style={{ textDecoration: 'none' }}>
+                      <Link
+                        to={`/deployments?app=${app.id}&status=not_approved&period=all`}
+                        style={{ textDecoration: 'none' }}
+                      >
                         {getStatusTag(app.stats)}
                       </Link>
                     ) : (
