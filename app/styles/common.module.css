@@ -186,12 +186,6 @@
   margin: 0 auto;
 }
 
-.navContainer {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-}
-
 /* Page header styles */
 .pageHeader {
   display: flex;

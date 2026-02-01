@@ -27,7 +27,7 @@ export default function Layout() {
     <div className={styles.layoutContainer}>
       <InternalHeader>
         {/* Mobile: Hamburger menu on the left */}
-        <Hide above="md">
+        <Hide above="md" asChild>
           <ActionMenu>
             <ActionMenu.Trigger>
               <InternalHeader.Button>
@@ -56,19 +56,17 @@ export default function Layout() {
         <Spacer />
 
         {/* Desktop: Inline navigation */}
-        <Show above="md">
-          <nav style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginRight: '1rem' }}>
-            {navItems.map((item) => (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={isActive(item.path) ? styles.navLinkActive : styles.navLink}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-        </Show>
+        {navItems.map((item) => (
+          <Show key={item.path} above="md" asChild>
+            <InternalHeader.Title
+              as={Link}
+              to={item.path}
+              className={isActive(item.path) ? styles.navLinkActive : styles.navLink}
+            >
+              {item.label}
+            </InternalHeader.Title>
+          </Show>
+        ))}
 
         <InternalHeader.Button onClick={toggleTheme}>
           {theme === 'light' ? (
