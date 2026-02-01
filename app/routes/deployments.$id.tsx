@@ -30,7 +30,13 @@ import {
 } from '@navikt/ds-react'
 import { useRef, useState } from 'react'
 import { Form, Link } from 'react-router'
-import { createComment, deleteComment, getCommentsByDeploymentId, getManualApproval } from '~/db/comments.server'
+import {
+  createComment,
+  deleteComment,
+  getCommentsByDeploymentId,
+  getLegacyInfo,
+  getManualApproval,
+} from '~/db/comments.server'
 import {
   getDeploymentById,
   getNextDeployment,
@@ -51,6 +57,7 @@ export async function loader({ params }: Route.LoaderArgs) {
 
   const comments = await getCommentsByDeploymentId(deploymentId)
   const manualApproval = await getManualApproval(deploymentId)
+  const legacyInfo = await getLegacyInfo(deploymentId)
 
   // Get previous and next deployments for navigation
   const previousDeployment = await getPreviousDeploymentForNav(deploymentId, deployment.monitored_app_id)
@@ -69,6 +76,7 @@ export async function loader({ params }: Route.LoaderArgs) {
     deployment,
     comments,
     manualApproval,
+    legacyInfo,
     previousDeployment,
     nextDeployment,
     userMappings: Object.fromEntries(userMappings),
@@ -134,6 +142,90 @@ export async function action({ request, params }: Route.ActionArgs) {
       return { success: 'Deployment manuelt godkjent' }
     } catch (_error) {
       return { error: 'Kunne ikke godkjenne deployment' }
+    }
+  }
+
+  if (intent === 'register_legacy_info') {
+    const registeredBy = formData.get('registered_by') as string
+    const slackLink = formData.get('slack_link') as string
+    const deployer = formData.get('deployer') as string
+    const commitSha = formData.get('commit_sha') as string
+    const prNumber = formData.get('pr_number') as string
+
+    if (!registeredBy || registeredBy.trim() === '') {
+      return { error: 'Registrert av må oppgis' }
+    }
+
+    if (!slackLink || slackLink.trim() === '') {
+      return { error: 'Slack-lenke er påkrevd' }
+    }
+
+    try {
+      // Build description of what was registered
+      const parts: string[] = []
+      if (deployer) parts.push(`Deployer: ${deployer.trim()}`)
+      if (commitSha) parts.push(`SHA: ${commitSha.trim()}`)
+      if (prNumber) parts.push(`PR: #${prNumber.trim()}`)
+      const infoText = parts.length > 0 ? parts.join(', ') : 'Legacy info registrert'
+
+      await createComment({
+        deployment_id: deploymentId,
+        comment_text: infoText,
+        slack_link: slackLink.trim(),
+        comment_type: 'legacy_info',
+        registered_by: registeredBy.trim(),
+      })
+
+      // Update deployment with provided info
+      await updateDeploymentFourEyes(deploymentId, {
+        hasFourEyes: false,
+        fourEyesStatus: 'pending_approval',
+        githubPrNumber: prNumber ? parseInt(prNumber, 10) : null,
+        githubPrUrl: null,
+      })
+
+      return { success: 'Legacy info registrert - venter på godkjenning fra annen person' }
+    } catch (_error) {
+      return { error: 'Kunne ikke registrere legacy info' }
+    }
+  }
+
+  if (intent === 'approve_legacy') {
+    const approvedBy = formData.get('approved_by') as string
+    const legacyInfo = await getLegacyInfo(deploymentId)
+
+    if (!approvedBy || approvedBy.trim() === '') {
+      return { error: 'Godkjenner må oppgis' }
+    }
+
+    if (!legacyInfo) {
+      return { error: 'Ingen legacy info å godkjenne' }
+    }
+
+    // Check that approver is different from registerer
+    if (legacyInfo.registered_by?.toLowerCase() === approvedBy.trim().toLowerCase()) {
+      return { error: 'Godkjenner kan ikke være samme person som registrerte info' }
+    }
+
+    try {
+      await createComment({
+        deployment_id: deploymentId,
+        comment_text: 'Legacy deployment godkjent etter gjennomgang',
+        slack_link: legacyInfo.slack_link || undefined,
+        comment_type: 'manual_approval',
+        approved_by: approvedBy.trim(),
+      })
+
+      await updateDeploymentFourEyes(deploymentId, {
+        hasFourEyes: true,
+        fourEyesStatus: 'manually_approved',
+        githubPrNumber: null,
+        githubPrUrl: null,
+      })
+
+      return { success: 'Legacy deployment godkjent' }
+    } catch (_error) {
+      return { error: 'Kunne ikke godkjenne legacy deployment' }
     }
   }
 
@@ -286,13 +378,15 @@ function getFourEyesStatus(deployment: any): {
 }
 
 export default function DeploymentDetail({ loaderData, actionData }: Route.ComponentProps) {
-  const { deployment, comments, manualApproval, previousDeployment, nextDeployment, userMappings } = loaderData
+  const { deployment, comments, manualApproval, legacyInfo, previousDeployment, nextDeployment, userMappings } =
+    loaderData
   const [commentText, setCommentText] = useState('')
   const [slackLink, setSlackLink] = useState('')
   const [approvedBy, setApprovedBy] = useState('')
   const [approvalReason, setApprovalReason] = useState('')
   const [approvalSlackLink, setApprovalSlackLink] = useState('')
   const [showApprovalForm, setShowApprovalForm] = useState(false)
+  const [showLegacyForm, setShowLegacyForm] = useState(false)
 
   // Statuses that require manual approval (when no manualApproval exists)
   const statusesRequiringApproval = [
@@ -304,6 +398,8 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
     'pending',
     'pr_not_approved',
   ]
+  const isLegacy = deployment.four_eyes_status === 'legacy'
+  const isPendingApproval = deployment.four_eyes_status === 'pending_approval'
   const requiresManualApproval =
     statusesRequiringApproval.includes(deployment.four_eyes_status ?? '') && !manualApproval
   const commentDialogRef = useRef<HTMLDialogElement>(null)
@@ -1165,6 +1261,127 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                 </VStack>
               </Form>
             )}
+          </VStack>
+        </Box>
+      )}
+
+      {/* Legacy deployment - register info section */}
+      {isLegacy && !legacyInfo && !manualApproval && (
+        <Box background="info-moderate" padding="space-24" borderRadius="8">
+          <VStack gap="space-16">
+            <Heading size="small">
+              <ClockIcon aria-hidden /> Legacy deployment - registrer info
+            </Heading>
+            <BodyShort>
+              Dette er et legacy deployment uten commit SHA. Registrer informasjon fra Slack for å muliggjøre
+              godkjenning. En annen person må deretter godkjenne.
+            </BodyShort>
+
+            {!showLegacyForm ? (
+              <Button variant="primary" onClick={() => setShowLegacyForm(true)}>
+                Registrer info
+              </Button>
+            ) : (
+              <Form method="post">
+                <input type="hidden" name="intent" value="register_legacy_info" />
+                <VStack gap="space-16">
+                  <TextField
+                    label="Registrert av (ditt navn)"
+                    name="registered_by"
+                    description="Navn på personen som registrerer info"
+                    size="small"
+                    required
+                  />
+                  <TextField
+                    label="Slack-lenke"
+                    name="slack_link"
+                    description="Lenke til Slack-melding for denne deployen"
+                    size="small"
+                    required
+                  />
+                  <TextField
+                    label="Deployer (valgfritt)"
+                    name="deployer"
+                    description="GitHub-brukernavn"
+                    size="small"
+                  />
+                  <TextField
+                    label="Commit SHA (valgfritt)"
+                    name="commit_sha"
+                    description="Full eller delvis SHA"
+                    size="small"
+                  />
+                  <TextField
+                    label="PR-nummer (valgfritt)"
+                    name="pr_number"
+                    type="number"
+                    description="F.eks. 1234"
+                    size="small"
+                  />
+                  <HStack gap="space-8">
+                    <Button type="submit" variant="primary" size="small">
+                      Registrer
+                    </Button>
+                    <Button type="button" variant="secondary" size="small" onClick={() => setShowLegacyForm(false)}>
+                      Avbryt
+                    </Button>
+                  </HStack>
+                </VStack>
+              </Form>
+            )}
+          </VStack>
+        </Box>
+      )}
+
+      {/* Legacy deployment - pending approval (registered but needs approval from someone else) */}
+      {(isPendingApproval || (legacyInfo && !manualApproval)) && (
+        <Box background="warning-moderate" padding="space-24" borderRadius="8">
+          <VStack gap="space-16">
+            <Heading size="small">
+              <ExclamationmarkTriangleIcon aria-hidden /> Venter på godkjenning
+            </Heading>
+            <BodyShort>
+              Info ble registrert av <strong>{legacyInfo?.registered_by}</strong> den{' '}
+              {legacyInfo?.created_at
+                ? new Date(legacyInfo.created_at).toLocaleDateString('no-NO', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })
+                : 'ukjent dato'}
+              .
+            </BodyShort>
+            {legacyInfo?.comment_text && (
+              <BodyShort style={{ fontStyle: 'italic' }}>"{legacyInfo.comment_text}"</BodyShort>
+            )}
+            {legacyInfo?.slack_link && (
+              <BodyShort size="small">
+                <a href={legacyInfo.slack_link} target="_blank" rel="noopener noreferrer">
+                  Se Slack-melding
+                </a>
+              </BodyShort>
+            )}
+            <Alert variant="info" size="small">
+              En annen person enn {legacyInfo?.registered_by} må godkjenne.
+            </Alert>
+
+            <Form method="post">
+              <input type="hidden" name="intent" value="approve_legacy" />
+              <VStack gap="space-16">
+                <TextField
+                  label="Godkjent av (ditt navn)"
+                  name="approved_by"
+                  description="Må være en annen person enn den som registrerte"
+                  size="small"
+                  required
+                />
+                <Button type="submit" variant="primary" size="small">
+                  Godkjenn
+                </Button>
+              </VStack>
+            </Form>
           </VStack>
         </Box>
       )}

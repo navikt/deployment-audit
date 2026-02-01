@@ -5,9 +5,10 @@ export interface DeploymentComment {
   deployment_id: number
   comment_text: string
   slack_link: string | null
-  comment_type: 'comment' | 'slack_link' | 'manual_approval'
+  comment_type: 'comment' | 'slack_link' | 'manual_approval' | 'legacy_info'
   approved_by: string | null
   approved_at: Date | null
+  registered_by: string | null
   created_at: Date
 }
 
@@ -15,8 +16,9 @@ export interface CreateCommentParams {
   deployment_id: number
   comment_text: string
   slack_link?: string
-  comment_type?: 'comment' | 'slack_link' | 'manual_approval'
+  comment_type?: 'comment' | 'slack_link' | 'manual_approval' | 'legacy_info'
   approved_by?: string
+  registered_by?: string
 }
 
 export async function getCommentsByDeploymentId(deployment_id: number): Promise<DeploymentComment[]> {
@@ -32,8 +34,8 @@ export async function createComment(params: CreateCommentParams): Promise<Deploy
   const approvedAt = commentType === 'manual_approval' ? new Date() : null
 
   const result = await query<DeploymentComment>(
-    `INSERT INTO deployment_comments (deployment_id, comment_text, slack_link, comment_type, approved_by, approved_at)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO deployment_comments (deployment_id, comment_text, slack_link, comment_type, approved_by, approved_at, registered_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING *`,
     [
       params.deployment_id,
@@ -42,6 +44,7 @@ export async function createComment(params: CreateCommentParams): Promise<Deploy
       commentType,
       params.approved_by || null,
       approvedAt,
+      params.registered_by || null,
     ],
   )
   return result.rows[0]
@@ -51,6 +54,17 @@ export async function getManualApproval(deployment_id: number): Promise<Deployme
   const result = await query<DeploymentComment>(
     `SELECT * FROM deployment_comments 
      WHERE deployment_id = $1 AND comment_type = 'manual_approval'
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [deployment_id],
+  )
+  return result.rows[0] || null
+}
+
+export async function getLegacyInfo(deployment_id: number): Promise<DeploymentComment | null> {
+  const result = await query<DeploymentComment>(
+    `SELECT * FROM deployment_comments 
+     WHERE deployment_id = $1 AND comment_type = 'legacy_info'
      ORDER BY created_at DESC
      LIMIT 1`,
     [deployment_id],
