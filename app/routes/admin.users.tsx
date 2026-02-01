@@ -109,28 +109,12 @@ export default function AdminUsers() {
           Kobler GitHub-brukernavn til Nav-identitet og Slack for visning i deployment-oversikten.
         </BodyShort>
 
-        {/* Unmapped users section */}
+        {/* Warning alert for unmapped users */}
         {unmappedUsers.length > 0 && (
-          <Box background="warning-moderate" padding="space-16" borderRadius="8">
-            <VStack gap="space-12">
-              <Heading size="small">Brukere uten mapping ({unmappedUsers.length})</Heading>
-              <BodyShort size="small">
-                Følgende GitHub-brukere har deployments men mangler mapping til Nav-identitet:
-              </BodyShort>
-              <HStack gap="space-8" wrap>
-                {unmappedUsers.map((user) => (
-                  <Button
-                    key={user.github_username}
-                    variant="secondary-neutral"
-                    size="xsmall"
-                    onClick={() => openAddWithUsername(user.github_username)}
-                  >
-                    {user.github_username} ({user.deployment_count})
-                  </Button>
-                ))}
-              </HStack>
-            </VStack>
-          </Box>
+          <Alert variant="warning">
+            {unmappedUsers.length} GitHub-bruker{unmappedUsers.length === 1 ? '' : 'e'} har deployments men mangler
+            mapping. Se listen nederst på siden.
+          </Alert>
         )}
 
         {mappings.length === 0 ? (
@@ -197,6 +181,40 @@ export default function AdminUsers() {
               </Box>
             ))}
           </div>
+        )}
+
+        {/* Unmapped users section at bottom */}
+        {unmappedUsers.length > 0 && (
+          <VStack gap="space-16">
+            <Heading size="medium">Brukere uten mapping ({unmappedUsers.length})</Heading>
+            <div>
+              {unmappedUsers.map((user) => (
+                <Box
+                  key={user.github_username}
+                  padding="space-16"
+                  background="raised"
+                  className={styles.stackedListItem}
+                >
+                  <HStack justify="space-between" align="center">
+                    <HStack gap="space-12" align="center">
+                      <Link to={`https://github.com/${user.github_username}`} target="_blank">
+                        <BodyShort weight="semibold">{user.github_username}</BodyShort>
+                      </Link>
+                      <Detail textColor="subtle">{user.deployment_count} deployments</Detail>
+                    </HStack>
+                    <Button
+                      variant="secondary"
+                      size="small"
+                      icon={<PlusIcon aria-hidden />}
+                      onClick={() => openAddWithUsername(user.github_username)}
+                    >
+                      <Show above="sm">Legg til mapping</Show>
+                    </Button>
+                  </HStack>
+                </Box>
+              ))}
+            </div>
+          </VStack>
         )}
 
         {/* Add Modal */}
