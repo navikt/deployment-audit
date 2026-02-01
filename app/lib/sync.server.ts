@@ -675,8 +675,8 @@ export async function verifyDeploymentFourEyes(
           )
           continue
         } else if (cachedCommit.pr_approval_reason !== 'no_pr') {
-          // Only trust cache for non-no_pr reasons (like pr_not_approved)
-          // For 'no_pr', we should retry with rebase matching
+          // Cached as not approved - this is unverified
+          // We do NOT cover this with deployed PR because the commit has its own PR
           console.log(`   💾 Commit ${commit.sha.substring(0, 7)}: cached as NOT approved`)
           unverifiedCommits.push({
             sha: commit.sha,
@@ -725,30 +725,7 @@ export async function verifyDeploymentFourEyes(
       }
 
       if (!prInfo) {
-        // No direct PR to main found. But if this commit is part of a merge that went to main
-        // (e.g., nested feature branch PRs), it's covered by the deployed PR's approval.
-        // Check if the deployed commit has an approved PR that covers this commit.
-        if (deployedPrNumber && prCache.has(deployedPrNumber)) {
-          const deployedPrApproval = prCache.get(deployedPrNumber)!
-          if (deployedPrApproval.hasFourEyes) {
-            console.log(
-              `   ✅ Commit ${commit.sha.substring(0, 7)}: No direct main-PR, but covered by approved PR #${deployedPrNumber}`,
-            )
-            // Cache as approved under the deployed PR
-            await updateCommitPrVerification(
-              owner,
-              repo,
-              commit.sha,
-              deployedPrNumber,
-              deployedPrData?.title || null,
-              deployedPrUrl,
-              true,
-              'covered_by_merge_pr',
-            )
-            continue
-          }
-        }
-
+        // No PR found - this is a direct push to main, which is unverified
         console.log(`   ❌ Commit ${commit.sha.substring(0, 7)}: No PR found (direct push to main)`)
 
         // Cache the result
@@ -792,6 +769,9 @@ export async function verifyDeploymentFourEyes(
       )
 
       if (!approvalResult.hasFourEyes) {
+        // The commit's own PR is not approved - this is unverified
+        // We do NOT cover this with the deployed PR because the commit has its own PR
+        // that should have been approved before merge
         unverifiedCommits.push({
           sha: commit.sha,
           message: commit.message.split('\n')[0],
