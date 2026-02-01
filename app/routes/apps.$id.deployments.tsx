@@ -42,7 +42,7 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   const method = url.searchParams.get('method') as 'pr' | 'direct_push' | 'legacy' | undefined
   const deployer = url.searchParams.get('deployer') || undefined
   const sha = url.searchParams.get('sha') || undefined
-  const period = (url.searchParams.get('period') || 'current-month') as TimePeriod
+  const period = (url.searchParams.get('period') || 'last-week') as TimePeriod
 
   const range = getDateRangeForPeriod(period)
 
@@ -87,7 +87,7 @@ export default function AppDeployments() {
   const currentMethod = searchParams.get('method') || ''
   const currentDeployer = searchParams.get('deployer') || ''
   const currentSha = searchParams.get('sha') || ''
-  const currentPeriod = searchParams.get('period') || 'current-month'
+  const currentPeriod = searchParams.get('period') || 'last-week'
 
   const updateFilter = (key: string, value: string) => {
     const newParams = new URLSearchParams(searchParams)

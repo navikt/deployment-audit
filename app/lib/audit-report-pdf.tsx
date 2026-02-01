@@ -1,4 +1,4 @@
-import { Document, Font, Page, renderToBuffer, StyleSheet, Text, View } from '@react-pdf/renderer'
+import { Document, Font, Link, Page, renderToBuffer, StyleSheet, Text, View } from '@react-pdf/renderer'
 import type { AuditReportData, ContributorEntry, ManualApprovalEntry, ReviewerEntry } from '~/db/audit-reports.server'
 
 // Register a font that supports Norwegian characters (using TTF format for compatibility)
@@ -123,16 +123,35 @@ const styles = StyleSheet.create({
   tableRowAlt: {
     backgroundColor: '#FAFAFA',
   },
+  deploymentCard: {
+    borderBottom: '1px solid #E6E3E1',
+    padding: 6,
+  },
+  deploymentCardAlt: {
+    backgroundColor: '#FAFAFA',
+  },
+  deploymentRow1: {
+    flexDirection: 'row',
+    marginBottom: 3,
+  },
+  deploymentRow2: {
+    flexDirection: 'row',
+  },
   tableCell: {
     fontSize: 8,
   },
-  col1: { width: '8%' },
-  col2: { width: '15%' },
-  col3: { width: '12%' },
-  col4: { width: '10%' },
-  col5: { width: '18%' },
-  col6: { width: '18%' },
-  col7: { width: '19%' },
+  // Row 1 columns: #, Dato, Tittel
+  r1col1: { width: '5%' },
+  r1col2: { width: '8%' },
+  r1col3: { width: '87%' },
+  // Row 2 columns: (spacer), Commit, Metode, Referanse, Deployer, Godkjenner, Nais ID
+  r2col1: { width: '5%' },
+  r2col2: { width: '8%' },
+  r2col3: { width: '8%' },
+  r2col4: { width: '12%' },
+  r2col5: { width: '18%' },
+  r2col6: { width: '18%' },
+  r2col7: { width: '31%' },
   manualBox: {
     backgroundColor: '#FFF4E0',
     padding: 10,
@@ -193,6 +212,10 @@ const styles = StyleSheet.create({
     lineHeight: 1.4,
     marginBottom: 4,
   },
+  link: {
+    color: '#005B82',
+    textDecoration: 'underline',
+  },
 })
 
 interface AuditReportPdfProps {
@@ -210,22 +233,29 @@ interface AuditReportPdfProps {
   userMappings?: Record<string, { display_name: string | null; nav_ident: string | null }>
 }
 
-// Helper to format user name with GitHub username in parentheses
+// Helper to format user name - only display name for PDF (compact)
 function formatUserName(
   githubUsername: string | null | undefined,
   userMappings?: Record<string, { display_name: string | null; nav_ident: string | null }>,
 ): string {
-  if (!githubUsername) return 'N/A'
+  if (!githubUsername) return '-'
   const mapping = userMappings?.[githubUsername]
   if (mapping?.display_name) {
-    return `${mapping.display_name} (${githubUsername})`
+    return mapping.display_name
   }
   return githubUsername
 }
 
 function formatDate(date: Date | string): string {
   const d = typeof date === 'string' ? new Date(date) : date
-  return d.toLocaleDateString('nb-NO', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const day = d.getDate().toString().padStart(2, '0')
+  const month = (d.getMonth() + 1).toString().padStart(2, '0')
+  return `${day}.${month}.`
+}
+
+function truncateText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text
+  return text.substring(0, maxLength - 1) + '…'
 }
 
 function formatDateTime(date: Date | string): string {
@@ -422,32 +452,79 @@ function AuditReportPdfDocument(props: AuditReportPdfProps) {
                 Deployments - {formatMonthName(monthKey)} ({monthDeployments.length} stk)
               </Text>
               <View style={styles.table}>
+                {/* Header row 1 */}
                 <View style={styles.tableHeader}>
-                  <Text style={[styles.tableHeaderCell, styles.col1]}>#</Text>
-                  <Text style={[styles.tableHeaderCell, styles.col2]}>Dato</Text>
-                  <Text style={[styles.tableHeaderCell, styles.col3]}>Commit</Text>
-                  <Text style={[styles.tableHeaderCell, styles.col4]}>Metode</Text>
-                  <Text style={[styles.tableHeaderCell, styles.col5]}>Deployer</Text>
-                  <Text style={[styles.tableHeaderCell, styles.col6]}>Godkjenner</Text>
-                  <Text style={[styles.tableHeaderCell, styles.col7]}>Referanse</Text>
+                  <Text style={[styles.tableHeaderCell, styles.r1col1]}>#</Text>
+                  <Text style={[styles.tableHeaderCell, styles.r1col2]}>Dato</Text>
+                  <Text style={[styles.tableHeaderCell, styles.r1col3]}>Tittel</Text>
+                </View>
+                {/* Header row 2 */}
+                <View
+                  style={[
+                    styles.tableHeader,
+                    { borderTopLeftRadius: 0, borderTopRightRadius: 0, backgroundColor: '#F0EDEB' },
+                  ]}
+                >
+                  <Text style={[styles.tableHeaderCell, styles.r2col1]} />
+                  <Text style={[styles.tableHeaderCell, styles.r2col2]}>Commit</Text>
+                  <Text style={[styles.tableHeaderCell, styles.r2col3]}>Metode</Text>
+                  <Text style={[styles.tableHeaderCell, styles.r2col4]}>Referanse</Text>
+                  <Text style={[styles.tableHeaderCell, styles.r2col5]}>Deployer</Text>
+                  <Text style={[styles.tableHeaderCell, styles.r2col6]}>Godkjenner</Text>
+                  <Text style={[styles.tableHeaderCell, styles.r2col7]}>Nais ID</Text>
                 </View>
                 {monthDeployments.map((d, idx) => (
-                  <View key={d.id} style={[styles.tableRow, idx % 2 === 1 ? styles.tableRowAlt : {}]}>
-                    <Text style={[styles.tableCell, styles.col1]}>{runningTotal + idx + 1}</Text>
-                    <Text style={[styles.tableCell, styles.col2]}>{formatDate(d.date)}</Text>
-                    <Text style={[styles.tableCell, styles.col3]}>
-                      {d.commit_sha ? d.commit_sha.substring(0, 7) : 'N/A'}
-                    </Text>
-                    <Text style={[styles.tableCell, styles.col4]}>
-                      {d.method === 'pr' ? 'PR' : d.method === 'legacy' ? 'Legacy' : 'Manuell'}
-                    </Text>
-                    <Text style={[styles.tableCell, styles.col5]}>{formatUserName(d.deployer, userMappings)}</Text>
-                    <Text style={[styles.tableCell, styles.col6]}>
-                      {d.approver ? formatUserName(d.approver, userMappings) : '-'}
-                    </Text>
-                    <Text style={[styles.tableCell, styles.col7]}>
-                      {d.method === 'legacy' ? '-' : d.pr_number ? `PR #${d.pr_number}` : 'Slack'}
-                    </Text>
+                  <View key={d.id} style={[styles.deploymentCard, idx % 2 === 1 ? styles.deploymentCardAlt : {}]}>
+                    {/* Row 1: #, Dato, Tittel */}
+                    <View style={styles.deploymentRow1}>
+                      <Text style={[styles.tableCell, styles.r1col1]}>{runningTotal + idx + 1}</Text>
+                      <Text style={[styles.tableCell, styles.r1col2]}>{formatDate(d.date)}</Text>
+                      <Text style={[styles.tableCell, styles.r1col3, { fontWeight: 600 }]}>{d.title || '-'}</Text>
+                    </View>
+                    {/* Row 2: Commit, Metode, Referanse, Deployer, Godkjenner, Nais ID */}
+                    <View style={styles.deploymentRow2}>
+                      <Text style={[styles.r2col1]} />
+                      <Text style={[styles.tableCell, styles.r2col2]}>
+                        {d.commit_sha && !d.commit_sha.startsWith('refs/') ? (
+                          <Link src={`https://github.com/${repository}/commit/${d.commit_sha}`} style={styles.link}>
+                            {d.commit_sha.substring(0, 7)}
+                          </Link>
+                        ) : (
+                          '-'
+                        )}
+                      </Text>
+                      <Text style={[styles.tableCell, styles.r2col3]}>
+                        {d.method === 'pr' ? 'PR' : d.method === 'legacy' ? 'Legacy' : 'Manuell'}
+                      </Text>
+                      <Text style={[styles.tableCell, styles.r2col4]}>
+                        {d.method === 'legacy' ? (
+                          '-'
+                        ) : d.pr_number && d.pr_url ? (
+                          <Link src={d.pr_url} style={styles.link}>
+                            PR #{d.pr_number}
+                          </Link>
+                        ) : d.pr_number ? (
+                          <Link src={`https://github.com/${repository}/pull/${d.pr_number}`} style={styles.link}>
+                            PR #{d.pr_number}
+                          </Link>
+                        ) : d.slack_link ? (
+                          <Link src={d.slack_link} style={styles.link}>
+                            Slack
+                          </Link>
+                        ) : (
+                          'Slack'
+                        )}
+                      </Text>
+                      <Text style={[styles.tableCell, styles.r2col5, { color: '#595959' }]}>
+                        {formatUserName(d.deployer, userMappings)}
+                      </Text>
+                      <Text style={[styles.tableCell, styles.r2col6, { color: '#595959' }]}>
+                        {d.approver ? formatUserName(d.approver, userMappings) : '-'}
+                      </Text>
+                      <Text style={[styles.tableCell, styles.r2col7, { fontSize: 6, color: '#888888' }]}>
+                        {d.nais_deployment_id || ''}
+                      </Text>
+                    </View>
                   </View>
                 ))}
               </View>
@@ -477,12 +554,34 @@ function AuditReportPdfDocument(props: AuditReportPdfProps) {
                 <Text style={styles.manualTitle}>
                   Deployment #{approval.deployment_id} - {formatDate(approval.date)}
                 </Text>
-                <Text style={styles.manualDetail}>Commit: {approval.commit_sha}</Text>
+                {approval.title && <Text style={[styles.manualDetail, { fontWeight: 600 }]}>{approval.title}</Text>}
+                <Text style={[styles.manualDetail, { fontSize: 7, color: '#666666' }]}>
+                  Nais ID: {approval.nais_deployment_id || 'N/A'}
+                </Text>
+                <Text style={styles.manualDetail}>
+                  Commit:{' '}
+                  {approval.commit_sha ? (
+                    <Link src={`https://github.com/${repository}/commit/${approval.commit_sha}`} style={styles.link}>
+                      {approval.commit_sha.substring(0, 7)}
+                    </Link>
+                  ) : (
+                    'N/A'
+                  )}
+                </Text>
                 <Text style={styles.manualDetail}>Deployer: {formatUserName(approval.deployer, userMappings)}</Text>
                 <Text style={styles.manualDetail}>Årsak: {approval.reason}</Text>
                 <Text style={styles.manualDetail}>Godkjent av: {approval.approved_by}</Text>
                 <Text style={styles.manualDetail}>Godkjent: {formatDateTime(approval.approved_at)}</Text>
-                <Text style={styles.manualDetail}>Slack: {approval.slack_link}</Text>
+                <Text style={styles.manualDetail}>
+                  Slack:{' '}
+                  {approval.slack_link ? (
+                    <Link src={approval.slack_link} style={styles.link}>
+                      {approval.slack_link}
+                    </Link>
+                  ) : (
+                    '-'
+                  )}
+                </Text>
                 <Text style={styles.manualDetail}>Kommentar: {approval.comment}</Text>
               </View>
             ))}

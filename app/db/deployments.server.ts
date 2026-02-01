@@ -499,6 +499,59 @@ export async function updateDeploymentFourEyes(
 }
 
 /**
+ * Update deployment with data fetched from GitHub for legacy verification
+ */
+export async function updateDeploymentLegacyData(
+  deploymentId: number,
+  data: {
+    commitSha: string | null
+    deployer: string | null
+    prNumber: number | null
+    prUrl: string | null
+    prTitle: string | null
+    reviewers: Array<{ username: string; state: string }>
+  },
+): Promise<Deployment> {
+  // For legacy, we store reviewers directly in a simplified github_pr_data
+  // Build a minimal structure that matches type requirements
+  let githubPrDataStr: string | null = null
+  if (data.prNumber && data.prTitle && data.reviewers.length > 0) {
+    // Store just the essentials - this is simplified legacy data
+    const minimalData = {
+      title: data.prTitle,
+      reviewers: data.reviewers.map((r) => ({
+        username: r.username,
+        avatar_url: '',
+        state: r.state,
+        submitted_at: new Date().toISOString(),
+      })),
+      // Mark as legacy-verified data
+      _legacy_verified: true,
+    }
+    githubPrDataStr = JSON.stringify(minimalData)
+  }
+
+  const result = await pool.query(
+    `UPDATE deployments 
+     SET commit_sha = COALESCE($1, commit_sha),
+         deployer_username = COALESCE($2, deployer_username),
+         github_pr_number = $3,
+         github_pr_url = $4,
+         github_pr_data = COALESCE($5::jsonb, github_pr_data),
+         title = COALESCE($6, title)
+     WHERE id = $7
+     RETURNING *`,
+    [data.commitSha, data.deployer, data.prNumber, data.prUrl, githubPrDataStr, data.prTitle, deploymentId],
+  )
+
+  if (result.rows.length === 0) {
+    throw new Error('Deployment not found')
+  }
+
+  return result.rows[0]
+}
+
+/**
  * Get the deployment that happened before this one for the same repo/environment
  * Uses created_at for ordering (not id, which isn't guaranteed chronological)
  */

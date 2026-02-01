@@ -76,3 +76,11 @@ export async function deleteComment(id: number): Promise<boolean> {
   const result = await query('DELETE FROM deployment_comments WHERE id = $1', [id])
   return (result.rowCount ?? 0) > 0
 }
+
+export async function deleteLegacyInfo(deployment_id: number): Promise<boolean> {
+  const result = await query(
+    "DELETE FROM deployment_comments WHERE deployment_id = $1 AND comment_type = 'legacy_info'",
+    [deployment_id],
+  )
+  return (result.rowCount ?? 0) > 0
+}

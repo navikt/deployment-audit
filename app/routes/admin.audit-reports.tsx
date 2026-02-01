@@ -145,10 +145,12 @@ export default function AdminAuditReports() {
         <VStack gap="space-16">
           <div>
             <Heading size="medium" spacing>
-              Generer nytt revisjonsbevis
+              Generer revisjonsbevis
             </Heading>
             <BodyShort textColor="subtle">
-              Velg applikasjon og år for å sjekke status og generere revisjonsbevis.
+              Velg applikasjon og år for å sjekke status og generere revisjonsbevis. Det kan bare finnes ett
+              revisjonsbevis per applikasjon per år. Hvis et bevis allerede finnes, vil det bli oppdatert med ny data og
+              ny dokument-ID.
             </BodyShort>
           </div>
 
@@ -203,7 +205,7 @@ export default function AdminAuditReports() {
                   loading={isSubmitting && navigation.formData?.get('intent') === 'generate-report'}
                   disabled={!selectedApp}
                 >
-                  Generer rapport
+                  Generer/oppdater rapport
                 </Button>
               </HStack>
 

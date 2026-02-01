@@ -53,7 +53,7 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   }
 
   const url = new URL(request.url)
-  const period = (url.searchParams.get('period') || 'current-month') as TimePeriod
+  const period = (url.searchParams.get('period') || 'last-week') as TimePeriod
 
   const range = getDateRangeForPeriod(period)
   const startDate = range?.startDate
@@ -140,7 +140,7 @@ export default function AppDetail() {
   } = useLoaderData<typeof loader>()
   const actionData = useActionData<typeof action>()
   const [searchParams] = useSearchParams()
-  const currentPeriod = searchParams.get('period') || 'current-month'
+  const currentPeriod = searchParams.get('period') || 'last-week'
 
   // Status badge based on deployment stats and alerts
   // Priority: 1. Missing four-eyes (error), 2. Pending verification (warning), 3. Alerts (warning), 4. OK (success)
@@ -316,7 +316,10 @@ export default function AppDetail() {
             {/* Existing reports */}
             {auditReports.length > 0 ? (
               <VStack gap="space-12">
-                <Label>Utstedte revisjonsbevis</Label>
+                <Label>{auditReports.length === 1 ? 'Utstedt revisjonsbevis' : 'Utstedte revisjonsbevis'}</Label>
+                <BodyShort size="small" textColor="subtle">
+                  Det kan kun finnes ett revisjonsbevis per år. Hver gang rapporten regenereres får den ny dokument-ID.
+                </BodyShort>
                 {auditReports.map((report) => (
                   <Box key={report.id} padding="space-16" borderRadius="8" background="sunken">
                     <HStack gap="space-16" align="center" justify="space-between" wrap>
@@ -331,6 +334,7 @@ export default function AppDetail() {
                           Generert: {new Date(report.generated_at).toLocaleDateString('nb-NO')} •{' '}
                           {report.pr_approved_count} PR, {report.manually_approved_count} manuell
                         </Detail>
+                        <Detail textColor="subtle">Dokument-ID: {report.report_id}</Detail>
                       </VStack>
                       <Button
                         as="a"

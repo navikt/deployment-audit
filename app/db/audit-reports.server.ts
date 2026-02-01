@@ -39,6 +39,8 @@ export interface AuditReportData {
 
 export interface AuditDeploymentEntry {
   id: number
+  nais_deployment_id: string
+  title: string
   date: string
   commit_sha: string
   method: 'pr' | 'manual' | 'legacy'
@@ -51,6 +53,8 @@ export interface AuditDeploymentEntry {
 
 export interface ManualApprovalEntry {
   deployment_id: number
+  nais_deployment_id: string
+  title: string
   date: string
   commit_sha: string
   deployer: string
@@ -291,6 +295,8 @@ export function buildReportData(rawData: Awaited<ReturnType<typeof getAuditRepor
 
     return {
       id: d.id,
+      nais_deployment_id: d.nais_deployment_id || '',
+      title: d.title || '',
       date: d.created_at.toISOString(),
       commit_sha: d.commit_sha || '',
       method,
@@ -307,6 +313,8 @@ export function buildReportData(rawData: Awaited<ReturnType<typeof getAuditRepor
     const deployment = deployments.find((d) => d.id === a.deployment_id)
     return {
       deployment_id: a.deployment_id,
+      nais_deployment_id: deployment?.nais_deployment_id || '',
+      title: deployment?.title || '',
       date: deployment?.created_at.toISOString() || '',
       commit_sha: deployment?.commit_sha || '',
       deployer: deployment?.deployer_username || '',

@@ -33,6 +33,7 @@ import { Form, Link } from 'react-router'
 import {
   createComment,
   deleteComment,
+  deleteLegacyInfo,
   getCommentsByDeploymentId,
   getLegacyInfo,
   getManualApproval,
@@ -42,8 +43,10 @@ import {
   getNextDeployment,
   getPreviousDeploymentForNav,
   updateDeploymentFourEyes,
+  updateDeploymentLegacyData,
 } from '~/db/deployments.server'
 import { getUserMappings } from '~/db/user-mappings.server'
+import { lookupLegacyByCommit, lookupLegacyByPR } from '~/lib/github.server'
 import { verifyDeploymentFourEyes } from '~/lib/sync.server'
 import type { Route } from './+types/deployments.$id'
 
@@ -145,6 +148,123 @@ export async function action({ request, params }: Route.ActionArgs) {
     }
   }
 
+  // Step 1: Look up GitHub data for legacy deployment
+  if (intent === 'lookup_legacy_github') {
+    const searchType = formData.get('search_type') as string
+    const searchValue = formData.get('search_value') as string
+    const registeredBy = formData.get('registered_by') as string
+    const slackLink = formData.get('slack_link') as string
+
+    if (!registeredBy || registeredBy.trim() === '') {
+      return { error: 'Ditt navn må oppgis' }
+    }
+
+    if (!slackLink || slackLink.trim() === '') {
+      return { error: 'Slack-lenke er påkrevd' }
+    }
+
+    if (!searchValue || searchValue.trim() === '') {
+      return { error: searchType === 'sha' ? 'Commit SHA må oppgis' : 'PR-nummer må oppgis' }
+    }
+
+    const deployment = await getDeploymentById(deploymentId)
+    if (!deployment) {
+      return { error: 'Deployment ikke funnet' }
+    }
+
+    const owner = deployment.detected_github_owner
+    const repo = deployment.detected_github_repo_name
+
+    if (!owner || !repo) {
+      return { error: 'Repository info mangler på deployment' }
+    }
+
+    try {
+      const result =
+        searchType === 'pr'
+          ? await lookupLegacyByPR(owner, repo, parseInt(searchValue.trim(), 10), deployment.created_at)
+          : await lookupLegacyByCommit(owner, repo, searchValue.trim(), deployment.created_at)
+
+      if (!result.success || !result.data) {
+        return { error: result.error || 'Kunne ikke finne data på GitHub' }
+      }
+
+      // Return the lookup data for preview
+      return {
+        legacyLookup: {
+          ...result.data,
+          slackLink: slackLink.trim(),
+          registeredBy: registeredBy.trim(),
+        },
+      }
+    } catch (error) {
+      console.error('Legacy lookup error:', error)
+      return { error: `Feil ved oppslag: ${error instanceof Error ? error.message : 'Ukjent feil'}` }
+    }
+  }
+
+  // Step 2: Confirm and save the looked up data
+  if (intent === 'confirm_legacy_lookup') {
+    const registeredBy = formData.get('registered_by') as string
+    const slackLink = formData.get('slack_link') as string
+    const commitSha = formData.get('commit_sha') as string
+    const commitMessage = formData.get('commit_message') as string
+    const commitAuthor = formData.get('commit_author') as string
+    const prNumber = formData.get('pr_number') as string
+    const prTitle = formData.get('pr_title') as string
+    const prUrl = formData.get('pr_url') as string
+    const reviewersJson = formData.get('reviewers') as string
+
+    if (!registeredBy) {
+      return { error: 'Registrert av mangler' }
+    }
+
+    try {
+      // Parse reviewers
+      const reviewers = reviewersJson ? JSON.parse(reviewersJson) : []
+
+      // Build description
+      const parts: string[] = []
+      if (commitAuthor) parts.push(`Deployer: ${commitAuthor}`)
+      if (commitSha) parts.push(`SHA: ${commitSha.substring(0, 7)}`)
+      if (prNumber) parts.push(`PR: #${prNumber}`)
+      const infoText = parts.length > 0 ? `GitHub-verifisert: ${parts.join(', ')}` : 'Legacy info fra GitHub'
+
+      // Create comment with legacy info
+      await createComment({
+        deployment_id: deploymentId,
+        comment_text: infoText,
+        slack_link: slackLink,
+        comment_type: 'legacy_info',
+        registered_by: registeredBy,
+      })
+
+      // Update deployment with GitHub data
+      await updateDeploymentLegacyData(deploymentId, {
+        commitSha: commitSha || null,
+        deployer: commitAuthor || null,
+        prNumber: prNumber ? parseInt(prNumber, 10) : null,
+        prUrl: prUrl || null,
+        prTitle: prTitle || null,
+        reviewers,
+      })
+
+      // Set status to pending_approval (legacy_pending to indicate it's verified from GitHub but needs approval)
+      await updateDeploymentFourEyes(deploymentId, {
+        hasFourEyes: false,
+        fourEyesStatus: 'legacy_pending',
+        githubPrNumber: prNumber ? parseInt(prNumber, 10) : null,
+        githubPrUrl: prUrl || null,
+      })
+
+      return { success: 'GitHub-data lagret - venter på godkjenning fra annen person' }
+    } catch (error) {
+      console.error('Error saving legacy data:', error)
+      return { error: 'Kunne ikke lagre data' }
+    }
+  }
+
+  // Legacy: Manual registration without GitHub lookup (keep for backwards compatibility)
   if (intent === 'register_legacy_info') {
     const registeredBy = formData.get('registered_by') as string
     const slackLink = formData.get('slack_link') as string
@@ -226,6 +346,39 @@ export async function action({ request, params }: Route.ActionArgs) {
       return { success: 'Legacy deployment godkjent' }
     } catch (_error) {
       return { error: 'Kunne ikke godkjenne legacy deployment' }
+    }
+  }
+
+  if (intent === 'reject_legacy') {
+    const rejectedBy = formData.get('rejected_by') as string
+    const reason = formData.get('reason') as string
+
+    if (!rejectedBy || rejectedBy.trim() === '') {
+      return { error: 'Ditt navn må oppgis' }
+    }
+
+    try {
+      // Delete the legacy_info comment
+      await deleteLegacyInfo(deploymentId)
+
+      // Add a rejection comment
+      await createComment({
+        deployment_id: deploymentId,
+        comment_text: `Legacy-verifisering avvist${reason ? `: ${reason}` : ''}`,
+        comment_type: 'comment',
+      })
+
+      // Reset status back to legacy
+      await updateDeploymentFourEyes(deploymentId, {
+        hasFourEyes: false,
+        fourEyesStatus: 'legacy',
+        githubPrNumber: null,
+        githubPrUrl: null,
+      })
+
+      return { success: 'Legacy-verifisering avvist - kan registreres på nytt' }
+    } catch (_error) {
+      return { error: 'Kunne ikke avvise verifisering' }
     }
   }
 
@@ -387,6 +540,10 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
   const [approvalSlackLink, setApprovalSlackLink] = useState('')
   const [showApprovalForm, setShowApprovalForm] = useState(false)
   const [showLegacyForm, setShowLegacyForm] = useState(false)
+  const [legacySearchType, setLegacySearchType] = useState<'sha' | 'pr'>('sha')
+  const [legacySearchValue, setLegacySearchValue] = useState('')
+  const [legacySlackLink, setLegacySlackLink] = useState('')
+  const [legacyRegisteredBy, setLegacyRegisteredBy] = useState('')
 
   // Statuses that require manual approval (when no manualApproval exists)
   const statusesRequiringApproval = [
@@ -399,7 +556,8 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
     'pr_not_approved',
   ]
   const isLegacy = deployment.four_eyes_status === 'legacy'
-  const isPendingApproval = deployment.four_eyes_status === 'pending_approval'
+  const isLegacyPending = deployment.four_eyes_status === 'legacy_pending'
+  const isPendingApproval = deployment.four_eyes_status === 'pending_approval' || isLegacyPending
   const requiresManualApproval =
     statusesRequiringApproval.includes(deployment.four_eyes_status ?? '') && !manualApproval
   const commentDialogRef = useRef<HTMLDialogElement>(null)
@@ -1265,62 +1423,152 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
         </Box>
       )}
 
-      {/* Legacy deployment - register info section */}
+      {/* Legacy deployment - GitHub lookup section */}
       {isLegacy && !legacyInfo && !manualApproval && (
         <Box background="info-moderate" padding="space-24" borderRadius="8">
           <VStack gap="space-16">
             <Heading size="small">
-              <ClockIcon aria-hidden /> Legacy deployment - registrer info
+              <ClockIcon aria-hidden /> Legacy deployment - hent data fra GitHub
             </Heading>
             <BodyShort>
-              Dette er et legacy deployment uten commit SHA. Registrer informasjon fra Slack for å muliggjøre
-              godkjenning. En annen person må deretter godkjenne.
+              Søk opp data fra GitHub ved hjelp av commit SHA eller PR-nummer. Tidspunktet må være innenfor 30 minutter
+              av deployment-tidspunktet. En annen person må deretter godkjenne.
             </BodyShort>
+
+            {actionData?.error && showLegacyForm && <Alert variant="error">{actionData.error}</Alert>}
+            {actionData?.success && showLegacyForm && <Alert variant="success">{actionData.success}</Alert>}
 
             {!showLegacyForm ? (
               <Button variant="primary" onClick={() => setShowLegacyForm(true)}>
-                Registrer info
+                Hent fra GitHub
               </Button>
+            ) : actionData?.legacyLookup ? (
+              // Show preview of looked up data
+              <VStack gap="space-16">
+                <Alert variant={actionData.legacyLookup.isWithinThreshold ? 'success' : 'warning'}>
+                  <Heading size="xsmall">
+                    {actionData.legacyLookup.isWithinThreshold ? 'Data funnet!' : 'Data funnet, men tidspunkt avviker'}
+                  </Heading>
+                  <BodyShort>
+                    Tidsforskjell: {actionData.legacyLookup.timeDifferenceMinutes} minutter
+                    {!actionData.legacyLookup.isWithinThreshold && ' (over 30 min grense)'}
+                  </BodyShort>
+                </Alert>
+
+                <Box background="default" padding="space-16" borderRadius="4">
+                  <VStack gap="space-8">
+                    <Detail>
+                      <strong>Commit:</strong> {actionData.legacyLookup.commitSha?.substring(0, 7)}
+                    </Detail>
+                    <Detail>
+                      <strong>Melding:</strong> {actionData.legacyLookup.commitMessage}
+                    </Detail>
+                    <Detail>
+                      <strong>Forfatter:</strong> {actionData.legacyLookup.commitAuthor}
+                    </Detail>
+                    {actionData.legacyLookup.prNumber && (
+                      <>
+                        <Detail>
+                          <strong>PR:</strong> #{actionData.legacyLookup.prNumber} - {actionData.legacyLookup.prTitle}
+                        </Detail>
+                        <Detail>
+                          <strong>Godkjennere:</strong>{' '}
+                          {actionData.legacyLookup.reviewers
+                            ?.filter((r: { state: string }) => r.state === 'APPROVED')
+                            .map((r: { username: string }) => r.username)
+                            .join(', ') || 'Ingen'}
+                        </Detail>
+                      </>
+                    )}
+                  </VStack>
+                </Box>
+
+                <HStack gap="space-8">
+                  <Form method="post">
+                    <input type="hidden" name="intent" value="confirm_legacy_lookup" />
+                    <input type="hidden" name="registered_by" value={actionData.legacyLookup.registeredBy} />
+                    <input type="hidden" name="slack_link" value={actionData.legacyLookup.slackLink} />
+                    <input type="hidden" name="commit_sha" value={actionData.legacyLookup.commitSha || ''} />
+                    <input type="hidden" name="commit_message" value={actionData.legacyLookup.commitMessage || ''} />
+                    <input type="hidden" name="commit_author" value={actionData.legacyLookup.commitAuthor || ''} />
+                    <input type="hidden" name="pr_number" value={actionData.legacyLookup.prNumber || ''} />
+                    <input type="hidden" name="pr_title" value={actionData.legacyLookup.prTitle || ''} />
+                    <input type="hidden" name="pr_url" value={actionData.legacyLookup.prUrl || ''} />
+                    <input
+                      type="hidden"
+                      name="reviewers"
+                      value={JSON.stringify(actionData.legacyLookup.reviewers || [])}
+                    />
+                    <Button type="submit" variant="primary" size="small">
+                      Bekreft og lagre
+                    </Button>
+                  </Form>
+                  <Button variant="secondary" size="small" onClick={() => setShowLegacyForm(false)}>
+                    Avbryt
+                  </Button>
+                </HStack>
+              </VStack>
             ) : (
+              // Show search form
               <Form method="post">
-                <input type="hidden" name="intent" value="register_legacy_info" />
+                <input type="hidden" name="intent" value="lookup_legacy_github" />
                 <VStack gap="space-16">
                   <TextField
-                    label="Registrert av (ditt navn)"
+                    label="Ditt navn"
                     name="registered_by"
-                    description="Navn på personen som registrerer info"
+                    value={legacyRegisteredBy}
+                    onChange={(e) => setLegacyRegisteredBy(e.target.value)}
+                    description="Hvem som gjør oppslaget"
                     size="small"
                     required
                   />
                   <TextField
                     label="Slack-lenke"
                     name="slack_link"
+                    value={legacySlackLink}
+                    onChange={(e) => setLegacySlackLink(e.target.value)}
                     description="Lenke til Slack-melding for denne deployen"
                     size="small"
                     required
                   />
+                  <HStack gap="space-8" align="end">
+                    <div>
+                      <BodyShort size="small" weight="semibold" spacing>
+                        Søk på
+                      </BodyShort>
+                      <HStack gap="space-8">
+                        <Button
+                          type="button"
+                          variant={legacySearchType === 'sha' ? 'primary' : 'secondary'}
+                          size="small"
+                          onClick={() => setLegacySearchType('sha')}
+                        >
+                          Commit SHA
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={legacySearchType === 'pr' ? 'primary' : 'secondary'}
+                          size="small"
+                          onClick={() => setLegacySearchType('pr')}
+                        >
+                          PR-nummer
+                        </Button>
+                      </HStack>
+                    </div>
+                  </HStack>
+                  <input type="hidden" name="search_type" value={legacySearchType} />
                   <TextField
-                    label="Deployer (valgfritt)"
-                    name="deployer"
-                    description="GitHub-brukernavn"
+                    label={legacySearchType === 'sha' ? 'Commit SHA' : 'PR-nummer'}
+                    name="search_value"
+                    value={legacySearchValue}
+                    onChange={(e) => setLegacySearchValue(e.target.value)}
+                    description={legacySearchType === 'sha' ? 'Full eller delvis SHA' : 'F.eks. 1234'}
                     size="small"
-                  />
-                  <TextField
-                    label="Commit SHA (valgfritt)"
-                    name="commit_sha"
-                    description="Full eller delvis SHA"
-                    size="small"
-                  />
-                  <TextField
-                    label="PR-nummer (valgfritt)"
-                    name="pr_number"
-                    type="number"
-                    description="F.eks. 1234"
-                    size="small"
+                    required
                   />
                   <HStack gap="space-8">
                     <Button type="submit" variant="primary" size="small">
-                      Registrer
+                      Søk på GitHub
                     </Button>
                     <Button type="button" variant="secondary" size="small" onClick={() => setShowLegacyForm(false)}>
                       Avbryt
@@ -1367,21 +1615,34 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
               En annen person enn {legacyInfo?.registered_by} må godkjenne.
             </Alert>
 
-            <Form method="post">
-              <input type="hidden" name="intent" value="approve_legacy" />
-              <VStack gap="space-16">
-                <TextField
-                  label="Godkjent av (ditt navn)"
-                  name="approved_by"
-                  description="Må være en annen person enn den som registrerte"
-                  size="small"
-                  required
-                />
-                <Button type="submit" variant="primary" size="small">
-                  Godkjenn
-                </Button>
-              </VStack>
-            </Form>
+            <HStack gap="space-16" wrap>
+              <Form method="post">
+                <input type="hidden" name="intent" value="approve_legacy" />
+                <VStack gap="space-16">
+                  <TextField
+                    label="Godkjent av (ditt navn)"
+                    name="approved_by"
+                    description="Må være en annen person enn den som registrerte"
+                    size="small"
+                    required
+                  />
+                  <Button type="submit" variant="primary" size="small">
+                    Godkjenn
+                  </Button>
+                </VStack>
+              </Form>
+
+              <Form method="post">
+                <input type="hidden" name="intent" value="reject_legacy" />
+                <VStack gap="space-16">
+                  <TextField label="Avvist av (ditt navn)" name="rejected_by" size="small" required />
+                  <TextField label="Begrunnelse (valgfritt)" name="reason" size="small" />
+                  <Button type="submit" variant="danger" size="small">
+                    Avvis
+                  </Button>
+                </VStack>
+              </Form>
+            </HStack>
           </VStack>
         </Box>
       )}
