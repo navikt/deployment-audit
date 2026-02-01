@@ -24,9 +24,11 @@ import {
 } from '~/db/deployments.server'
 import { getMonitoredApplication } from '~/db/monitored-applications.server'
 import {
+  findPRForRebasedCommit,
   getCommitsBetween,
   getDetailedPullRequestInfo,
   getPullRequestForCommit,
+  type PullRequestWithMatchInfo,
   verifyPullRequestFourEyes,
 } from '~/lib/github.server'
 import { fetchApplicationDeployments, fetchNewDeployments } from '~/lib/nais.server'
@@ -591,12 +593,28 @@ export async function verifyDeploymentFourEyes(
       // No cached result - check GitHub API
       // Use verifyCommitIsInPR=true to detect commits that were pushed to main
       // and then "smuggled" into a PR when the PR merged main into its branch.
-      const prInfo = await getPullRequestForCommit(owner, repo, commit.sha, true)
+      let prInfo: PullRequestWithMatchInfo | null = await getPullRequestForCommit(owner, repo, commit.sha, true)
+
+      // If no PR found via standard lookup, try rebase matching
+      if (!prInfo) {
+        console.log(`   🔄 Commit ${commit.sha.substring(0, 7)}: No PR via standard lookup, trying rebase match...`)
+
+        // Get the previous deployment date for limiting the PR search window
+        const prevDeploymentDate = previousDeployment?.created_at ? new Date(previousDeployment.created_at) : undefined
+
+        prInfo = await findPRForRebasedCommit(
+          owner,
+          repo,
+          commit.sha,
+          commit.author,
+          commit.date, // This is author_date in our commit data
+          commit.message,
+          prevDeploymentDate,
+        )
+      }
 
       if (!prInfo) {
-        console.log(
-          `   ❌ Commit ${commit.sha.substring(0, 7)}: No PR found or not an original PR commit (direct push to main)`,
-        )
+        console.log(`   ❌ Commit ${commit.sha.substring(0, 7)}: No PR found (direct push to main)`)
 
         // Cache the result
         await updateCommitPrVerification(owner, repo, commit.sha, null, null, null, false, 'no_pr')
@@ -618,8 +636,9 @@ export async function verifyDeploymentFourEyes(
       if (!approvalResult) {
         approvalResult = await verifyPullRequestFourEyes(owner, repo, prInfo.number)
         prCache.set(prInfo.number, approvalResult)
+        const matchType = prInfo._rebase_matched ? '(rebase match)' : ''
         console.log(
-          `   🔍 Commit ${commit.sha.substring(0, 7)}: PR #${prInfo.number} - ${approvalResult.hasFourEyes ? '✅ approved' : '❌ not approved'}`,
+          `   🔍 Commit ${commit.sha.substring(0, 7)}: PR #${prInfo.number} ${matchType} - ${approvalResult.hasFourEyes ? '✅ approved' : '❌ not approved'}`,
         )
       } else {
         console.log(`   💾 Commit ${commit.sha.substring(0, 7)}: PR #${prInfo.number} - cached result`)

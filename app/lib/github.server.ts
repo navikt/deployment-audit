@@ -278,6 +278,154 @@ export async function getPullRequestForCommit(
   }
 }
 
+// Extended PR type that includes rebase match info
+export interface PullRequestWithMatchInfo extends PullRequest {
+  _rebase_matched?: boolean
+  _matched_original_sha?: string
+}
+
+// Cache for PR commits with metadata for rebase matching
+interface PRCommitMetadata {
+  sha: string
+  author: string
+  authorDate: string
+  messageFirstLine: string
+}
+const prCommitsMetadataCache = new Map<string, PRCommitMetadata[]>()
+
+/**
+ * Find a PR for a rebased commit by matching metadata.
+ * When commits are rebased, they get new SHAs but preserve:
+ * - author name
+ * - author date (NOT committer date)
+ * - commit message
+ *
+ * This function searches recently merged PRs for commits with matching metadata.
+ */
+export async function findPRForRebasedCommit(
+  owner: string,
+  repo: string,
+  commitSha: string,
+  commitAuthor: string,
+  commitAuthorDate: string,
+  commitMessage: string,
+  sinceDate?: Date,
+): Promise<PullRequestWithMatchInfo | null> {
+  const client = getGitHubClient()
+
+  // Normalize inputs for comparison
+  const normalizedAuthor = commitAuthor.toLowerCase()
+  const normalizedAuthorDate = new Date(commitAuthorDate).toISOString()
+  const normalizedMessageFirstLine = commitMessage.split('\n')[0].trim()
+
+  console.log(
+    `🔄 Attempting rebase match for commit ${commitSha.substring(0, 7)} (author: ${normalizedAuthor}, date: ${normalizedAuthorDate.substring(0, 19)})`,
+  )
+
+  try {
+    // Get recently merged PRs
+    const mergedPRs = await client.pulls.list({
+      owner,
+      repo,
+      state: 'closed',
+      sort: 'updated',
+      direction: 'desc',
+      per_page: 50,
+    })
+
+    // Filter to only merged PRs, optionally since a date
+    const relevantPRs = mergedPRs.data.filter((pr) => {
+      if (!pr.merged_at) return false
+      if (sinceDate) {
+        const mergedAt = new Date(pr.merged_at)
+        return mergedAt >= sinceDate
+      }
+      return true
+    })
+
+    console.log(`   📋 Checking ${relevantPRs.length} recently merged PRs for rebase match`)
+
+    for (const pr of relevantPRs) {
+      const cacheKey = `${owner}/${repo}#${pr.number}-metadata`
+      let prCommits = prCommitsMetadataCache.get(cacheKey)
+
+      if (!prCommits) {
+        // Fetch PR commits with full metadata
+        try {
+          const prCommitsResponse = await client.pulls.listCommits({
+            owner,
+            repo,
+            pull_number: pr.number,
+            per_page: 100,
+          })
+
+          prCommits = prCommitsResponse.data.map((c) => ({
+            sha: c.sha,
+            author: (c.commit.author?.name || c.author?.login || 'unknown').toLowerCase(),
+            authorDate: c.commit.author?.date || '',
+            messageFirstLine: c.commit.message.split('\n')[0].trim(),
+          }))
+
+          prCommitsMetadataCache.set(cacheKey, prCommits)
+        } catch (err) {
+          console.warn(`   Could not fetch commits for PR #${pr.number}:`, err)
+          continue
+        }
+      }
+
+      // Look for metadata match
+      for (const prCommit of prCommits) {
+        const authorMatch = prCommit.author === normalizedAuthor
+        const messageMatch = prCommit.messageFirstLine === normalizedMessageFirstLine
+
+        // Date match: within 1 second tolerance
+        let dateMatch = false
+        if (prCommit.authorDate) {
+          const prDate = new Date(prCommit.authorDate)
+          const commitDate = new Date(normalizedAuthorDate)
+          const dateDiffMs = Math.abs(prDate.getTime() - commitDate.getTime())
+          dateMatch = dateDiffMs < 1000 // Within 1 second
+        }
+
+        if (authorMatch && dateMatch && messageMatch) {
+          console.log(
+            `   ✅ Rebase match found! Commit ${commitSha.substring(0, 7)} matches PR #${pr.number} commit ${prCommit.sha.substring(0, 7)}`,
+          )
+          console.log(`      Original: ${prCommit.sha.substring(0, 7)} → Rebased: ${commitSha.substring(0, 7)}`)
+
+          return {
+            number: pr.number,
+            title: pr.title,
+            html_url: pr.html_url,
+            merged_at: pr.merged_at,
+            state: pr.state,
+            _rebase_matched: true,
+            _matched_original_sha: prCommit.sha,
+          }
+        }
+      }
+    }
+
+    console.log(`   ❌ No rebase match found for commit ${commitSha.substring(0, 7)}`)
+    return null
+  } catch (error) {
+    console.error(`❌ Error finding PR for rebased commit ${commitSha}:`, error)
+
+    if (error instanceof Error && error.message.includes('rate limit')) {
+      throw error
+    }
+
+    return null
+  }
+}
+
+/**
+ * Clear the PR commits metadata cache (for testing)
+ */
+export function clearPrCommitsMetadataCache(): void {
+  prCommitsMetadataCache.clear()
+}
+
 export interface PullRequestReview {
   id: number
   user: {
