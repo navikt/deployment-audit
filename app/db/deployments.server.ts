@@ -505,20 +505,27 @@ export async function updateDeploymentLegacyData(
   deploymentId: number,
   data: {
     commitSha: string | null
+    commitMessage: string | null
     deployer: string | null
     prNumber: number | null
     prUrl: string | null
     prTitle: string | null
+    prAuthor: string | null
+    prMergedAt: string | null
     reviewers: Array<{ username: string; state: string }>
   },
 ): Promise<Deployment> {
   // For legacy, we store reviewers directly in a simplified github_pr_data
   // Build a minimal structure that matches type requirements
   let githubPrDataStr: string | null = null
-  if (data.prNumber && data.prTitle && data.reviewers.length > 0) {
-    // Store just the essentials - this is simplified legacy data
-    const minimalData = {
-      title: data.prTitle,
+  if (data.prNumber || data.reviewers.length > 0) {
+    // Store all available data for legacy verification
+    const prData = {
+      title: data.prTitle || data.commitMessage || '',
+      number: data.prNumber,
+      html_url: data.prUrl,
+      user: data.prAuthor ? { login: data.prAuthor } : null,
+      merged_at: data.prMergedAt,
       reviewers: data.reviewers.map((r) => ({
         username: r.username,
         avatar_url: '',
@@ -528,7 +535,7 @@ export async function updateDeploymentLegacyData(
       // Mark as legacy-verified data
       _legacy_verified: true,
     }
-    githubPrDataStr = JSON.stringify(minimalData)
+    githubPrDataStr = JSON.stringify(prData)
   }
 
   const result = await pool.query(
@@ -541,7 +548,15 @@ export async function updateDeploymentLegacyData(
          title = COALESCE($6, title)
      WHERE id = $7
      RETURNING *`,
-    [data.commitSha, data.deployer, data.prNumber, data.prUrl, githubPrDataStr, data.prTitle, deploymentId],
+    [
+      data.commitSha,
+      data.deployer,
+      data.prNumber,
+      data.prUrl,
+      githubPrDataStr,
+      data.prTitle || data.commitMessage,
+      deploymentId,
+    ],
   )
 
   if (result.rows.length === 0) {

@@ -208,10 +208,13 @@ export async function action({ request, params }: Route.ActionArgs) {
     const registeredBy = formData.get('registered_by') as string
     const slackLink = formData.get('slack_link') as string
     const commitSha = formData.get('commit_sha') as string
+    const commitMessage = formData.get('commit_message') as string
     const commitAuthor = formData.get('commit_author') as string
     const prNumber = formData.get('pr_number') as string
     const prTitle = formData.get('pr_title') as string
     const prUrl = formData.get('pr_url') as string
+    const prAuthor = formData.get('pr_author') as string
+    const prMergedAt = formData.get('pr_merged_at') as string
     const reviewersJson = formData.get('reviewers') as string
 
     if (!registeredBy) {
@@ -241,10 +244,13 @@ export async function action({ request, params }: Route.ActionArgs) {
       // Update deployment with GitHub data
       await updateDeploymentLegacyData(deploymentId, {
         commitSha: commitSha || null,
+        commitMessage: commitMessage || null,
         deployer: commitAuthor || null,
         prNumber: prNumber ? parseInt(prNumber, 10) : null,
         prUrl: prUrl || null,
         prTitle: prTitle || null,
+        prAuthor: prAuthor || null,
+        prMergedAt: prMergedAt || null,
         reviewers,
       })
 
@@ -1499,6 +1505,16 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                     <input type="hidden" name="pr_number" value={actionData.legacyLookup.prNumber || ''} />
                     <input type="hidden" name="pr_title" value={actionData.legacyLookup.prTitle || ''} />
                     <input type="hidden" name="pr_url" value={actionData.legacyLookup.prUrl || ''} />
+                    <input type="hidden" name="pr_author" value={actionData.legacyLookup.prAuthor || ''} />
+                    <input
+                      type="hidden"
+                      name="pr_merged_at"
+                      value={
+                        actionData.legacyLookup.prMergedAt
+                          ? new Date(actionData.legacyLookup.prMergedAt).toISOString()
+                          : ''
+                      }
+                    />
                     <input
                       type="hidden"
                       name="reviewers"
