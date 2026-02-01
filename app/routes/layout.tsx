@@ -27,7 +27,7 @@ export default function Layout() {
     <div className={styles.layoutContainer}>
       <InternalHeader>
         {/* Mobile: Hamburger menu on the left */}
-        <Hide above="md" asChild>
+        <Hide above="md">
           <ActionMenu>
             <ActionMenu.Trigger>
               <InternalHeader.Button>
@@ -56,7 +56,7 @@ export default function Layout() {
         <Spacer />
 
         {/* Desktop: Inline navigation */}
-        <Show above="md" asChild>
+        <Show above="md">
           <nav className={styles.navContainer}>
             {navItems.map((item) => (
               <Link
