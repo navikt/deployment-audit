@@ -358,25 +358,23 @@ export async function verifyDeploymentsFourEyes(filters?: DeploymentFilters & { 
     per_page: 10000, // Get all deployments, not just first 20
   })
 
-  // Filter to deployments without four-eyes approval, excluding legacy deployments
-  const needsVerification = deploymentsToVerify.filter((d) => !d.has_four_eyes && d.four_eyes_status !== 'legacy')
+  // Only verify deployments with 'pending' or 'error' status
+  // Other statuses (direct_push, unverified_commits, missing, etc.) are final results
+  // that can only be changed via manual approval
+  const statusesToVerify = ['pending', 'error']
+  const needsVerification = deploymentsToVerify.filter(
+    (d) => !d.has_four_eyes && d.four_eyes_status !== 'legacy' && statusesToVerify.includes(d.four_eyes_status ?? ''),
+  )
 
-  // Prioritize: 1) pending (never verified), 2) others (failed verification or direct push)
-  // Within each priority, sort by created_at ascending (oldest first)
-  const pending = needsVerification
-    .filter((d) => d.four_eyes_status === 'pending')
-    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-  const nonPending = needsVerification
-    .filter((d) => d.four_eyes_status !== 'pending')
-    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-  const prioritized = [...pending, ...nonPending]
+  // Sort by created_at ascending (oldest first)
+  const prioritized = needsVerification.sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+  )
 
   // Apply limit if specified
   const toVerify = filters?.limit ? prioritized.slice(0, filters.limit) : prioritized
 
-  console.log(
-    `📋 Found ${toVerify.length} deployments needing verification (${prioritized.filter((d) => d.four_eyes_status === 'pending').length} pending, ${prioritized.filter((d) => d.four_eyes_status !== 'pending').length} failed)`,
-  )
+  console.log(`📋 Found ${toVerify.length} deployments needing verification`)
 
   let verified = 0
   let failed = 0
