@@ -49,6 +49,21 @@ const dynamicBreadcrumbs: Array<{
     },
   },
   {
+    pattern: /^\/apps\/(\d+)\/deployments\/(\d+)$/,
+    getLabel: (matches) => {
+      const match = matches.find((m) => m.pathname.match(/^\/apps\/\d+\/deployments\/\d+$/))
+      const data = match?.data as { deployment?: { commit_sha?: string } } | undefined
+      const sha = data?.deployment?.commit_sha
+      return sha ? sha.substring(0, 7) : 'Deployment'
+    },
+    parent: '/apps/:id/deployments',
+    getParentLabel: (matches) => {
+      const match = matches.find((m) => m.pathname.match(/^\/apps\/\d+\/deployments\/\d+$/))
+      const data = match?.data as { app?: { app_name?: string } } | undefined
+      return data?.app?.app_name || 'Applikasjon'
+    },
+  },
+  {
     pattern: /^\/deployments\/(\d+)$/,
     getLabel: (matches) => {
       const match = matches.find((m) => m.pathname.match(/^\/deployments\/\d+$/))
@@ -101,7 +116,17 @@ function buildBreadcrumbs(pathname: string, matches: ReturnType<typeof useMatche
   for (const dynamic of dynamicBreadcrumbs) {
     if (dynamic.pattern.test(pathname)) {
       // Add parent breadcrumbs first
-      if (dynamic.parent === '/apps/:id') {
+      if (dynamic.parent === '/apps/:id/deployments') {
+        // Special case: app -> deployments -> specific deployment
+        const appMatch = pathname.match(/^\/apps\/(\d+)/)
+        if (appMatch) {
+          crumbs.push({ path: '/apps', label: 'Applikasjoner' })
+          const appPath = `/apps/${appMatch[1]}`
+          const appLabel = dynamic.getParentLabel ? dynamic.getParentLabel(matches) : 'Applikasjon'
+          crumbs.push({ path: appPath, label: appLabel })
+          crumbs.push({ path: `${appPath}/deployments`, label: 'Deployments' })
+        }
+      } else if (dynamic.parent === '/apps/:id') {
         // Special case: need to get app breadcrumb first
         const appMatch = pathname.match(/^\/apps\/(\d+)/)
         if (appMatch) {
