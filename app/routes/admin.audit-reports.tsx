@@ -24,8 +24,11 @@ import {
   getAllAuditReports,
   getAuditReportData,
   saveAuditReport,
+  updateAuditReportPdf,
 } from '~/db/audit-reports.server'
 import { getAllMonitoredApplications } from '~/db/monitored-applications.server'
+import { getAllUserMappings } from '~/db/user-mappings.server'
+import { generateAuditReportPdf } from '~/lib/audit-report-pdf'
 import styles from '~/styles/common.module.css'
 
 export async function loader(_args: LoaderFunctionArgs) {
@@ -75,7 +78,7 @@ export async function action({ request }: ActionFunctionArgs) {
     const rawData = await getAuditReportData(appId, year)
     const reportData = buildReportData(rawData)
 
-    // Save report
+    // Save report metadata first
     const report = await saveAuditReport({
       monitoredAppId: appId,
       appName: rawData.app.app_name,
@@ -86,6 +89,31 @@ export async function action({ request }: ActionFunctionArgs) {
       reportData,
       generatedBy: undefined, // Could add user info here
     })
+
+    // Get user mappings for PDF generation
+    const mappingsArray = await getAllUserMappings()
+    const userMappings = Object.fromEntries(
+      mappingsArray.map((m) => [m.github_username, { display_name: m.display_name, nav_ident: m.nav_ident }]),
+    )
+
+    // Generate PDF and store in database
+    const pdfBuffer = await generateAuditReportPdf({
+      appName: report.app_name,
+      repository: report.repository,
+      teamSlug: report.team_slug,
+      environmentName: report.environment_name,
+      year: report.year,
+      periodStart: new Date(report.period_start),
+      periodEnd: new Date(report.period_end),
+      reportData: report.report_data,
+      contentHash: report.content_hash,
+      reportId: report.report_id,
+      generatedAt: new Date(report.generated_at),
+      userMappings,
+    })
+
+    // Store PDF in database
+    await updateAuditReportPdf(report.id, Buffer.from(pdfBuffer))
 
     return { generated: report, error: null, readiness: null }
   }
