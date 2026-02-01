@@ -41,12 +41,6 @@ export async function loader({ request }: Route.LoaderArgs) {
       getAlertCountsByApp(),
     ])
 
-    // Calculate total alert count
-    let alertsCount = 0
-    for (const count of alertCountsByApp.values()) {
-      alertsCount += count
-    }
-
     // Fetch active repository and deployment stats for each app
     const appsWithData = await Promise.all(
       apps.map(async (app) => {
