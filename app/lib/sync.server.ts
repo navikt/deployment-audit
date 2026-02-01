@@ -575,7 +575,9 @@ export async function verifyDeploymentFourEyes(
             `   💾 Commit ${commit.sha.substring(0, 7)}: cached as approved (PR #${cachedCommit.original_pr_number})`,
           )
           continue
-        } else {
+        } else if (cachedCommit.pr_approval_reason !== 'no_pr') {
+          // Only trust cache for non-no_pr reasons (like pr_not_approved)
+          // For 'no_pr', we should retry with rebase matching
           console.log(`   💾 Commit ${commit.sha.substring(0, 7)}: cached as NOT approved`)
           unverifiedCommits.push({
             sha: commit.sha,
@@ -587,10 +589,13 @@ export async function verifyDeploymentFourEyes(
             reason: cachedCommit.pr_approval_reason || 'no_pr',
           })
           continue
+        } else {
+          // Cached as no_pr - retry with rebase matching
+          console.log(`   🔄 Commit ${commit.sha.substring(0, 7)}: cached as no_pr, retrying with rebase matching...`)
         }
       }
 
-      // No cached result - check GitHub API
+      // No cached result OR cached as no_pr - check GitHub API
       // Use verifyCommitIsInPR=true to detect commits that were pushed to main
       // and then "smuggled" into a PR when the PR merged main into its branch.
       let prInfo: PullRequestWithMatchInfo | null = await getPullRequestForCommit(owner, repo, commit.sha, true)

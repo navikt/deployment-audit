@@ -211,7 +211,11 @@ export async function getPullRequestForCommit(
         const cacheKey = `${owner}/${repo}#${pr.number}`
         let prCommitShas = prCommitsCache.get(cacheKey)
 
-        if (!prCommitShas) {
+        // Also get metadata cache for rebase matching
+        const metadataCacheKey = `${owner}/${repo}#${pr.number}-metadata`
+        let prCommitsMetadata = prCommitsMetadataCache.get(metadataCacheKey)
+
+        if (!prCommitShas || !prCommitsMetadata) {
           // Fetch the PR's commits
           try {
             const prCommitsResponse = await client.pulls.listCommits({
@@ -223,6 +227,15 @@ export async function getPullRequestForCommit(
 
             prCommitShas = prCommitsResponse.data.map((c) => c.sha)
             prCommitsCache.set(cacheKey, prCommitShas)
+
+            // Also cache metadata for rebase matching
+            prCommitsMetadata = prCommitsResponse.data.map((c) => ({
+              sha: c.sha,
+              author: (c.commit.author?.name || c.author?.login || 'unknown').toLowerCase(),
+              authorDate: c.commit.author?.date || '',
+              messageFirstLine: c.commit.message.split('\n')[0].trim(),
+            }))
+            prCommitsMetadataCache.set(metadataCacheKey, prCommitsMetadata)
           } catch (err) {
             console.warn(`Could not fetch commits for PR #${pr.number}:`, err)
             continue
@@ -231,7 +244,7 @@ export async function getPullRequestForCommit(
           console.log(`   📋 Using cached commits for PR #${pr.number} (${prCommitShas.length} commits)`)
         }
 
-        // Check if our commit is in the PR's commit list
+        // Check if our commit is in the PR's commit list (exact SHA match)
         const isInPR = prCommitShas.includes(sha)
 
         if (isInPR) {
@@ -243,11 +256,62 @@ export async function getPullRequestForCommit(
             merged_at: pr.merged_at,
             state: pr.state,
           }
-        } else {
-          console.log(
-            `⚠️  Commit ${sha.substring(0, 7)} is NOT in PR #${pr.number}'s original commits (checking if squash merge)`,
-          )
         }
+
+        // Not an exact SHA match - try rebase matching via metadata
+        // This handles "rebase and merge" where commits get new SHAs
+        if (prCommitsMetadata) {
+          // Fetch the commit details to get metadata for matching
+          try {
+            const commitResponse = await client.repos.getCommit({
+              owner,
+              repo,
+              ref: sha,
+            })
+            const commitData = commitResponse.data
+
+            const commitAuthor = (commitData.commit.author?.name || commitData.author?.login || 'unknown').toLowerCase()
+            const commitAuthorDate = commitData.commit.author?.date || ''
+            const commitMessageFirstLine = commitData.commit.message.split('\n')[0].trim()
+
+            // Try to match against PR commits by metadata
+            for (const prCommit of prCommitsMetadata) {
+              const authorMatch = prCommit.author === commitAuthor
+
+              // Date match within 1 second
+              let dateMatch = false
+              if (prCommit.authorDate && commitAuthorDate) {
+                const prDate = new Date(prCommit.authorDate)
+                const mainDate = new Date(commitAuthorDate)
+                const dateDiffMs = Math.abs(prDate.getTime() - mainDate.getTime())
+                dateMatch = dateDiffMs < 1000
+              }
+
+              const messageMatch = prCommit.messageFirstLine === commitMessageFirstLine
+
+              if (authorMatch && dateMatch && messageMatch) {
+                console.log(
+                  `✅ Commit ${sha.substring(0, 7)} matches PR #${pr.number} via rebase (original: ${prCommit.sha.substring(0, 7)})`,
+                )
+                return {
+                  number: pr.number,
+                  title: pr.title,
+                  html_url: pr.html_url,
+                  merged_at: pr.merged_at,
+                  state: pr.state,
+                  _rebase_matched: true,
+                  _matched_original_sha: prCommit.sha,
+                } as PullRequestWithMatchInfo
+              }
+            }
+          } catch (err) {
+            console.warn(`Could not fetch commit ${sha} for rebase matching:`, err)
+          }
+        }
+
+        console.log(
+          `⚠️  Commit ${sha.substring(0, 7)} is NOT in PR #${pr.number}'s original commits and no rebase match found`,
+        )
       }
 
       // None of the associated PRs contain this commit as an original commit
