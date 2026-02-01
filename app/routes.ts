@@ -9,9 +9,17 @@ export default [
     index('routes/home.tsx'),
     route('apps', 'routes/apps.tsx'),
     route('apps/discover', 'routes/apps.discover.tsx'),
+    // Legacy ID-based routes (redirect to new structure)
     route('apps/:id', 'routes/apps.$id.tsx'),
     route('apps/:id/deployments', 'routes/apps.$id.deployments.tsx'),
     route('apps/:id/deployments/:deploymentId', 'routes/apps.$id.deployments.$deploymentId.tsx'),
+    // New semantic URL structure
+    route('team/:team/env/:env/app/:app', 'routes/team.$team.env.$env.app.$app.tsx'),
+    route('team/:team/env/:env/app/:app/deployments', 'routes/team.$team.env.$env.app.$app.deployments.tsx'),
+    route(
+      'team/:team/env/:env/app/:app/deployments/:deploymentId',
+      'routes/team.$team.env.$env.app.$app.deployments.$deploymentId.tsx',
+    ),
     route('deployments/verify', 'routes/deployments.verify.tsx'),
     route('deployments/:id', 'routes/deployments.$id.tsx'),
     route('users/:username', 'routes/users.$username.tsx'),

@@ -111,6 +111,10 @@ function getStatusTag(appStats: { total: number; without_four_eyes: number; pend
   )
 }
 
+function getAppUrl(app: { team_slug: string; environment_name: string; app_name: string }) {
+  return `/team/${app.team_slug}/env/${app.environment_name}/app/${app.app_name}`
+}
+
 export default function Home({ loaderData }: Route.ComponentProps) {
   const { stats, apps, allAppsCount, statusFilter } = loaderData
   const [searchParams, setSearchParams] = useSearchParams()
@@ -269,7 +273,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                   {/* First row: App name, environment (desktop), alert indicator, status tag */}
                   <HStack gap="space-8" align="center" justify="space-between" wrap>
                     <HStack gap="space-12" align="center" style={{ flex: 1 }}>
-                      <Link to={`/apps/${app.id}`}>
+                      <Link to={getAppUrl(app)}>
                         <BodyShort weight="semibold">{app.app_name}</BodyShort>
                       </Link>
                       <Show above="md">
@@ -278,7 +282,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                     </HStack>
                     <HStack gap="space-8" align="center">
                       {app.alertCount > 0 && (
-                        <Link to={`/apps/${app.id}#varsler`} style={{ textDecoration: 'none' }}>
+                        <Link to={`${getAppUrl(app)}#varsler`} style={{ textDecoration: 'none' }}>
                           <Tag data-color="danger" variant="moderate" size="xsmall">
                             <BellIcon aria-hidden /> {app.alertCount}
                           </Tag>
@@ -286,7 +290,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                       )}
                       {app.stats.without_four_eyes > 0 ? (
                         <Link
-                          to={`/apps/${app.id}/deployments?status=not_approved&period=all`}
+                          to={`${getAppUrl(app)}/deployments?status=not_approved&period=all`}
                           style={{ textDecoration: 'none' }}
                         >
                           {getStatusTag(app.stats)}

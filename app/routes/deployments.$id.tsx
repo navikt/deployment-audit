@@ -46,6 +46,7 @@ import {
   updateDeploymentFourEyes,
   updateDeploymentLegacyData,
 } from '~/db/deployments.server'
+import { getMonitoredApplicationById } from '~/db/monitored-applications.server'
 import { getUserMappings } from '~/db/user-mappings.server'
 import { lookupLegacyByCommit, lookupLegacyByPR } from '~/lib/github.server'
 import { verifyDeploymentFourEyes } from '~/lib/sync.server'
@@ -60,12 +61,19 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     throw new Response('Deployment not found', { status: 404 })
   }
 
+  // Get app info for building semantic URLs
+  const app = await getMonitoredApplicationById(deployment.monitored_app_id)
+  if (!app) {
+    throw new Response('Application not found', { status: 404 })
+  }
+  const appUrl = `/team/${app.team_slug}/env/${app.environment_name}/app/${app.app_name}`
+
   // Redirect to app-scoped URL if accessed via /deployments/:id directly
   // Check if this is a direct request (not from the app-scoped re-export)
   const url = new URL(request.url)
   if (url.pathname === `/deployments/${deploymentId}`) {
     const searchParams = url.searchParams.toString()
-    const redirectUrl = `/apps/${deployment.monitored_app_id}/deployments/${deploymentId}${searchParams ? `?${searchParams}` : ''}`
+    const redirectUrl = `${appUrl}/deployments/${deploymentId}${searchParams ? `?${searchParams}` : ''}`
     return Response.redirect(new URL(redirectUrl, url.origin), 302)
   }
 
@@ -112,6 +120,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     previousDeployment,
     nextDeployment,
     userMappings: Object.fromEntries(userMappings),
+    appUrl,
   }
 }
 
@@ -594,7 +603,7 @@ function getFourEyesStatus(deployment: any): {
 }
 
 export default function DeploymentDetail({ loaderData, actionData }: Route.ComponentProps) {
-  const { deployment, comments, manualApproval, legacyInfo, previousDeployment, nextDeployment, userMappings } =
+  const { deployment, comments, manualApproval, legacyInfo, previousDeployment, nextDeployment, userMappings, appUrl } =
     loaderData
   const [searchParams] = useSearchParams()
   const [commentText, setCommentText] = useState('')
@@ -646,7 +655,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           {previousDeployment ? (
             <Button
               as={Link}
-              to={`/apps/${deployment.monitored_app_id}/deployments/${previousDeployment.id}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`}
+              to={`${appUrl}/deployments/${previousDeployment.id}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`}
               variant="tertiary"
               size="xsmall"
             >
@@ -659,7 +668,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           )}
           <Button
             as={Link}
-            to={`/apps/${deployment.monitored_app_id}/deployments${searchParams.toString() ? `?${searchParams.toString()}` : ''}`}
+            to={`${appUrl}/deployments${searchParams.toString() ? `?${searchParams.toString()}` : ''}`}
             variant="tertiary"
             size="xsmall"
           >
@@ -668,7 +677,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           {nextDeployment ? (
             <Button
               as={Link}
-              to={`/apps/${deployment.monitored_app_id}/deployments/${nextDeployment.id}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`}
+              to={`${appUrl}/deployments/${nextDeployment.id}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`}
               variant="tertiary"
               size="xsmall"
             >

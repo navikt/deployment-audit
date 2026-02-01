@@ -22,8 +22,41 @@ const dynamicBreadcrumbs: Array<{
   pattern: RegExp
   getLabel: (matches: ReturnType<typeof useMatches>, pathname: string) => string
   parent: string
-  getParentLabel?: (matches: ReturnType<typeof useMatches>) => string
+  getParentLabel?: (matches: ReturnType<typeof useMatches>, pathname: string) => string
 }> = [
+  // New semantic URL structure: /team/:team/env/:env/app/:app
+  {
+    pattern: /^\/team\/([^/]+)\/env\/([^/]+)\/app\/([^/]+)$/,
+    getLabel: (_matches, pathname) => {
+      const appName = pathname.split('/')[6]
+      return appName || 'Applikasjon'
+    },
+    parent: '/',
+  },
+  {
+    pattern: /^\/team\/([^/]+)\/env\/([^/]+)\/app\/([^/]+)\/deployments$/,
+    getLabel: () => 'Deployments',
+    parent: '/team/:team/env/:env/app/:app',
+    getParentLabel: (_matches, pathname) => {
+      const appName = pathname.split('/')[6]
+      return appName || 'Applikasjon'
+    },
+  },
+  {
+    pattern: /^\/team\/([^/]+)\/env\/([^/]+)\/app\/([^/]+)\/deployments\/(\d+)$/,
+    getLabel: (matches) => {
+      const match = matches.find((m) => m.pathname.match(/^\/team\/[^/]+\/env\/[^/]+\/app\/[^/]+\/deployments\/\d+$/))
+      const data = match?.data as { deployment?: { commit_sha?: string } } | undefined
+      const sha = data?.deployment?.commit_sha
+      return sha ? sha.substring(0, 7) : 'Deployment'
+    },
+    parent: '/team/:team/env/:env/app/:app/deployments',
+    getParentLabel: (_matches, pathname) => {
+      const appName = pathname.split('/')[6]
+      return appName || 'Applikasjon'
+    },
+  },
+  // Legacy ID-based routes (will redirect, but keep for breadcrumbs during transition)
   {
     pattern: /^\/apps\/(\d+)$/,
     getLabel: (matches) => {
@@ -102,23 +135,41 @@ function buildBreadcrumbs(pathname: string, matches: ReturnType<typeof useMatche
   for (const dynamic of dynamicBreadcrumbs) {
     if (dynamic.pattern.test(pathname)) {
       // Add parent breadcrumbs first
-      if (dynamic.parent === '/apps/:id/deployments') {
-        // Special case: app -> deployments -> specific deployment
+      // New semantic URL structure: /team/:team/env/:env/app/:app/deployments/:id
+      if (dynamic.parent === '/team/:team/env/:env/app/:app/deployments') {
+        const semanticMatch = pathname.match(/^\/team\/([^/]+)\/env\/([^/]+)\/app\/([^/]+)/)
+        if (semanticMatch) {
+          const [, team, env, app] = semanticMatch
+          const appPath = `/team/${team}/env/${env}/app/${app}`
+          const appLabel = dynamic.getParentLabel ? dynamic.getParentLabel(matches, pathname) : app
+          crumbs.push({ path: appPath, label: appLabel })
+          crumbs.push({ path: `${appPath}/deployments`, label: 'Deployments' })
+        }
+      } else if (dynamic.parent === '/team/:team/env/:env/app/:app') {
+        const semanticMatch = pathname.match(/^\/team\/([^/]+)\/env\/([^/]+)\/app\/([^/]+)/)
+        if (semanticMatch) {
+          const [, team, env, app] = semanticMatch
+          const appPath = `/team/${team}/env/${env}/app/${app}`
+          const appLabel = dynamic.getParentLabel ? dynamic.getParentLabel(matches, pathname) : app
+          crumbs.push({ path: appPath, label: appLabel })
+        }
+      } else if (dynamic.parent === '/apps/:id/deployments') {
+        // Legacy: app -> deployments -> specific deployment
         const appMatch = pathname.match(/^\/apps\/(\d+)/)
         if (appMatch) {
           const appPath = `/apps/${appMatch[1]}`
-          const appLabel = dynamic.getParentLabel ? dynamic.getParentLabel(matches) : 'Applikasjon'
+          const appLabel = dynamic.getParentLabel ? dynamic.getParentLabel(matches, pathname) : 'Applikasjon'
           crumbs.push({ path: appPath, label: appLabel })
           crumbs.push({ path: `${appPath}/deployments`, label: 'Deployments' })
         }
       } else if (dynamic.parent === '/apps/:id') {
-        // Special case: need to get app breadcrumb first
+        // Legacy: need to get app breadcrumb first
         const appMatch = pathname.match(/^\/apps\/(\d+)/)
         if (appMatch) {
           const appPath = `/apps/${appMatch[1]}`
           // Use getParentLabel if available, otherwise fallback to first dynamic config
           const appLabel = dynamic.getParentLabel
-            ? dynamic.getParentLabel(matches)
+            ? dynamic.getParentLabel(matches, pathname)
             : dynamicBreadcrumbs[0].getLabel(matches, appPath)
           crumbs.push({ path: appPath, label: appLabel })
         }

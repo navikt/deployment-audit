@@ -1,42 +1,25 @@
-// This route provides app-scoped deployment view with proper breadcrumbs
-// Re-exports the deployment detail page with additional app context
-
+// Legacy route - redirects to new semantic URL structure
+import type { LoaderFunctionArgs } from 'react-router'
 import { getMonitoredApplicationById } from '~/db/monitored-applications.server'
-import type { Route } from './+types/apps.$id.deployments.$deploymentId'
 
-import { default as DeploymentDetail, action as deploymentAction, loader as deploymentLoader } from './deployments.$id'
-
-export async function loader({ params, request }: Route.LoaderArgs) {
-  const appId = parseInt(params.id, 10)
-  if (Number.isNaN(appId)) {
+export async function loader({ params, request }: LoaderFunctionArgs) {
+  const id = parseInt(params.id || '', 10)
+  if (Number.isNaN(id)) {
     throw new Response('Invalid app ID', { status: 400 })
   }
 
-  const app = await getMonitoredApplicationById(appId)
+  const app = await getMonitoredApplicationById(id)
   if (!app) {
     throw new Response('Application not found', { status: 404 })
   }
 
-  // Call the original deployment loader
-  const deploymentData = await deploymentLoader({
-    params: { id: params.deploymentId },
-    request,
-  } as Parameters<typeof deploymentLoader>[0])
+  const url = new URL(request.url)
+  const searchParams = url.searchParams.toString()
+  const newUrl = `/team/${app.team_slug}/env/${app.environment_name}/app/${app.app_name}/deployments/${params.deploymentId}${searchParams ? `?${searchParams}` : ''}`
 
-  // Add app context for breadcrumbs
-  return {
-    ...deploymentData,
-    app,
-    appContext: true,
-  }
+  return Response.redirect(new URL(newUrl, url.origin), 302)
 }
 
-// Wrap the action to pass deploymentId as id
-export async function action({ params, request }: Route.ActionArgs) {
-  return deploymentAction({
-    params: { id: params.deploymentId },
-    request,
-  } as Parameters<typeof deploymentAction>[0])
+export default function DeploymentRedirect() {
+  return null
 }
-
-export default DeploymentDetail
