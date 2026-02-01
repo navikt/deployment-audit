@@ -507,6 +507,7 @@ export async function updateDeploymentLegacyData(
     commitSha: string | null
     commitMessage: string | null
     deployer: string | null
+    mergedBy: string | null
     prNumber: number | null
     prUrl: string | null
     prTitle: string | null
@@ -515,6 +516,9 @@ export async function updateDeploymentLegacyData(
     reviewers: Array<{ username: string; state: string }>
   },
 ): Promise<Deployment> {
+  // Use mergedBy as deployer if available, otherwise fall back to deployer/commitAuthor
+  const effectiveDeployer = data.mergedBy || data.deployer
+
   // For legacy, we store reviewers directly in a simplified github_pr_data
   // Build a minimal structure that matches type requirements
   let githubPrDataStr: string | null = null
@@ -525,6 +529,7 @@ export async function updateDeploymentLegacyData(
       number: data.prNumber,
       html_url: data.prUrl,
       user: data.prAuthor ? { login: data.prAuthor } : null,
+      merged_by: data.mergedBy ? { login: data.mergedBy } : null,
       merged_at: data.prMergedAt,
       reviewers: data.reviewers.map((r) => ({
         username: r.username,
@@ -550,7 +555,7 @@ export async function updateDeploymentLegacyData(
      RETURNING *`,
     [
       data.commitSha,
-      data.deployer,
+      effectiveDeployer,
       data.prNumber,
       data.prUrl,
       githubPrDataStr,

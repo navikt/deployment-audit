@@ -215,6 +215,7 @@ export async function action({ request, params }: Route.ActionArgs) {
     const prUrl = formData.get('pr_url') as string
     const prAuthor = formData.get('pr_author') as string
     const prMergedAt = formData.get('pr_merged_at') as string
+    const mergedBy = formData.get('merged_by') as string
     const reviewersJson = formData.get('reviewers') as string
 
     if (!registeredBy) {
@@ -225,9 +226,10 @@ export async function action({ request, params }: Route.ActionArgs) {
       // Parse reviewers
       const reviewers = reviewersJson ? JSON.parse(reviewersJson) : []
 
-      // Build description
+      // Build description - use mergedBy as deployer if available
+      const effectiveDeployer = mergedBy || commitAuthor
       const parts: string[] = []
-      if (commitAuthor) parts.push(`Deployer: ${commitAuthor}`)
+      if (effectiveDeployer) parts.push(`Deployer: ${effectiveDeployer}`)
       if (commitSha) parts.push(`SHA: ${commitSha.substring(0, 7)}`)
       if (prNumber) parts.push(`PR: #${prNumber}`)
       const infoText = parts.length > 0 ? `GitHub-verifisert: ${parts.join(', ')}` : 'Legacy info fra GitHub'
@@ -241,11 +243,12 @@ export async function action({ request, params }: Route.ActionArgs) {
         registered_by: registeredBy,
       })
 
-      // Update deployment with GitHub data
+      // Update deployment with GitHub data (mergedBy will be used as deployer)
       await updateDeploymentLegacyData(deploymentId, {
         commitSha: commitSha || null,
         commitMessage: commitMessage || null,
         deployer: commitAuthor || null,
+        mergedBy: mergedBy || null,
         prNumber: prNumber ? parseInt(prNumber, 10) : null,
         prUrl: prUrl || null,
         prTitle: prTitle || null,
@@ -254,12 +257,26 @@ export async function action({ request, params }: Route.ActionArgs) {
         reviewers,
       })
 
-      // Set status to pending_approval (legacy_pending to indicate it's verified from GitHub but needs approval)
+      // Run full GitHub verification to fetch all PR data (comments, reviews, etc.)
+      let updatedDeployment = await getDeploymentById(deploymentId)
+      if (updatedDeployment && commitSha) {
+        console.log(`🔄 Running full GitHub verification for legacy deployment ${deploymentId}`)
+        const repository = `${updatedDeployment.detected_github_owner}/${updatedDeployment.detected_github_repo_name}`
+        await verifyDeploymentFourEyes(deploymentId, commitSha, repository, updatedDeployment.environment_name)
+
+        // Reload deployment to get the updated PR data from verification
+        updatedDeployment = await getDeploymentById(deploymentId)
+      }
+
+      // Set status to legacy_pending but PRESERVE the github_pr_data from verification
       await updateDeploymentFourEyes(deploymentId, {
         hasFourEyes: false,
         fourEyesStatus: 'legacy_pending',
-        githubPrNumber: prNumber ? parseInt(prNumber, 10) : null,
-        githubPrUrl: prUrl || null,
+        githubPrNumber: updatedDeployment?.github_pr_number || (prNumber ? parseInt(prNumber, 10) : null),
+        githubPrUrl: updatedDeployment?.github_pr_url || prUrl || null,
+        // Keep the PR data from verifyDeploymentFourEyes - don't overwrite it
+        githubPrData: updatedDeployment?.github_pr_data || undefined,
+        title: updatedDeployment?.title || prTitle || commitMessage || null,
       })
 
       return { success: 'GitHub-data lagret - venter på godkjenning fra annen person' }
@@ -333,6 +350,9 @@ export async function action({ request, params }: Route.ActionArgs) {
     }
 
     try {
+      // Get current deployment to preserve GitHub data
+      const currentDeployment = await getDeploymentById(deploymentId)
+
       await createComment({
         deployment_id: deploymentId,
         comment_text: 'Legacy deployment godkjent etter gjennomgang',
@@ -341,11 +361,14 @@ export async function action({ request, params }: Route.ActionArgs) {
         approved_by: approvedBy.trim(),
       })
 
+      // Preserve existing GitHub data when approving
       await updateDeploymentFourEyes(deploymentId, {
         hasFourEyes: true,
         fourEyesStatus: 'manually_approved',
-        githubPrNumber: null,
-        githubPrUrl: null,
+        githubPrNumber: currentDeployment?.github_pr_number || null,
+        githubPrUrl: currentDeployment?.github_pr_url || null,
+        githubPrData: currentDeployment?.github_pr_data || undefined,
+        title: currentDeployment?.title || null,
       })
 
       return { success: 'Legacy deployment godkjent' }
@@ -1477,6 +1500,11 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                     <Detail>
                       <strong>Forfatter:</strong> {actionData.legacyLookup.commitAuthor}
                     </Detail>
+                    {actionData.legacyLookup.mergedBy && (
+                      <Detail>
+                        <strong>Merget av:</strong> {actionData.legacyLookup.mergedBy}
+                      </Detail>
+                    )}
                     {actionData.legacyLookup.prNumber && (
                       <>
                         <Detail>
@@ -1506,6 +1534,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                     <input type="hidden" name="pr_title" value={actionData.legacyLookup.prTitle || ''} />
                     <input type="hidden" name="pr_url" value={actionData.legacyLookup.prUrl || ''} />
                     <input type="hidden" name="pr_author" value={actionData.legacyLookup.prAuthor || ''} />
+                    <input type="hidden" name="merged_by" value={actionData.legacyLookup.mergedBy || ''} />
                     <input
                       type="hidden"
                       name="pr_merged_at"

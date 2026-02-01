@@ -1083,6 +1083,7 @@ export interface LegacyLookupResult {
     prUrl?: string
     prMergedAt?: Date
     prAuthor?: string
+    mergedBy?: string
     reviewers?: Array<{ username: string; state: string }>
     timeDifferenceMinutes: number
     isWithinThreshold: boolean
@@ -1210,6 +1211,7 @@ export async function lookupLegacyByPR(
 
     // Get merge commit SHA
     const commitSha = pr.merge_commit_sha || ''
+    const mergedBy = pr.merged_by?.login
 
     return {
       success: true,
@@ -1223,6 +1225,7 @@ export async function lookupLegacyByPR(
         prUrl: pr.html_url,
         prMergedAt,
         prAuthor: pr.user?.login,
+        mergedBy,
         reviewers,
         timeDifferenceMinutes,
         isWithinThreshold,
