@@ -1,6 +1,7 @@
 import { MenuHamburgerIcon, MoonIcon, SunIcon } from '@navikt/aksel-icons'
 import { ActionMenu, Hide, InternalHeader, Show, Spacer } from '@navikt/ds-react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router'
+import { Breadcrumbs } from '~/components/Breadcrumbs'
 import { useTheme } from '~/hooks/useTheme'
 import styles from '../styles/common.module.css'
 
@@ -76,6 +77,8 @@ export default function Layout() {
           )}
         </InternalHeader.Button>
       </InternalHeader>
+
+      <Breadcrumbs />
 
       <div className={styles.layoutMain}>
         <Outlet />
