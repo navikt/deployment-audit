@@ -671,9 +671,15 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
             ) : null}
             {/* Verify button for non-OK states */}
             {deployment.commit_sha &&
-              ['pending', 'error', 'missing', 'direct_push', 'unverified_commits'].includes(
-                deployment.four_eyes_status,
-              ) && (
+              [
+                'pending',
+                'error',
+                'missing',
+                'direct_push',
+                'unverified_commits',
+                'pr_not_approved',
+                'approved_pr_with_unreviewed',
+              ].includes(deployment.four_eyes_status) && (
                 <Form method="post" style={{ display: 'inline' }}>
                   <input type="hidden" name="intent" value="verify_four_eyes" />
                   <Button
