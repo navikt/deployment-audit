@@ -27,28 +27,28 @@ export default function Layout() {
     <div className={styles.layoutContainer}>
       <InternalHeader>
         {/* Mobile: Hamburger menu on the left */}
-        <Hide above="md" asChild>
-          <ActionMenu>
+        <ActionMenu>
+          <Hide above="md" asChild>
             <ActionMenu.Trigger>
               <InternalHeader.Button>
                 <MenuHamburgerIcon title="Meny" style={{ fontSize: '1.5rem' }} />
               </InternalHeader.Button>
             </ActionMenu.Trigger>
-            <ActionMenu.Content>
-              <ActionMenu.Group label="Navigasjon">
-                {navItems.map((item) => (
-                  <ActionMenu.Item
-                    key={item.path}
-                    onSelect={() => navigate(item.path)}
-                    className={isActive(item.path) ? styles.navLinkActive : undefined}
-                  >
-                    {item.label}
-                  </ActionMenu.Item>
-                ))}
-              </ActionMenu.Group>
-            </ActionMenu.Content>
-          </ActionMenu>
-        </Hide>
+          </Hide>
+          <ActionMenu.Content>
+            <ActionMenu.Group label="Navigasjon">
+              {navItems.map((item) => (
+                <ActionMenu.Item
+                  key={item.path}
+                  onSelect={() => navigate(item.path)}
+                  className={isActive(item.path) ? styles.navLinkActive : undefined}
+                >
+                  {item.label}
+                </ActionMenu.Item>
+              ))}
+            </ActionMenu.Group>
+          </ActionMenu.Content>
+        </ActionMenu>
 
         <InternalHeader.Title as={Link} to="/">
           Pensjon Deployment Audit
