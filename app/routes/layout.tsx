@@ -1,8 +1,9 @@
 import { MenuHamburgerIcon, MoonIcon, SunIcon } from '@navikt/aksel-icons'
-import { ActionMenu, Hide, HStack, InternalHeader, Search, Show, Spacer } from '@navikt/ds-react'
+import { ActionMenu, Hide, InternalHeader, Show, Spacer } from '@navikt/ds-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router'
 import { Breadcrumbs } from '~/components/Breadcrumbs'
+import { SearchDialog } from '~/components/SearchDialog'
 import { useTheme } from '~/hooks/useTheme'
 import styles from '../styles/common.module.css'
 
@@ -10,7 +11,7 @@ export default function Layout() {
   const location = useLocation()
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
-  const [searchQuery, setSearchQuery] = useState('')
+  const [_searchQuery, setSearchQuery] = useState('')
 
   const isActive = (path: string) => {
     if (path === '/') {
@@ -67,29 +68,11 @@ export default function Layout() {
           Pensjon Deployment Audit
         </InternalHeader.Title>
 
-        {/* Global search */}
+        {/* Global search dialog */}
         <Show above="md" asChild>
-          <HStack
-            as="form"
-            paddingInline="space-20"
-            align="center"
-            onSubmit={(e) => {
-              e.preventDefault()
-              if (searchQuery.trim()) {
-                navigate(`/search?q=${encodeURIComponent(searchQuery)}`)
-              }
-            }}
-          >
-            <Search
-              label="Søk"
-              size="small"
-              variant="simple"
-              placeholder="Navn, NAV-ident, SHA..."
-              value={searchQuery}
-              onChange={setSearchQuery}
-              autoComplete="off"
-            />
-          </HStack>
+          <div style={{ paddingInline: 'var(--ax-space-20)' }}>
+            <SearchDialog />
+          </div>
         </Show>
 
         <Spacer />

@@ -1,0 +1,260 @@
+import { MagnifyingGlassIcon } from '@navikt/aksel-icons'
+import { BodyShort, Box, Detail, Dialog, HStack, Loader, Search, Tag, VStack } from '@navikt/ds-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router'
+
+interface SearchResult {
+  type: 'deployment' | 'user'
+  id?: number
+  url: string
+  title: string
+  subtitle?: string
+}
+
+function Kbd({ children }: { children: React.ReactNode }) {
+  return (
+    <Box
+      as="kbd"
+      paddingInline="space-6"
+      paddingBlock="space-2"
+      background="neutral-moderate"
+      borderRadius="4"
+      style={{
+        fontFamily: 'inherit',
+        fontSize: '0.75rem',
+        fontWeight: 500,
+      }}
+    >
+      {children}
+    </Box>
+  )
+}
+
+export function SearchDialog() {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<SearchResult[]>([])
+  const [loading, setLoading] = useState(false)
+  const [selectedIndex, setSelectedIndex] = useState(0)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  // Close dialog on navigation
+  // biome-ignore lint/correctness/useExhaustiveDependencies: We want this to run when pathname changes
+  useEffect(() => {
+    setOpen(false)
+    setQuery('')
+    setResults([])
+  }, [location.pathname])
+
+  // Keyboard shortcut to open dialog (Cmd/Ctrl + K)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setOpen(true)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  // Debounced search
+  useEffect(() => {
+    if (!query.trim()) {
+      setResults([])
+      return
+    }
+
+    const timer = setTimeout(async () => {
+      setLoading(true)
+      try {
+        const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`)
+        if (response.ok) {
+          const data = await response.json()
+          setResults(data.results || [])
+          setSelectedIndex(0)
+        }
+      } catch {
+        // Ignore errors
+      } finally {
+        setLoading(false)
+      }
+    }, 200)
+
+    return () => clearTimeout(timer)
+  }, [query])
+
+  const handleSelect = useCallback(
+    (result: SearchResult) => {
+      navigate(result.url)
+      setOpen(false)
+    },
+    [navigate],
+  )
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setSelectedIndex((i) => Math.min(i + 1, results.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setSelectedIndex((i) => Math.max(i - 1, 0))
+    } else if (e.key === 'Enter' && results[selectedIndex]) {
+      e.preventDefault()
+      handleSelect(results[selectedIndex])
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => setOpen(nextOpen)}>
+      <Dialog.Trigger>
+        <HStack
+          gap="space-8"
+          align="center"
+          style={{
+            cursor: 'pointer',
+            minWidth: '200px',
+            padding: 'var(--ax-space-6) var(--ax-space-12)',
+            background: 'var(--ax-bg-neutral-softA)',
+            borderRadius: 'var(--ax-radius-8)',
+            border: '1px solid var(--ax-border-neutral-subtle)',
+          }}
+        >
+          <MagnifyingGlassIcon aria-hidden style={{ fontSize: '1rem', color: 'var(--ax-text-neutral-subtle)' }} />
+          <BodyShort size="small" style={{ color: 'var(--ax-text-neutral-subtle)', flex: 1 }}>
+            Søk...
+          </BodyShort>
+          <Kbd>⌘K</Kbd>
+        </HStack>
+      </Dialog.Trigger>
+
+      <Dialog.Popup
+        width="large"
+        position="center"
+        closeOnOutsideClick
+        initialFocusTo={() => searchInputRef.current}
+        aria-label="Søk"
+      >
+        <Dialog.Header withClosebutton={false}>
+          <Search
+            ref={searchInputRef}
+            label="Søk"
+            hideLabel
+            variant="simple"
+            placeholder="Søk på navn, NAV-ident, e-post, SHA..."
+            value={query}
+            onChange={setQuery}
+            onKeyDown={handleKeyDown}
+            autoComplete="off"
+          />
+        </Dialog.Header>
+
+        <Dialog.Body style={{ padding: 0, maxHeight: '400px', overflowY: 'auto' }}>
+          {loading && (
+            <HStack justify="center" padding="space-24">
+              <Loader size="medium" />
+            </HStack>
+          )}
+
+          {!loading && query && results.length === 0 && (
+            <Box padding="space-24">
+              <BodyShort style={{ color: 'var(--ax-text-neutral-subtle)', textAlign: 'center' }}>
+                Ingen resultater for "{query}"
+              </BodyShort>
+            </Box>
+          )}
+
+          {!loading && results.length > 0 && (
+            <VStack as="ul" gap="space-0" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+              {results.map((result, index) => (
+                <Box
+                  as="li"
+                  key={`${result.type}-${result.id || result.title}`}
+                  padding="space-12"
+                  paddingInline="space-16"
+                  background={index === selectedIndex ? 'neutral-moderate' : undefined}
+                  style={{ cursor: 'pointer' }}
+                  onMouseEnter={() => setSelectedIndex(index)}
+                  onClick={() => handleSelect(result)}
+                >
+                  <Link
+                    to={result.url}
+                    style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      handleSelect(result)
+                    }}
+                  >
+                    <HStack gap="space-12" align="center">
+                      <MagnifyingGlassIcon
+                        aria-hidden
+                        style={{ fontSize: '1rem', color: 'var(--ax-text-neutral-subtle)' }}
+                      />
+                      <VStack gap="space-2" style={{ flex: 1, minWidth: 0 }}>
+                        <HStack gap="space-8" align="center">
+                          <BodyShort
+                            weight="semibold"
+                            style={{
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {result.title}
+                          </BodyShort>
+                          <Tag size="xsmall" variant={result.type === 'deployment' ? 'info' : 'neutral'}>
+                            {result.type === 'deployment' ? 'Deployment' : 'Bruker'}
+                          </Tag>
+                        </HStack>
+                        {result.subtitle && (
+                          <BodyShort
+                            size="small"
+                            style={{
+                              color: 'var(--ax-text-neutral-subtle)',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {result.subtitle}
+                          </BodyShort>
+                        )}
+                      </VStack>
+                    </HStack>
+                  </Link>
+                </Box>
+              ))}
+            </VStack>
+          )}
+
+          {!loading && !query && (
+            <Box padding="space-24">
+              <VStack gap="space-8" align="center">
+                <BodyShort style={{ color: 'var(--ax-text-neutral-subtle)' }}>
+                  Søk på navn, NAV-ident, e-post, GitHub-brukernavn, SHA eller deployment ID
+                </BodyShort>
+                <HStack gap="space-8">
+                  <HStack gap="space-4" align="center">
+                    <Kbd>↑</Kbd>
+                    <Kbd>↓</Kbd>
+                    <Detail>naviger</Detail>
+                  </HStack>
+                  <HStack gap="space-4" align="center">
+                    <Kbd>↵</Kbd>
+                    <Detail>velg</Detail>
+                  </HStack>
+                  <HStack gap="space-4" align="center">
+                    <Kbd>esc</Kbd>
+                    <Detail>lukk</Detail>
+                  </HStack>
+                </HStack>
+              </VStack>
+            </Box>
+          )}
+        </Dialog.Body>
+      </Dialog.Popup>
+    </Dialog>
+  )
+}
