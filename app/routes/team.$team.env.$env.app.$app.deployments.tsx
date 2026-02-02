@@ -1,17 +1,5 @@
 import { ChevronLeftIcon, ChevronRightIcon } from '@navikt/aksel-icons'
-import {
-  BodyShort,
-  Box,
-  Button,
-  Detail,
-  Heading,
-  Hide,
-  HStack,
-  Select,
-  Show,
-  TextField,
-  VStack,
-} from '@navikt/ds-react'
+import { BodyShort, Box, Button, Detail, Hide, HStack, Select, Show, TextField, VStack } from '@navikt/ds-react'
 import { Form, Link, type LoaderFunctionArgs, redirect, useLoaderData, useSearchParams } from 'react-router'
 import { MethodTag, StatusTag } from '~/components/deployment-tags'
 import { type DeploymentFilters, getDeploymentsPaginated } from '~/db/deployments.server'

@@ -1009,14 +1009,3 @@ export function startPeriodicSync(): void {
     runPeriodicSync().catch(console.error)
   }, SYNC_INTERVAL_MS)
 }
-
-/**
- * Stop the periodic sync scheduler
- */
-function stopPeriodicSync(): void {
-  if (periodicSyncInterval) {
-    clearInterval(periodicSyncInterval)
-    periodicSyncInterval = null
-    console.log('🛑 Periodic sync scheduler stopped')
-  }
-}
