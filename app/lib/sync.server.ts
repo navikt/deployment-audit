@@ -853,79 +853,11 @@ export async function verifyDeploymentFourEyes(
   }
 }
 
-/**
- * Combined sync: Fetch from Nais AND verify with GitHub
- * Use this for small batches where rate limits are not a concern
- */
-async function syncAndVerifyDeployments(
-  teamSlug: string,
-  environmentName: string,
-  appName: string,
-): Promise<{
-  newCount: number
-  verified: number
-  alertsCreated: number
-}> {
-  console.log('🔄 Full sync (Nais + GitHub) for application:', {
-    team: teamSlug,
-    environment: environmentName,
-    app: appName,
-  })
-
-  // Step 1: Sync from Nais
-  const naisResult = await syncDeploymentsFromNais(teamSlug, environmentName, appName)
-
-  // Step 2: Verify new deployments with GitHub
-  const monitoredApp = await getMonitoredApplication(teamSlug, environmentName, appName)
-  if (!monitoredApp) {
-    throw new Error('Application not found after sync')
-  }
-
-  const verifyResult = await verifyDeploymentsFourEyes({
-    monitored_app_id: monitoredApp.id,
-    limit: 1000, // Limit to avoid rate limits
-  })
-
-  console.log(`✅ Full sync complete`)
-
-  return {
-    newCount: naisResult.newCount,
-    verified: verifyResult.verified,
-    alertsCreated: naisResult.alertsCreated,
-  }
-}
-
 // ============================================================================
 // Locked sync functions - for distributed execution across multiple pods
 // ============================================================================
 
 import { acquireSyncLock, cleanupOldSyncJobs, releaseSyncLock } from '~/db/sync-jobs.server'
-
-/**
- * Full sync from Nais with distributed locking (for manual sync or initial setup)
- * Only one pod will run sync for a given app at a time
- */
-async function syncDeploymentsFromNaisWithLock(
-  monitoredAppId: number,
-  teamSlug: string,
-  environmentName: string,
-  appName: string,
-): Promise<{ success: boolean; result?: Awaited<ReturnType<typeof syncDeploymentsFromNais>>; locked?: boolean }> {
-  const lockId = await acquireSyncLock('nais_sync', monitoredAppId)
-  if (!lockId) {
-    return { success: false, locked: true }
-  }
-
-  try {
-    const result = await syncDeploymentsFromNais(teamSlug, environmentName, appName)
-    await releaseSyncLock(lockId, 'completed', result)
-    return { success: true, result }
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    await releaseSyncLock(lockId, 'failed', undefined, errorMessage)
-    throw error
-  }
-}
 
 /**
  * Incremental sync from Nais with distributed locking (for periodic sync)

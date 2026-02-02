@@ -117,14 +117,6 @@ export default function AppDeployments() {
 
   return (
     <VStack gap="space-32">
-      {/* Header */}
-      <div>
-        <Detail textColor="subtle">
-          <Link to="/">Applikasjoner</Link> / <Link to={`${appUrl}`}>{app.app_name}</Link> / Deployments
-        </Detail>
-        <Heading size="large">Deployments for {app.app_name}</Heading>
-      </div>
-
       {/* Filters */}
       <Box padding="space-20" borderRadius="8" background="sunken">
         <Form method="get">

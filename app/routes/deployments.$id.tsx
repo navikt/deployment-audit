@@ -752,50 +752,45 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
 
   return (
     <VStack gap="space-32">
-      {/* Breadcrumb with navigation */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Detail textColor="subtle">
-          {deployment.team_slug} / {deployment.environment_name} / {deployment.app_name}
-        </Detail>
-        <HStack gap="space-8">
-          {previousDeployment ? (
-            <Button
-              as={Link}
-              to={`${appUrl}/deployments/${previousDeployment.id}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`}
-              variant="tertiary"
-              size="xsmall"
-            >
-              ← Forrige
-            </Button>
-          ) : (
-            <Button variant="tertiary" size="xsmall" disabled>
-              ← Forrige
-            </Button>
-          )}
+      {/* Navigation buttons */}
+      <HStack justify="end" gap="space-8">
+        {previousDeployment ? (
           <Button
             as={Link}
-            to={`${appUrl}/deployments${searchParams.toString() ? `?${searchParams.toString()}` : ''}`}
+            to={`${appUrl}/deployments/${previousDeployment.id}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`}
             variant="tertiary"
             size="xsmall"
           >
-            Alle
+            ← Forrige
           </Button>
-          {nextDeployment ? (
-            <Button
-              as={Link}
-              to={`${appUrl}/deployments/${nextDeployment.id}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`}
-              variant="tertiary"
-              size="xsmall"
-            >
-              Neste →
-            </Button>
-          ) : (
-            <Button variant="tertiary" size="xsmall" disabled>
-              Neste →
-            </Button>
-          )}
-        </HStack>
-      </div>
+        ) : (
+          <Button variant="tertiary" size="xsmall" disabled>
+            ← Forrige
+          </Button>
+        )}
+        <Button
+          as={Link}
+          to={`${appUrl}/deployments${searchParams.toString() ? `?${searchParams.toString()}` : ''}`}
+          variant="tertiary"
+          size="xsmall"
+        >
+          Alle
+        </Button>
+        {nextDeployment ? (
+          <Button
+            as={Link}
+            to={`${appUrl}/deployments/${nextDeployment.id}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`}
+            variant="tertiary"
+            size="xsmall"
+          >
+            Neste →
+          </Button>
+        ) : (
+          <Button variant="tertiary" size="xsmall" disabled>
+            Neste →
+          </Button>
+        )}
+      </HStack>
       {/* Main header */}
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
