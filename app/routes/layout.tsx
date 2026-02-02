@@ -84,7 +84,7 @@ export default function Layout() {
               label="Søk"
               size="small"
               variant="simple"
-              placeholder="Søk bruker, SHA, ID..."
+              placeholder="Navn, NAV-ident, SHA..."
               value={searchQuery}
               onChange={setSearchQuery}
               autoComplete="off"

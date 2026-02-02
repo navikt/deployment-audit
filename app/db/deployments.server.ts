@@ -905,22 +905,44 @@ export async function searchDeployments(query: string, limit = 10): Promise<Sear
     return results
   }
 
-  // Otherwise, search by deployer username
+  // Otherwise, search by deployer username OR user mapping fields (nav_ident, nav_email, display_name, slack_member_id)
   const userResult = await pool.query(
-    `SELECT DISTINCT deployer_username, COUNT(*) as deployment_count
-     FROM deployments
-     WHERE deployer_username ILIKE $1
-     GROUP BY deployer_username
+    `SELECT DISTINCT d.deployer_username, 
+            um.display_name, um.nav_email, um.nav_ident, um.slack_member_id,
+            COUNT(*) as deployment_count
+     FROM deployments d
+     LEFT JOIN user_mappings um ON d.deployer_username = um.github_username
+     WHERE d.deployer_username ILIKE $1
+        OR um.display_name ILIKE $1
+        OR um.nav_email ILIKE $1
+        OR um.nav_ident ILIKE $1
+        OR um.slack_member_id ILIKE $1
+     GROUP BY d.deployer_username, um.display_name, um.nav_email, um.nav_ident, um.slack_member_id
      ORDER BY deployment_count DESC
      LIMIT $2`,
     [`%${trimmedQuery}%`, limit],
   )
   for (const row of userResult.rows) {
+    // Show the most relevant matching field in the subtitle
+    let matchInfo = ''
+    const queryLower = trimmedQuery.toLowerCase()
+    if (row.display_name?.toLowerCase().includes(queryLower)) {
+      matchInfo = row.display_name
+    } else if (row.nav_ident?.toLowerCase().includes(queryLower)) {
+      matchInfo = `NAV-ident: ${row.nav_ident}`
+    } else if (row.nav_email?.toLowerCase().includes(queryLower)) {
+      matchInfo = row.nav_email
+    } else if (row.slack_member_id?.toLowerCase().includes(queryLower)) {
+      matchInfo = `Slack: ${row.slack_member_id}`
+    }
+
     results.push({
       type: 'user',
       url: `/users/${row.deployer_username}`,
-      title: row.deployer_username,
-      subtitle: `${row.deployment_count} deployment(s)`,
+      title: row.display_name || row.deployer_username,
+      subtitle: matchInfo
+        ? `${row.deployer_username} • ${matchInfo} • ${row.deployment_count} deployment(s)`
+        : `${row.deployer_username} • ${row.deployment_count} deployment(s)`,
     })
   }
 

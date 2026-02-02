@@ -28,7 +28,7 @@ export default function SearchPage() {
       <VStack gap="space-8">
         <Heading size="large">Søk</Heading>
         <Hide above="md">
-          <BodyShort>Søk på brukernavn, SHA eller deployment ID</BodyShort>
+          <BodyShort>Søk på navn, NAV-ident, e-post, brukernavn, SHA eller ID</BodyShort>
         </Hide>
         <Show above="md">
           <BodyShort>
@@ -49,7 +49,7 @@ export default function SearchPage() {
               label="Søk"
               hideLabel
               variant="primary"
-              placeholder="Søk bruker, SHA, ID..."
+              placeholder="Navn, NAV-ident, e-post, SHA..."
               name="q"
               defaultValue={query}
             />
