@@ -12,7 +12,7 @@ import {
   TextField,
   VStack,
 } from '@navikt/ds-react'
-import { Form, Link, type LoaderFunctionArgs, useLoaderData, useSearchParams } from 'react-router'
+import { Form, Link, type LoaderFunctionArgs, redirect, useLoaderData, useSearchParams } from 'react-router'
 import { MethodTag, StatusTag } from '~/components/deployment-tags'
 import { type DeploymentFilters, getDeploymentsPaginated } from '~/db/deployments.server'
 import { getMonitoredApplicationByIdentity } from '~/db/monitored-applications.server'
@@ -59,6 +59,12 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   }
 
   const result = await getDeploymentsPaginated(filters)
+
+  // Redirect to page 1 if requested page exceeds total pages
+  if (page > result.total_pages && result.total_pages > 0) {
+    url.searchParams.set('page', '1')
+    throw redirect(url.pathname + url.search)
+  }
 
   // Get display names for deployers
   const deployerUsernames = [...new Set(result.deployments.map((d) => d.deployer_username).filter(Boolean))] as string[]
