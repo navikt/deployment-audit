@@ -1,3 +1,4 @@
+import { createAppAuth } from '@octokit/auth-app'
 import { Octokit } from '@octokit/rest'
 import type { GitHubPRData } from '~/db/deployments.server'
 
@@ -11,23 +12,60 @@ export function clearPrCommitsCache(): void {
   prCommitsCache.clear()
 }
 
+/**
+ * Get GitHub client - supports both GitHub App and PAT authentication
+ * GitHub App is preferred (higher rate limits, better security)
+ */
 function getGitHubClient(): Octokit {
   if (!octokit) {
-    const token = process.env.GITHUB_TOKEN
+    const appId = process.env.GITHUB_APP_ID
+    const privateKey = process.env.GITHUB_APP_PRIVATE_KEY
+    const installationId = process.env.GITHUB_APP_INSTALLATION_ID
+    const pat = process.env.GITHUB_TOKEN
 
-    if (!token) {
-      throw new Error('GITHUB_TOKEN environment variable is not set')
+    // Prefer GitHub App authentication
+    if (appId && privateKey && installationId) {
+      console.log('🔐 Using GitHub App authentication')
+
+      // Handle private key - can be base64 encoded or raw PEM
+      let decodedPrivateKey = privateKey
+      if (!privateKey.includes('-----BEGIN')) {
+        // Assume base64 encoded
+        decodedPrivateKey = Buffer.from(privateKey, 'base64').toString('utf-8')
+      }
+
+      octokit = new Octokit({
+        authStrategy: createAppAuth,
+        auth: {
+          appId: parseInt(appId, 10),
+          privateKey: decodedPrivateKey,
+          installationId: parseInt(installationId, 10),
+        },
+        log: {
+          debug: () => {},
+          info: () => {},
+          warn: console.warn,
+          error: console.error,
+        },
+      })
+    } else if (pat) {
+      // Fallback to Personal Access Token
+      console.log('🔑 Using Personal Access Token authentication')
+
+      octokit = new Octokit({
+        auth: pat,
+        log: {
+          debug: () => {},
+          info: () => {},
+          warn: console.warn,
+          error: console.error,
+        },
+      })
+    } else {
+      throw new Error(
+        'GitHub authentication not configured. Set either GITHUB_APP_ID + GITHUB_APP_PRIVATE_KEY + GITHUB_APP_INSTALLATION_ID, or GITHUB_TOKEN',
+      )
     }
-
-    octokit = new Octokit({
-      auth: token,
-      log: {
-        debug: () => {},
-        info: () => {},
-        warn: console.warn,
-        error: console.error,
-      },
-    })
 
     // Add request hook for logging
     octokit.hook.before('request', (options) => {

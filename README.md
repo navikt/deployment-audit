@@ -40,12 +40,25 @@ Kopier `.env.example` til `.env`:
 cp .env.example .env
 ```
 
-Fyll inn:
+Fyll inn (velg enten GitHub App eller PAT):
+
+**GitHub App (anbefalt):**
+```env
+DATABASE_URL=postgresql://username:password@localhost:5432/pensjon_deployment_audit
+GITHUB_APP_ID=123456
+GITHUB_APP_PRIVATE_KEY=<base64-encoded-private-key>
+GITHUB_APP_INSTALLATION_ID=12345678
+NAIS_GRAPHQL_URL=http://localhost:4242/graphql
+```
+
+**Personal Access Token (fallback):**
 ```env
 DATABASE_URL=postgresql://username:password@localhost:5432/pensjon_deployment_audit
 GITHUB_TOKEN=your_github_token
 NAIS_GRAPHQL_URL=http://localhost:4242/graphql
 ```
+
+> **Tips:** For å base64-encode private key: `base64 -i private-key.pem | tr -d '\n'`
 
 ### 3. Initialiser database
 
@@ -74,7 +87,7 @@ Applikasjonen bruker distroless Node.js 24 image for produksjon:
 
 ```bash
 docker build -t pensjon-deployment-audit .
-docker run -e DATABASE_URL=... -e GITHUB_TOKEN=... -p 3000:3000 pensjon-deployment-audit
+docker run -e DATABASE_URL=... -e GITHUB_APP_ID=... -e GITHUB_APP_PRIVATE_KEY=... -e GITHUB_APP_INSTALLATION_ID=... -p 3000:3000 pensjon-deployment-audit
 ```
 
 Database migrations kjøres automatisk ved oppstart.
