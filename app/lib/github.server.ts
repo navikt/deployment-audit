@@ -60,7 +60,10 @@ export function getGitHubClient(): Octokit {
         url = url.replace('{head}', (options.head as string).substring(0, 7))
       }
 
-      console.log(`🌐 [GitHub #${requestCount}] ${method} ${url}`)
+      // Add page number if paginating
+      const pageInfo = options.page ? ` (page ${options.page})` : ''
+
+      console.log(`🌐 [GitHub #${requestCount}] ${method} ${url}${pageInfo}`)
     })
 
     // Add response hook for rate limit info
@@ -606,34 +609,19 @@ export async function getPullRequestCommits(
 ): Promise<PullRequestCommit[]> {
   const client = getGitHubClient()
 
-  // Use pagination to get all commits (PRs can have more than 100 commits)
-  const allCommits: PullRequestCommit[] = []
-  let page = 1
-  const perPage = 100
+  console.log(`   📄 Fetching commits for PR #${pull_number}...`)
 
-  console.log(`   📄 Fetching commits for PR #${pull_number} (paginated)...`)
+  // Use paginate to automatically handle all pages efficiently
+  const allCommits = await client.paginate(client.pulls.listCommits, {
+    owner,
+    repo,
+    pull_number,
+    per_page: 100,
+  })
 
-  while (true) {
-    const response = await client.pulls.listCommits({
-      owner,
-      repo,
-      pull_number,
-      per_page: perPage,
-      page,
-    })
+  console.log(`      Total: ${allCommits.length} commits`)
 
-    allCommits.push(...(response.data as PullRequestCommit[]))
-    console.log(`      Page ${page}: ${response.data.length} commits (total: ${allCommits.length})`)
-
-    // If we got fewer than perPage, we've reached the end
-    if (response.data.length < perPage) {
-      break
-    }
-
-    page++
-  }
-
-  return allCommits
+  return allCommits as PullRequestCommit[]
 }
 
 /**

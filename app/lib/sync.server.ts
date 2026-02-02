@@ -652,7 +652,8 @@ export async function verifyDeploymentFourEyes(
         continue
       }
 
-      // Fast path: If commit is directly in the deployed PR and that PR is approved
+      // If commit is in the deployed PR, use the deployed PR's approval status
+      // Don't check for other PRs - the commit belongs to this deployment's PR
       if (deployedPrNumber && deployedPrCommitShas.has(commit.sha)) {
         const deployedPrApproval = prCache.get(deployedPrNumber)
         if (deployedPrApproval?.hasFourEyes) {
@@ -667,8 +668,19 @@ export async function verifyDeploymentFourEyes(
             true,
             'in_approved_pr',
           )
-          continue
+        } else {
+          console.log(`   ❌ Commit ${commit.sha.substring(0, 7)}: in unapproved PR #${deployedPrNumber}`)
+          unverifiedCommits.push({
+            sha: commit.sha,
+            message: commit.message.split('\n')[0],
+            author: commit.author,
+            date: commit.date,
+            html_url: commit.html_url,
+            pr_number: deployedPrNumber,
+            reason: deployedPrApproval?.reason || 'pr_not_approved',
+          })
         }
+        continue
       }
 
       // Check if we have cached verification in database
