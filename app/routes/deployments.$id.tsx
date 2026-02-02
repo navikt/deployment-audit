@@ -1569,6 +1569,18 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
             <BodyShort>
               Dette deploymentet har status "{status.text}" og krever manuell godkjenning for å oppfylle
               fire-øyne-prinsippet. Legg ved Slack-lenke som dokumenterer at koden er blitt reviewet.
+              {previousDeployment?.commit_sha && deployment.commit_sha && (
+                <>
+                  {' '}
+                  <a
+                    href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/compare/${previousDeployment.commit_sha}...${deployment.commit_sha}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Se endringer på GitHub
+                  </a>
+                </>
+              )}
             </BodyShort>
 
             {isCurrentUserInvolved ? (
