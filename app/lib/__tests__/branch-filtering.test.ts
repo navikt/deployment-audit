@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 /**
  * Tests for branch filtering in PR lookups.
@@ -12,14 +12,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * - PR #18316 merged the shared feature branch into main
  * - When verifying, we should only use PR #18316 (targets main), not the feature PRs
  */
-
-// Anonymized test data from real scenario
-const DEPLOYMENT_COMMIT = {
-  sha: 'merge-commit-sha-main',
-  message: 'Merge pull request #18316',
-  author: 'author-a',
-  author_date: '2026-01-21T13:57:50Z',
-}
 
 const MAIN_PR = {
   number: 18316,

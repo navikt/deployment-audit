@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 /**
  * Tests for rebase commit matching logic.
@@ -10,15 +10,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Test data from real PRs (anonymized)
 
-// Test Case 1: Rebase and Merge (PR #18375 - pensjon-pen)
+// Test Case 1: Rebase and Merge
 // All 9 rebased commits should match to PR via metadata
-const PR_18375_METADATA = {
-  number: 18375,
-  base_sha: '32d2be81aa26cac697a3424ad0e17a6aa7c7b231',
-  merge_commit_sha: '1fe00f15bed928e0f10d4c8631e6b319f139106a',
-  merged_at: '2026-01-23T09:43:02Z',
-  title: 'UFO-192/UFO-194: Din uføretrygd features',
-}
 
 const PR_18375_ORIGINAL_COMMITS = [
   {

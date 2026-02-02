@@ -206,7 +206,8 @@ describe('Direct Push and Unapproved PR Verification', () => {
 
   describe('Commit verification', () => {
     it('should verify commits from approved PR #18220', () => {
-      const commit = COMMITS_BETWEEN_DEPLOYMENTS.find((c) => c.sha.startsWith('e9ba01f'))!
+      const commit = COMMITS_BETWEEN_DEPLOYMENTS.find((c) => c.sha.startsWith('e9ba01f'))
+      if (!commit) throw new Error('Test data not found')
       const result = verifyCommit(commit, APPROVED_PR, 'main')
 
       expect(result.verified).toBe(true)
@@ -215,7 +216,8 @@ describe('Direct Push and Unapproved PR Verification', () => {
     })
 
     it('should NOT verify commits from unapproved PR #18196', () => {
-      const commit = COMMITS_BETWEEN_DEPLOYMENTS.find((c) => c.sha.startsWith('edf1b1f'))!
+      const commit = COMMITS_BETWEEN_DEPLOYMENTS.find((c) => c.sha.startsWith('edf1b1f'))
+      if (!commit) throw new Error('Test data not found')
       const result = verifyCommit(commit, APPROVED_PR, 'main')
 
       expect(result.verified).toBe(false)
@@ -224,7 +226,8 @@ describe('Direct Push and Unapproved PR Verification', () => {
     })
 
     it('should NOT verify direct push revert commit (no PR)', () => {
-      const commit = COMMITS_BETWEEN_DEPLOYMENTS.find((c) => c.sha.startsWith('55a83e7'))!
+      const commit = COMMITS_BETWEEN_DEPLOYMENTS.find((c) => c.sha.startsWith('55a83e7'))
+      if (!commit) throw new Error('Test data not found')
       const result = verifyCommit(commit, APPROVED_PR, 'main')
 
       expect(result.verified).toBe(false)
@@ -233,7 +236,8 @@ describe('Direct Push and Unapproved PR Verification', () => {
     })
 
     it('should skip merge commits', () => {
-      const mergeCommit = COMMITS_BETWEEN_DEPLOYMENTS.find((c) => c.sha === 'e15cc90')!
+      const mergeCommit = COMMITS_BETWEEN_DEPLOYMENTS.find((c) => c.sha === 'e15cc90')
+      if (!mergeCommit) throw new Error('Test data not found')
       const result = verifyCommit(mergeCommit, APPROVED_PR, 'main')
 
       expect(result.verified).toBe(true)
@@ -273,8 +277,12 @@ describe('Direct Push and Unapproved PR Verification', () => {
       // This is the key test - even though PR #18220 is approved,
       // commits from PR #18196 and direct pushes should remain unverified
 
-      const commitFromUnapprovedPR = COMMITS_BETWEEN_DEPLOYMENTS.find((c) => c.sha.startsWith('edf1b1f'))!
-      const directPushCommit = COMMITS_BETWEEN_DEPLOYMENTS.find((c) => c.sha.startsWith('55a83e7'))!
+      const commitFromUnapprovedPR = COMMITS_BETWEEN_DEPLOYMENTS.find((c) => c.sha.startsWith('edf1b1f'))
+      const directPushCommit = COMMITS_BETWEEN_DEPLOYMENTS.find((c) => c.sha.startsWith('55a83e7'))
+
+      if (!commitFromUnapprovedPR || !directPushCommit) {
+        throw new Error('Test data not found')
+      }
 
       const result1 = verifyCommit(commitFromUnapprovedPR, APPROVED_PR, 'main')
       const result2 = verifyCommit(directPushCommit, APPROVED_PR, 'main')

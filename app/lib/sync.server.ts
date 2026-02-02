@@ -654,8 +654,8 @@ export async function verifyDeploymentFourEyes(
 
       // Fast path: If commit is directly in the deployed PR and that PR is approved
       if (deployedPrNumber && deployedPrCommitShas.has(commit.sha)) {
-        const deployedPrApproval = prCache.get(deployedPrNumber)!
-        if (deployedPrApproval.hasFourEyes) {
+        const deployedPrApproval = prCache.get(deployedPrNumber)
+        if (deployedPrApproval?.hasFourEyes) {
           console.log(`   ✅ Commit ${commit.sha.substring(0, 7)}: in approved PR #${deployedPrNumber}`)
           await updateCommitPrVerification(
             owner,
