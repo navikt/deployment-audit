@@ -24,6 +24,8 @@ import {
 } from '~/db/deployments.server'
 import { getMonitoredApplication } from '~/db/monitored-applications.server'
 import {
+  clearPrCommitsCache,
+  clearPrCommitsMetadataCache,
   findPRForRebasedCommit,
   getCommitsBetween,
   getDetailedPullRequestInfo,
@@ -43,7 +45,6 @@ function verifyFourEyesFromPrData(prData: {
   reviewers?: Array<{ username: string; state: string; submitted_at: string }>
   commits?: Array<{ sha: string; date: string }>
 }): { hasFourEyes: boolean; reason: string } {
-  const prCreator = prData.creator?.username || ''
   const reviewers = prData.reviewers || []
   const commits = prData.commits || []
 
@@ -52,7 +53,8 @@ function verifyFourEyesFromPrData(prData: {
   }
 
   // Get the timestamp of the last commit
-  const lastCommitDate = new Date(commits[commits.length - 1].date)
+  const lastCommit = commits[commits.length - 1]
+  const lastCommitDate = new Date(lastCommit.date)
 
   // Find approved reviews that came after the last commit
   const approvedReviewsAfterLastCommit = reviewers.filter((review) => {
@@ -495,6 +497,10 @@ export async function verifyDeploymentFourEyes(
   }
 
   const [owner, repo] = repoParts
+
+  // Clear any stale in-memory caches (important for dev mode where process persists)
+  clearPrCommitsCache()
+  clearPrCommitsMetadataCache()
 
   try {
     console.log(`🔍 [Deployment ${deploymentId}] Verifying commits up to ${commitSha.substring(0, 7)} in ${repository}`)

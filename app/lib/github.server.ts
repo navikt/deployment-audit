@@ -11,6 +11,11 @@ export function clearPrCommitsCache(): void {
   prCommitsCache.clear()
 }
 
+export function clearAllGitHubCaches(): void {
+  prCommitsCache.clear()
+  // Also clear metadata cache (defined later, but we export a function to clear it)
+}
+
 export function getGitHubRequestCount(): number {
   return requestCount
 }
@@ -41,7 +46,20 @@ export function getGitHubClient(): Octokit {
     octokit.hook.before('request', (options) => {
       requestCount++
       const method = options.method || 'GET'
-      const url = options.url?.replace('https://api.github.com', '') || options.baseUrl
+      let url = options.url?.replace('https://api.github.com', '') || options.baseUrl || ''
+
+      // Replace template variables with actual values for debug logging
+      if (options.owner) url = url.replace('{owner}', options.owner as string)
+      if (options.repo) url = url.replace('{repo}', options.repo as string)
+      if (options.pull_number) url = url.replace('{pull_number}', String(options.pull_number))
+      if (options.commit_sha) url = url.replace('{commit_sha}', (options.commit_sha as string).substring(0, 7))
+      if (options.ref) url = url.replace('{ref}', (options.ref as string).substring(0, 7))
+      if (options.issue_number) url = url.replace('{issue_number}', String(options.issue_number))
+      if (options.base && options.head) {
+        url = url.replace('{base}', (options.base as string).substring(0, 7))
+        url = url.replace('{head}', (options.head as string).substring(0, 7))
+      }
+
       console.log(`🌐 [GitHub #${requestCount}] ${method} ${url}`)
     })
 
@@ -231,20 +249,33 @@ export async function getPullRequestForCommit(
         let prCommitsMetadata = prCommitsMetadataCache.get(metadataCacheKey)
 
         if (!prCommitShas || !prCommitsMetadata) {
-          // Fetch the PR's commits
+          // Fetch the PR's commits (with pagination for PRs with 100+ commits)
           try {
-            const prCommitsResponse = await client.pulls.listCommits({
-              owner,
-              repo,
-              pull_number: pr.number,
-              per_page: 100,
-            })
+            let allPrCommits: Awaited<ReturnType<typeof client.pulls.listCommits>>['data'] = []
+            let prCommitsPage = 1
 
-            prCommitShas = prCommitsResponse.data.map((c) => c.sha)
+            while (true) {
+              const prCommitsResponse = await client.pulls.listCommits({
+                owner,
+                repo,
+                pull_number: pr.number,
+                per_page: 100,
+                page: prCommitsPage,
+              })
+
+              allPrCommits = allPrCommits.concat(prCommitsResponse.data)
+
+              if (prCommitsResponse.data.length < 100) {
+                break
+              }
+              prCommitsPage++
+            }
+
+            prCommitShas = allPrCommits.map((c) => c.sha)
             prCommitsCache.set(cacheKey, prCommitShas)
 
             // Also cache metadata for rebase matching
-            prCommitsMetadata = prCommitsResponse.data.map((c) => ({
+            prCommitsMetadata = allPrCommits.map((c) => ({
               sha: c.sha,
               author: (c.commit.author?.name || c.author?.login || 'unknown').toLowerCase(),
               authorDate: c.commit.author?.date || '',
@@ -431,22 +462,41 @@ export async function findPRForRebasedCommit(
       let prCommits = prCommitsMetadataCache.get(cacheKey)
 
       if (!prCommits) {
-        // Fetch PR commits with full metadata
+        // Fetch PR commits with full metadata (with pagination for PRs with 100+ commits)
         try {
-          const prCommitsResponse = await client.pulls.listCommits({
-            owner,
-            repo,
-            pull_number: pr.number,
-            per_page: 100,
-          })
+          const allPrCommitsData: Array<{
+            sha: string
+            author: string
+            authorDate: string
+            messageFirstLine: string
+          }> = []
+          let prCommitsPage = 1
 
-          prCommits = prCommitsResponse.data.map((c) => ({
-            sha: c.sha,
-            author: (c.commit.author?.name || c.author?.login || 'unknown').toLowerCase(),
-            authorDate: c.commit.author?.date || '',
-            messageFirstLine: c.commit.message.split('\n')[0].trim(),
-          }))
+          while (true) {
+            const prCommitsResponse = await client.pulls.listCommits({
+              owner,
+              repo,
+              pull_number: pr.number,
+              per_page: 100,
+              page: prCommitsPage,
+            })
 
+            for (const c of prCommitsResponse.data) {
+              allPrCommitsData.push({
+                sha: c.sha,
+                author: (c.commit.author?.name || c.author?.login || 'unknown').toLowerCase(),
+                authorDate: c.commit.author?.date || '',
+                messageFirstLine: c.commit.message.split('\n')[0].trim(),
+              })
+            }
+
+            if (prCommitsResponse.data.length < 100) {
+              break
+            }
+            prCommitsPage++
+          }
+
+          prCommits = allPrCommitsData
           prCommitsMetadataCache.set(cacheKey, prCommits)
         } catch (err) {
           console.warn(`   Could not fetch commits for PR #${pr.number}:`, err)
@@ -556,14 +606,34 @@ export async function getPullRequestCommits(
 ): Promise<PullRequestCommit[]> {
   const client = getGitHubClient()
 
-  const response = await client.pulls.listCommits({
-    owner,
-    repo,
-    pull_number,
-    per_page: 100,
-  })
+  // Use pagination to get all commits (PRs can have more than 100 commits)
+  const allCommits: PullRequestCommit[] = []
+  let page = 1
+  const perPage = 100
 
-  return response.data as PullRequestCommit[]
+  console.log(`   📄 Fetching commits for PR #${pull_number} (paginated)...`)
+
+  while (true) {
+    const response = await client.pulls.listCommits({
+      owner,
+      repo,
+      pull_number,
+      per_page: perPage,
+      page,
+    })
+
+    allCommits.push(...(response.data as PullRequestCommit[]))
+    console.log(`      Page ${page}: ${response.data.length} commits (total: ${allCommits.length})`)
+
+    // If we got fewer than perPage, we've reached the end
+    if (response.data.length < perPage) {
+      break
+    }
+
+    page++
+  }
+
+  return allCommits
 }
 
 /**
@@ -784,7 +854,8 @@ export async function getDetailedPullRequestInfo(
       pull_number,
     })
 
-    // Group reviews by user (latest review per user)
+    // Group reviews by user - prioritize APPROVED state, then latest timestamp
+    // This ensures a later COMMENTED review doesn't overwrite an earlier APPROVED
     const reviewsByUser = new Map<
       string,
       { username: string; avatar_url: string; state: string; submitted_at: string }
@@ -802,8 +873,24 @@ export async function getDetailedPullRequestInfo(
     for (const review of reviewsResponse.data) {
       if (review.user && review.submitted_at) {
         const existing = reviewsByUser.get(review.user.login)
-        // Keep the latest review from each user
-        if (!existing || new Date(review.submitted_at) > new Date(existing.submitted_at)) {
+
+        // Determine if we should update the stored review
+        let shouldUpdate = false
+        if (!existing) {
+          shouldUpdate = true
+        } else if (review.state === 'APPROVED' && existing.state !== 'APPROVED') {
+          // New review is APPROVED but existing is not - always prefer APPROVED
+          shouldUpdate = true
+        } else if (review.state === 'APPROVED' && existing.state === 'APPROVED') {
+          // Both are APPROVED - keep the latest one
+          shouldUpdate = new Date(review.submitted_at) > new Date(existing.submitted_at)
+        } else if (review.state !== 'APPROVED' && existing.state !== 'APPROVED') {
+          // Neither is APPROVED - keep the latest one
+          shouldUpdate = new Date(review.submitted_at) > new Date(existing.submitted_at)
+        }
+        // If existing is APPROVED and new is not, don't update (shouldUpdate stays false)
+
+        if (shouldUpdate) {
           reviewsByUser.set(review.user.login, {
             username: review.user.login,
             avatar_url: review.user.avatar_url,
@@ -867,15 +954,28 @@ export async function getDetailedPullRequestInfo(
       console.warn('Could not fetch check runs:', error)
     }
 
-    // Fetch commits
-    const commitsResponse = await client.pulls.listCommits({
-      owner,
-      repo,
-      pull_number,
-      per_page: 100,
-    })
+    // Fetch commits (with pagination for PRs with 100+ commits)
+    let allCommitsData: Awaited<ReturnType<typeof client.pulls.listCommits>>['data'] = []
+    let commitsPage = 1
 
-    const commits = commitsResponse.data.map((commit) => ({
+    while (true) {
+      const commitsResponse = await client.pulls.listCommits({
+        owner,
+        repo,
+        pull_number,
+        per_page: 100,
+        page: commitsPage,
+      })
+
+      allCommitsData = allCommitsData.concat(commitsResponse.data)
+
+      if (commitsResponse.data.length < 100) {
+        break
+      }
+      commitsPage++
+    }
+
+    const commits = allCommitsData.map((commit) => ({
       sha: commit.sha,
       message: commit.commit.message,
       author: {
