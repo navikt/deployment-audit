@@ -6,6 +6,7 @@ const STORAGE_KEY = 'pensjon-deployment-audit-theme'
 
 interface ThemeContextType {
   theme: ThemeValue
+  setTheme: (theme: ThemeValue) => void
   toggleTheme: () => void
   isLoaded: boolean
 }
@@ -25,13 +26,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setIsLoaded(true)
   }, [])
 
-  const toggleTheme = useCallback(() => {
-    const newTheme = theme === 'light' ? 'dark' : 'light'
+  const setTheme = useCallback((newTheme: ThemeValue) => {
     setThemeState(newTheme)
     localStorage.setItem(STORAGE_KEY, newTheme)
-  }, [theme])
+  }, [])
 
-  return <ThemeContext.Provider value={{ theme, toggleTheme, isLoaded }}>{children}</ThemeContext.Provider>
+  const toggleTheme = useCallback(() => {
+    const newTheme = theme === 'light' ? 'dark' : 'light'
+    setTheme(newTheme)
+  }, [theme, setTheme])
+
+  return <ThemeContext.Provider value={{ theme, setTheme, toggleTheme, isLoaded }}>{children}</ThemeContext.Provider>
 }
 
 export function useTheme() {

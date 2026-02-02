@@ -1,16 +1,39 @@
-import { MenuHamburgerIcon, MoonIcon, SunIcon } from '@navikt/aksel-icons'
-import { ActionMenu, Hide, InternalHeader, Show, Spacer } from '@navikt/ds-react'
+import { ChevronDownIcon, MenuHamburgerIcon, MoonIcon, SunIcon } from '@navikt/aksel-icons'
+import { ActionMenu, BodyShort, Detail, Hide, InternalHeader, Show, Spacer } from '@navikt/ds-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router'
 import { Breadcrumbs } from '~/components/Breadcrumbs'
 import { SearchDialog } from '~/components/SearchDialog'
+import { getUserMappingByNavIdent } from '~/db/user-mappings.server'
 import { useTheme } from '~/hooks/useTheme'
+import { getUserIdentity } from '~/lib/auth.server'
 import styles from '../styles/common.module.css'
+import type { Route } from './+types/layout'
 
-export default function Layout() {
+export async function loader({ request }: Route.LoaderArgs) {
+  const identity = getUserIdentity(request)
+
+  if (!identity) {
+    return { user: null }
+  }
+
+  // Try to get display name from user mappings
+  const userMapping = await getUserMappingByNavIdent(identity.navIdent)
+
+  return {
+    user: {
+      navIdent: identity.navIdent,
+      displayName: userMapping?.display_name || identity.name || identity.navIdent,
+      email: userMapping?.nav_email || identity.email || null,
+    },
+  }
+}
+
+export default function Layout({ loaderData }: Route.ComponentProps) {
+  const { user } = loaderData
   const location = useLocation()
   const navigate = useNavigate()
-  const { theme, toggleTheme } = useTheme()
+  const { theme, setTheme } = useTheme()
   const [_searchQuery, setSearchQuery] = useState('')
 
   const isActive = (path: string) => {
@@ -90,13 +113,60 @@ export default function Layout() {
           </Show>
         ))}
 
-        <InternalHeader.Button onClick={toggleTheme}>
-          {theme === 'light' ? (
-            <MoonIcon title="Bytt til mørkt tema" style={{ fontSize: '1.5rem' }} />
-          ) : (
-            <SunIcon title="Bytt til lyst tema" style={{ fontSize: '1.5rem' }} />
-          )}
-        </InternalHeader.Button>
+        {/* User menu */}
+        {user ? (
+          <ActionMenu>
+            <ActionMenu.Trigger>
+              <InternalHeader.Button
+                style={{
+                  paddingRight: 'var(--ax-space-16)',
+                  paddingLeft: 'var(--ax-space-16)',
+                  gap: 'var(--ax-space-8)',
+                }}
+              >
+                <BodyShort size="small">{user.displayName}</BodyShort>
+                <ChevronDownIcon title="Brukermeny" />
+              </InternalHeader.Button>
+            </ActionMenu.Trigger>
+            <ActionMenu.Content align="end">
+              <ActionMenu.Label>
+                <dl style={{ margin: 0 }}>
+                  <BodyShort as="dt" size="small" weight="semibold">
+                    {user.displayName}
+                  </BodyShort>
+                  <Detail as="dd" style={{ margin: 0 }}>
+                    {user.navIdent}
+                  </Detail>
+                </dl>
+              </ActionMenu.Label>
+              <ActionMenu.Divider />
+              <ActionMenu.Group label="Tema">
+                <ActionMenu.Item
+                  onSelect={() => setTheme('light')}
+                  disabled={theme === 'light'}
+                  icon={<SunIcon aria-hidden style={{ fontSize: '1.5rem' }} />}
+                >
+                  Lyst tema
+                </ActionMenu.Item>
+                <ActionMenu.Item
+                  onSelect={() => setTheme('dark')}
+                  disabled={theme === 'dark'}
+                  icon={<MoonIcon aria-hidden style={{ fontSize: '1.5rem' }} />}
+                >
+                  Mørkt tema
+                </ActionMenu.Item>
+              </ActionMenu.Group>
+            </ActionMenu.Content>
+          </ActionMenu>
+        ) : (
+          <InternalHeader.Button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>
+            {theme === 'light' ? (
+              <MoonIcon title="Bytt til mørkt tema" style={{ fontSize: '1.5rem' }} />
+            ) : (
+              <SunIcon title="Bytt til lyst tema" style={{ fontSize: '1.5rem' }} />
+            )}
+          </InternalHeader.Button>
+        )}
       </InternalHeader>
 
       <Breadcrumbs />

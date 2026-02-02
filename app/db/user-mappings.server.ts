@@ -165,3 +165,11 @@ export async function getUnmappedUsers(): Promise<{ github_username: string; dep
 export function clearUserMappingCache(): void {
   userMappingCache.clear()
 }
+
+/**
+ * Get user mapping by NAV-ident
+ */
+export async function getUserMappingByNavIdent(navIdent: string): Promise<UserMapping | null> {
+  const result = await pool.query('SELECT * FROM user_mappings WHERE UPPER(nav_ident) = UPPER($1)', [navIdent])
+  return result.rows[0] || null
+}
