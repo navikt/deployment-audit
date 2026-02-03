@@ -24,6 +24,7 @@ import {
   updateDeploymentFourEyes,
 } from '~/db/deployments.server'
 import { getMonitoredApplication } from '~/db/monitored-applications.server'
+import { isBaseBranchMergeCommit, shouldApproveWithBaseMerge } from '~/lib/base-branch-merge'
 import {
   clearPrCommitsCache,
   clearPrCommitsMetadataCache,
@@ -44,36 +45,56 @@ import { fetchApplicationDeployments, fetchNewDeployments } from '~/lib/nais.ser
 function verifyFourEyesFromPrData(prData: {
   creator?: { username: string }
   reviewers?: Array<{ username: string; state: string; submitted_at: string }>
-  commits?: Array<{ sha: string; date: string }>
+  commits?: Array<{ sha: string; date: string; message?: string }>
+  base_branch?: string
 }): { hasFourEyes: boolean; reason: string } {
   const reviewers = prData.reviewers || []
   const commits = prData.commits || []
+  const baseBranch = prData.base_branch || 'main'
 
   if (commits.length === 0) {
     return { hasFourEyes: false, reason: 'No commits found in PR' }
   }
 
-  // Get the timestamp of the last commit
-  const lastCommit = commits[commits.length - 1]
-  const lastCommitDate = new Date(lastCommit.date)
+  // Find the last "real" commit - ignore merge commits that bring base branch into feature branch
+  // These are commits like "Merge branch 'main' into feature/..."
+  let lastRealCommit = commits[commits.length - 1]
+  let lastRealCommitIndex = commits.length - 1
 
-  // Find approved reviews that came after the last commit
+  // Walk backwards to find the last non-base-merge commit
+  for (let i = commits.length - 1; i >= 0; i--) {
+    const commit = commits[i]
+    if (commit.message && !isBaseBranchMergeCommit(commit.message, baseBranch)) {
+      lastRealCommit = commit
+      lastRealCommitIndex = i
+      break
+    }
+  }
+
+  const lastRealCommitDate = new Date(lastRealCommit.date)
+
+  // Find approved reviews that came after the last real commit
+  // (ignoring base-branch merge commits that were added after approval)
   const approvedReviewsAfterLastCommit = reviewers.filter((review) => {
     if (review.state !== 'APPROVED' || !review.submitted_at) {
       return false
     }
     const reviewDate = new Date(review.submitted_at)
-    return reviewDate > lastCommitDate
+    return reviewDate > lastRealCommitDate
   })
 
   if (approvedReviewsAfterLastCommit.length > 0) {
+    const reason =
+      lastRealCommitIndex < commits.length - 1
+        ? `Approved by ${approvedReviewsAfterLastCommit[0].username} (after ignoring ${commits.length - 1 - lastRealCommitIndex} base-merge commit(s))`
+        : `Approved by ${approvedReviewsAfterLastCommit[0].username} after last commit`
     return {
       hasFourEyes: true,
-      reason: `Approved by ${approvedReviewsAfterLastCommit[0].username} after last commit`,
+      reason,
     }
   }
 
-  // No approved reviews after last commit
+  // No approved reviews after last real commit
   const approvedReviews = reviewers.filter((r) => r.state === 'APPROVED')
   if (approvedReviews.length === 0) {
     return { hasFourEyes: false, reason: 'No approved reviews found' }
@@ -820,6 +841,44 @@ export async function verifyDeploymentFourEyes(
         title: deployedPrData?.title || null,
       })
       return true
+    }
+
+    // Check if unverified commits are from base branch (main) merged into feature branch
+    // In this case, if the deployed PR is approved, we should accept it
+    if (deployedPrData && unverifiedCommits.length > 0) {
+      const reviews = deployedPrData.reviewers || []
+      const prCommits = deployedPrData.commits || []
+
+      const baseMergeResult = shouldApproveWithBaseMerge(
+        reviews.map((r: { state: string }) => ({ state: r.state })),
+        unverifiedCommits.map((c) => ({
+          sha: c.sha,
+          message: c.message,
+          date: c.date,
+        })),
+        prCommits.map((c: { sha: string; message: string; author_date?: string }) => ({
+          sha: c.sha,
+          message: c.message,
+          date: c.author_date,
+        })),
+        deployedPrData.base_branch,
+      )
+
+      if (baseMergeResult.approved) {
+        console.log(`✅ [Deployment ${deploymentId}] Approved via base branch merge: ${baseMergeResult.reason}`)
+        await updateDeploymentFourEyes(deploymentId, {
+          hasFourEyes: true,
+          fourEyesStatus: 'approved',
+          githubPrNumber: deployedPrNumber,
+          githubPrUrl: deployedPrUrl,
+          githubPrData: {
+            ...deployedPrData,
+            base_merge_approval_reason: baseMergeResult.reason,
+          },
+          title: deployedPrData?.title || null,
+        })
+        return true
+      }
     }
 
     // No standard approval - check for implicit approval
