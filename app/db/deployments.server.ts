@@ -751,7 +751,7 @@ export async function getAppDeploymentStats(
   let sql = `SELECT 
       COUNT(*) as total,
       SUM(CASE WHEN has_four_eyes = true THEN 1 ELSE 0 END) as with_four_eyes,
-      SUM(CASE WHEN has_four_eyes = false THEN 1 ELSE 0 END) as without_four_eyes,
+      SUM(CASE WHEN has_four_eyes = false OR four_eyes_status IN ('legacy_pending', 'pending_baseline') THEN 1 ELSE 0 END) as without_four_eyes,
       SUM(CASE WHEN four_eyes_status = 'pending' THEN 1 ELSE 0 END) as pending_verification,
       MAX(created_at) as last_deployment,
       (SELECT id FROM deployments WHERE monitored_app_id = $1 ORDER BY created_at DESC LIMIT 1) as last_deployment_id
