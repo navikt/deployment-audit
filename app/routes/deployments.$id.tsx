@@ -109,6 +109,46 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   if (deployment.deployer_username) usernames.push(deployment.deployer_username)
   if (deployment.github_pr_data?.creator?.username) usernames.push(deployment.github_pr_data.creator.username)
   if (deployment.github_pr_data?.merger?.username) usernames.push(deployment.github_pr_data.merger.username)
+  // Include assignees
+  if (deployment.github_pr_data?.assignees) {
+    for (const assignee of deployment.github_pr_data.assignees) {
+      if (assignee.username && !usernames.includes(assignee.username)) {
+        usernames.push(assignee.username)
+      }
+    }
+  }
+  // Include reviewers
+  if (deployment.github_pr_data?.reviewers) {
+    for (const reviewer of deployment.github_pr_data.reviewers) {
+      if (reviewer.username && !usernames.includes(reviewer.username)) {
+        usernames.push(reviewer.username)
+      }
+    }
+  }
+  // Include requested reviewers
+  if (deployment.github_pr_data?.requested_reviewers) {
+    for (const reviewer of deployment.github_pr_data.requested_reviewers) {
+      if (reviewer.username && !usernames.includes(reviewer.username)) {
+        usernames.push(reviewer.username)
+      }
+    }
+  }
+  // Include PR commits authors
+  if (deployment.github_pr_data?.commits) {
+    for (const commit of deployment.github_pr_data.commits) {
+      if (commit.author?.username && !usernames.includes(commit.author.username)) {
+        usernames.push(commit.author.username)
+      }
+    }
+  }
+  // Include PR comments authors
+  if (deployment.github_pr_data?.comments) {
+    for (const comment of deployment.github_pr_data.comments) {
+      if (comment.user?.username && !usernames.includes(comment.user.username)) {
+        usernames.push(comment.user.username)
+      }
+    }
+  }
   // Include unverified commit authors
   if (deployment.unverified_commits) {
     for (const commit of deployment.unverified_commits) {
@@ -1229,7 +1269,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                 <HStack gap="space-8" wrap>
                   {deployment.github_pr_data.assignees.map((a) => (
                     <Tag data-color="neutral" key={a.username} variant="outline" size="small">
-                      {a.username}
+                      {getUserDisplay(a.username) || a.username}
                     </Tag>
                   ))}
                 </HStack>
@@ -1278,7 +1318,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                         <ChatIcon aria-hidden style={{ color: 'var(--ax-text-neutral-subtle)' }} />
                       )}
                       <a href={`https://github.com/${reviewer.username}`} target="_blank" rel="noopener noreferrer">
-                        {reviewer.username}
+                        {getUserDisplay(reviewer.username) || reviewer.username}
                       </a>
                       <span style={{ color: 'var(--ax-text-neutral-subtle)' }}>
                         {new Date(reviewer.submitted_at).toLocaleString('no-NO', {
@@ -1294,7 +1334,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                     <HStack key={`pending:${r.username}`} gap="space-8" align="center">
                       <CircleIcon aria-hidden style={{ color: 'var(--ax-text-warning)' }} />
                       <a href={`https://github.com/${r.username}`} target="_blank" rel="noopener noreferrer">
-                        {r.username}
+                        {getUserDisplay(r.username) || r.username}
                       </a>
                     </HStack>
                   ))}
@@ -1378,7 +1418,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                       {commit.author.avatar_url && (
                         <img
                           src={commit.author.avatar_url}
-                          alt={commit.author.username}
+                          alt={getUserDisplay(commit.author.username) || commit.author.username}
                           style={{
                             width: '32px',
                             height: '32px',
@@ -1397,7 +1437,9 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                           >
                             {commit.sha.substring(0, 7)}
                           </a>
-                          <span style={{ color: 'var(--ax-text-neutral-subtle)' }}>{commit.author.username}</span>
+                          <span style={{ color: 'var(--ax-text-neutral-subtle)' }}>
+                            {getUserDisplay(commit.author.username) || commit.author.username}
+                          </span>
                           <span style={{ color: 'var(--ax-text-neutral-subtle)' }}>
                             {new Date(commit.date).toLocaleString('no-NO', {
                               dateStyle: 'short',
@@ -1425,7 +1467,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                       {comment.user.avatar_url && (
                         <img
                           src={comment.user.avatar_url}
-                          alt={comment.user.username}
+                          alt={getUserDisplay(comment.user.username) || comment.user.username}
                           style={{
                             width: '32px',
                             height: '32px',
@@ -1441,7 +1483,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                             target="_blank"
                             rel="noopener noreferrer"
                           >
-                            {comment.user.username}
+                            {getUserDisplay(comment.user.username) || comment.user.username}
                           </a>
                           <span style={{ color: 'var(--ax-text-neutral-subtle)' }}>
                             {new Date(comment.created_at).toLocaleString('no-NO', {
