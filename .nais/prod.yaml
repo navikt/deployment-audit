@@ -64,6 +64,8 @@ spec:
   env:
     - name: NODE_ENV
       value: production
+    - name: TZ
+      value: Europe/Oslo
     - name: NAIS_GRAPHQL_URL
       value: https://console.nav.cloud.nais.io/graphql
     - name: ENABLE_PERIODIC_SYNC
