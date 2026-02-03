@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { Document, Font, Link, Page, renderToBuffer, StyleSheet, Text, View } from '@react-pdf/renderer'
-import type { AuditReportData, ContributorEntry, ManualApprovalEntry, ReviewerEntry } from '~/db/audit-reports.server'
+import type { AuditReportData, ManualApprovalEntry } from '~/db/audit-reports.server'
 
 // Register fonts from local files (downloaded during Docker build)
 // In production: /app/fonts/
@@ -287,7 +287,6 @@ function AuditReportPdfDocument(props: AuditReportPdfProps) {
     repository,
     teamSlug,
     environmentName,
-    year,
     periodStart,
     periodEnd,
     reportData,
