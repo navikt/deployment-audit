@@ -218,7 +218,8 @@ export async function getAuditReportData(
     registered_by: string
   }>
   reviewer_counts: Map<string, number>
-  user_mappings: Map<string, { display_name: string | null; nav_ident: string | null }>
+  user_mappings: Map<string, { display_name: string | null; nav_ident: string | null; github_username: string }>
+  canonical_map: Map<string, string>
 }> {
   const startDate = new Date(year, 0, 1)
   const endDate = new Date(year, 11, 31, 23, 59, 59, 999)
@@ -330,46 +331,75 @@ export async function getAuditReportData(
   }
 
   // Get user mappings for all deployers and reviewers
-  const usernames = new Set<string>()
+  // Collect all identifiers (could be github usernames or nav-idents)
+  const identifiers = new Set<string>()
   for (const d of deployments) {
-    if (d.deployer_username) usernames.add(d.deployer_username)
-    if (d.approved_by_username) usernames.add(d.approved_by_username)
+    if (d.deployer_username) identifiers.add(d.deployer_username)
+    if (d.approved_by_username) identifiers.add(d.approved_by_username)
   }
   for (const a of manual_approvals) {
-    if (a.approved_by) usernames.add(a.approved_by)
+    if (a.approved_by) identifiers.add(a.approved_by)
   }
   for (const l of legacy_infos) {
-    if (l.registered_by) usernames.add(l.registered_by)
+    if (l.registered_by) identifiers.add(l.registered_by)
   }
   // Add reviewer usernames from aggregated counts
   for (const username of reviewer_counts.keys()) {
-    usernames.add(username)
+    identifiers.add(username)
   }
 
-  const user_mappings = new Map<string, { display_name: string | null; nav_ident: string | null }>()
-  if (usernames.size > 0) {
+  // Fetch mappings where identifier matches github_username OR nav_ident
+  const user_mappings = new Map<
+    string,
+    { display_name: string | null; nav_ident: string | null; github_username: string }
+  >()
+  // Maps any identifier (github_username or nav_ident) to canonical github_username
+  const canonical_map = new Map<string, string>()
+
+  if (identifiers.size > 0) {
+    const identifierArray = Array.from(identifiers)
     const mappingsResult = await pool.query(
-      `SELECT github_username, display_name, nav_ident FROM user_mappings WHERE github_username = ANY($1)`,
-      [Array.from(usernames)],
+      `SELECT github_username, display_name, nav_ident 
+       FROM user_mappings 
+       WHERE github_username = ANY($1) OR nav_ident = ANY($1)`,
+      [identifierArray],
     )
     for (const row of mappingsResult.rows) {
       user_mappings.set(row.github_username, {
         display_name: row.display_name,
         nav_ident: row.nav_ident,
+        github_username: row.github_username,
       })
+      // Map both github_username and nav_ident to the canonical github_username
+      canonical_map.set(row.github_username, row.github_username)
+      if (row.nav_ident) {
+        canonical_map.set(row.nav_ident, row.github_username)
+      }
     }
   }
 
-  return { app, repository, deployments, manual_approvals, legacy_infos, reviewer_counts, user_mappings }
+  return { app, repository, deployments, manual_approvals, legacy_infos, reviewer_counts, user_mappings, canonical_map }
 }
 
 /**
  * Build the structured report data from raw data
  */
 export function buildReportData(rawData: Awaited<ReturnType<typeof getAuditReportData>>): AuditReportData {
-  const { deployments, manual_approvals, legacy_infos, reviewer_counts, user_mappings } = rawData
+  const { deployments, manual_approvals, legacy_infos, reviewer_counts, user_mappings, canonical_map } = rawData
   const manualApprovalMap = new Map(manual_approvals.map((a) => [a.deployment_id, a]))
   const legacyInfoMap = new Map(legacy_infos.map((l) => [l.deployment_id, l]))
+
+  // Helper to get display name for any identifier (github username or nav-ident)
+  const getDisplayName = (identifier: string | null | undefined): string | undefined => {
+    if (!identifier) return undefined
+    const canonical = canonical_map.get(identifier) || identifier
+    return user_mappings.get(canonical)?.display_name || undefined
+  }
+
+  // Helper to get canonical username for aggregation
+  const getCanonical = (identifier: string): string => {
+    return canonical_map.get(identifier) || identifier
+  }
 
   // Build deployments list
   const deploymentEntries: AuditDeploymentEntry[] = deployments.map((d) => {
@@ -403,10 +433,9 @@ export function buildReportData(rawData: Awaited<ReturnType<typeof getAuditRepor
       commit_sha: d.commit_sha || '',
       method,
       deployer: d.deployer_username || '',
-      deployer_display_name: user_mappings.get(d.deployer_username || '')?.display_name || undefined,
+      deployer_display_name: getDisplayName(d.deployer_username),
       approver,
-      approver_display_name:
-        approver && approver !== 'Legacy' ? user_mappings.get(approver)?.display_name || undefined : undefined,
+      approver_display_name: approver && approver !== 'Legacy' ? getDisplayName(approver) : undefined,
       pr_number: d.github_pr_number || undefined,
       pr_url: d.github_pr_url || undefined,
       slack_link: manualApproval?.slack_link || undefined,
@@ -434,23 +463,24 @@ export function buildReportData(rawData: Awaited<ReturnType<typeof getAuditRepor
       date: deployment?.created_at.toISOString() || '',
       commit_sha: deployment?.commit_sha || '',
       deployer: deployment?.deployer_username || '',
-      deployer_display_name: user_mappings.get(deployment?.deployer_username || '')?.display_name || undefined,
+      deployer_display_name: getDisplayName(deployment?.deployer_username),
       reason,
       registered_by: legacyInfo?.registered_by || '',
-      registered_by_display_name: user_mappings.get(legacyInfo?.registered_by || '')?.display_name || undefined,
+      registered_by_display_name: getDisplayName(legacyInfo?.registered_by),
       approved_by: a.approved_by,
-      approved_by_display_name: user_mappings.get(a.approved_by)?.display_name || undefined,
+      approved_by_display_name: getDisplayName(a.approved_by),
       approved_at: a.approved_at.toISOString(),
       slack_link: a.slack_link,
       comment: a.comment_text,
     }
   })
 
-  // Build contributors list
+  // Build contributors list - use canonical username for aggregation
   const contributorCounts = new Map<string, number>()
   for (const d of deployments) {
     if (d.deployer_username) {
-      contributorCounts.set(d.deployer_username, (contributorCounts.get(d.deployer_username) || 0) + 1)
+      const canonical = getCanonical(d.deployer_username)
+      contributorCounts.set(canonical, (contributorCounts.get(canonical) || 0) + 1)
     }
   }
   const contributors: ContributorEntry[] = Array.from(contributorCounts.entries())
@@ -462,12 +492,19 @@ export function buildReportData(rawData: Awaited<ReturnType<typeof getAuditRepor
     }))
     .sort((a, b) => b.deployment_count - a.deployment_count)
 
-  // Build reviewers list - now using pre-aggregated reviewer_counts from SQL
-  // Also add manual approvers
-  const combinedReviewerCounts = new Map(reviewer_counts)
+  // Build reviewers list - use canonical username for aggregation
+  // Merge reviewers from PR reviews and manual approvals
+  const combinedReviewerCounts = new Map<string, number>()
+  // Add PR reviewers (use canonical)
+  for (const [username, count] of reviewer_counts) {
+    const canonical = getCanonical(username)
+    combinedReviewerCounts.set(canonical, (combinedReviewerCounts.get(canonical) || 0) + count)
+  }
+  // Add manual approvers (use canonical)
   for (const a of manual_approvals) {
     if (a.approved_by) {
-      combinedReviewerCounts.set(a.approved_by, (combinedReviewerCounts.get(a.approved_by) || 0) + 1)
+      const canonical = getCanonical(a.approved_by)
+      combinedReviewerCounts.set(canonical, (combinedReviewerCounts.get(canonical) || 0) + 1)
     }
   }
   const reviewers: ReviewerEntry[] = Array.from(combinedReviewerCounts.entries())

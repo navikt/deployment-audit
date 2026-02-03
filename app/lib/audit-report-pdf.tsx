@@ -405,9 +405,9 @@ function AuditReportPdfDocument(props: AuditReportPdfProps) {
           </View>
         </View>
 
-        {/* Notice for 2025 reports about data quality issues */}
+        {/* Notice for 2025 reports about data quality issues - on new page */}
         {year === 2025 && (
-          <View style={styles.noticeBox}>
+          <View style={styles.noticeBox} break>
             <Text style={styles.noticeTitle}>Merknad om datakvalitet for januar og februar 2025</Text>
             <Text style={styles.noticeText}>
               Nais-API-et inneholdt ikke commit-SHA for deployments i januar og enkelte dager i februar. Disse
