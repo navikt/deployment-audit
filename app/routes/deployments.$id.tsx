@@ -840,6 +840,8 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                 'unverified_commits',
                 'pr_not_approved',
                 'approved_pr_with_unreviewed',
+                'baseline',
+                'no_changes',
               ].includes(deployment.four_eyes_status) && (
                 <Form method="post" style={{ display: 'inline' }}>
                   <input type="hidden" name="intent" value="verify_four_eyes" />
