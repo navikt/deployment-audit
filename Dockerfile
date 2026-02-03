@@ -18,6 +18,14 @@ RUN npm run build
 # Compile TypeScript startup script to JavaScript
 RUN npx tsc scripts/start-prod.ts --outDir scripts --module nodenext --moduleResolution nodenext --target es2022
 
+# Download fonts for PDF generation (react-pdf requires TTF format)
+RUN mkdir -p /app/fonts && \
+    apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && \
+    curl -sL "https://github.com/adobe-fonts/source-sans/raw/release/TTF/SourceSans3-Regular.ttf" -o /app/fonts/source-sans-3-regular.ttf && \
+    curl -sL "https://github.com/adobe-fonts/source-sans/raw/release/TTF/SourceSans3-It.ttf" -o /app/fonts/source-sans-3-italic.ttf && \
+    curl -sL "https://github.com/adobe-fonts/source-sans/raw/release/TTF/SourceSans3-Semibold.ttf" -o /app/fonts/source-sans-3-semibold.ttf && \
+    apt-get remove -y curl && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+
 # Production dependencies only
 FROM node:24-bookworm-slim AS prod-deps
 
@@ -39,6 +47,9 @@ COPY --from=prod-deps /app/node_modules ./node_modules
 
 # Copy built application
 COPY --from=builder /app/build ./build
+
+# Copy fonts for PDF generation
+COPY --from=builder /app/fonts ./fonts
 
 # Copy migration files and config
 COPY --from=builder /app/app/db/migrations ./app/db/migrations

@@ -1,21 +1,32 @@
+import { join } from 'node:path'
 import { Document, Font, Link, Page, renderToBuffer, StyleSheet, Text, View } from '@react-pdf/renderer'
 import type { AuditReportData, ContributorEntry, ManualApprovalEntry, ReviewerEntry } from '~/db/audit-reports.server'
 
-// Register a font that supports Norwegian characters (using TTF format for compatibility)
+// Register fonts from local files (downloaded during Docker build)
+// In production: /app/fonts/
+// In development: use CDN fallback
+const fontBasePath = process.env.NODE_ENV === 'production' ? join(process.cwd(), 'fonts') : null
+
 Font.register({
   family: 'Source Sans Pro',
   fonts: [
     {
-      src: 'https://cdn.jsdelivr.net/fontsource/fonts/source-sans-pro@latest/latin-400-normal.ttf',
+      src: fontBasePath
+        ? join(fontBasePath, 'source-sans-3-regular.ttf')
+        : 'https://cdn.jsdelivr.net/fontsource/fonts/source-sans-pro@latest/latin-400-normal.ttf',
       fontWeight: 400,
     },
     {
-      src: 'https://cdn.jsdelivr.net/fontsource/fonts/source-sans-pro@latest/latin-400-italic.ttf',
+      src: fontBasePath
+        ? join(fontBasePath, 'source-sans-3-italic.ttf')
+        : 'https://cdn.jsdelivr.net/fontsource/fonts/source-sans-pro@latest/latin-400-italic.ttf',
       fontWeight: 400,
       fontStyle: 'italic',
     },
     {
-      src: 'https://cdn.jsdelivr.net/fontsource/fonts/source-sans-pro@latest/latin-600-normal.ttf',
+      src: fontBasePath
+        ? join(fontBasePath, 'source-sans-3-semibold.ttf')
+        : 'https://cdn.jsdelivr.net/fontsource/fonts/source-sans-pro@latest/latin-600-normal.ttf',
       fontWeight: 600,
     },
   ],

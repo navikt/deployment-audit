@@ -22,6 +22,7 @@
     "prepare": "lefthook install"
   },
   "dependencies": {
+    "@fontsource/source-sans-pro": "^5.2.5",
     "@navikt/aksel-icons": "^8.1.0",
     "@navikt/ds-css": "^8.1.0",
     "@navikt/ds-react": "^8.1.0",
