@@ -49,9 +49,9 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
 
   const result = await getDeploymentsPaginated(filters)
 
-  // Redirect to page 1 if requested page exceeds total pages
+  // Redirect to last valid page if requested page exceeds total pages
   if (page > result.total_pages && result.total_pages > 0) {
-    url.searchParams.set('page', '1')
+    url.searchParams.set('page', String(result.total_pages))
     throw redirect(url.pathname + url.search)
   }
 
