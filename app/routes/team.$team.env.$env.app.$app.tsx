@@ -338,7 +338,7 @@ export default function AppDetail() {
           <VStack gap="space-20">
             <HStack justify="space-between" align="center" wrap>
               <Heading size="medium">
-                <FileTextIcon aria-hidden /> Revisjonsbevis
+                <FileTextIcon aria-hidden /> Leveranserapport
               </Heading>
               <Button as={Link} to="/admin/audit-reports" variant="tertiary" size="small">
                 Administrer
@@ -362,7 +362,7 @@ export default function AppDetail() {
                       )}
                       <BodyShort weight="semibold">
                         {new Date().getFullYear()}:{' '}
-                        {currentYearReadiness.is_ready ? 'Klar for revisjonsbevis' : 'Ikke klar'}
+                        {currentYearReadiness.is_ready ? 'Klar for leveranserapport' : 'Ikke klar'}
                       </BodyShort>
                     </HStack>
                     <Detail>
@@ -374,7 +374,7 @@ export default function AppDetail() {
                   </VStack>
                   {currentYearReadiness.is_ready && (
                     <Button as={Link} to="/admin/audit-reports" size="small" variant="primary">
-                      Generer revisjonsbevis
+                      Generer leveranserapport
                     </Button>
                   )}
                 </HStack>
@@ -384,9 +384,10 @@ export default function AppDetail() {
             {/* Existing reports */}
             {auditReports.length > 0 ? (
               <VStack gap="space-12">
-                <Label>{auditReports.length === 1 ? 'Utstedt revisjonsbevis' : 'Utstedte revisjonsbevis'}</Label>
+                <Label>{auditReports.length === 1 ? 'Utstedt leveranserapport' : 'Utstedte leveranserapport'}</Label>
                 <BodyShort size="small" textColor="subtle">
-                  Det kan kun finnes ett revisjonsbevis per år. Hver gang rapporten regenereres får den ny dokument-ID.
+                  Det kan kun finnes ett leveranserapport per år. Hver gang rapporten regenereres får den ny
+                  dokument-ID.
                 </BodyShort>
                 {auditReports.map((report) => (
                   <Box key={report.id} padding="space-16" borderRadius="8" background="sunken">
@@ -430,7 +431,7 @@ export default function AppDetail() {
                 ))}
               </VStack>
             ) : (
-              <BodyShort textColor="subtle">Ingen revisjonsbevis er generert for denne applikasjonen.</BodyShort>
+              <BodyShort textColor="subtle">Ingen leveranserapport er generert for denne applikasjonen.</BodyShort>
             )}
           </VStack>
         </Box>

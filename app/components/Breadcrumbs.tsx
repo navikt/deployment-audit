@@ -14,7 +14,7 @@ const breadcrumbConfig: Record<string, BreadcrumbConfig> = {
   '/admin': { label: 'Admin' },
   '/admin/users': { label: 'Brukermappinger' },
   '/admin/sync-jobs': { label: 'Sync Jobs' },
-  '/admin/audit-reports': { label: 'Revisjonsbevis' },
+  '/admin/audit-reports': { label: 'Leveranserapport' },
 }
 
 // Pattern-based config for dynamic routes

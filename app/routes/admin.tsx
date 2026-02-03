@@ -106,10 +106,10 @@ export default function AdminIndex() {
               <FileTextIcon fontSize="2rem" aria-hidden />
               <div>
                 <Heading size="small" spacing>
-                  Revisjonsbevis
+                  Leveranserapport
                 </Heading>
                 <BodyShort textColor="subtle">
-                  Generer revisjonsbevis for Riksrevisjonen som dokumenterer four-eyes-prinsippet.
+                  Generer leveranserapport for revisjon som dokumenterer four-eyes-prinsippet.
                 </BodyShort>
               </div>
             </VStack>

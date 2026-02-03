@@ -313,7 +313,7 @@ function AuditReportPdfDocument(props: AuditReportPdfProps) {
       {/* Page 1: Summary */}
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
-          <Text style={styles.title}>REVISJONSBEVIS</Text>
+          <Text style={styles.title}>LEVERANSERAPPORT</Text>
           <Text style={styles.subtitle}>Four-Eyes Principle Compliance Report</Text>
         </View>
 

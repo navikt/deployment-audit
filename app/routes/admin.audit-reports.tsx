@@ -153,10 +153,10 @@ export default function AdminAuditReports() {
     <VStack gap="space-24">
       <div>
         <Heading size="large" spacing>
-          Revisjonsbevis
+          Leveranserapport
         </Heading>
         <BodyShort textColor="subtle">
-          Generer revisjonsbevis for Riksrevisjonen som dokumenterer four-eyes-prinsippet for alle deployments.
+          Generer leveranserapport for revisjon som dokumenterer four-eyes-prinsippet for alle deployments.
         </BodyShort>
       </div>
 
@@ -164,7 +164,7 @@ export default function AdminAuditReports() {
 
       {actionData?.generated && (
         <Alert variant="success">
-          Revisjonsbevis generert! Dokument-ID: <strong>{actionData.generated.report_id}</strong>
+          Leveranserapport generert! Dokument-ID: <strong>{actionData.generated.report_id}</strong>
         </Alert>
       )}
 
@@ -173,12 +173,12 @@ export default function AdminAuditReports() {
         <VStack gap="space-16">
           <div>
             <Heading size="medium" spacing>
-              Generer revisjonsbevis
+              Generer leveranserapport
             </Heading>
             <BodyShort textColor="subtle">
-              Velg applikasjon og år for å sjekke status og generere revisjonsbevis. Det kan bare finnes ett
-              revisjonsbevis per applikasjon per år. Hvis et bevis allerede finnes, vil det bli oppdatert med ny data og
-              ny dokument-ID.
+              Velg applikasjon og år for å sjekke status og generere leveranserapport. Det kan bare finnes ett
+              leveranserapport per applikasjon per år. Hvis et bevis allerede finnes, vil det bli oppdatert med ny data
+              og ny dokument-ID.
             </BodyShort>
           </div>
 
@@ -249,7 +249,7 @@ export default function AdminAuditReports() {
                       {actionData.readiness.is_ready ? (
                         <>
                           <CheckmarkCircleIcon aria-hidden fontSize="1.5rem" />
-                          <Heading size="small">Klar for revisjonsbevis</Heading>
+                          <Heading size="small">Klar for leveranserapport</Heading>
                         </>
                       ) : (
                         <>
@@ -310,13 +310,13 @@ export default function AdminAuditReports() {
         <VStack gap="space-16">
           <div>
             <Heading size="medium" spacing>
-              Utstedte revisjonsbevis
+              Utstedte leveranserapport
             </Heading>
-            <BodyShort textColor="subtle">{reports.length} revisjonsbevis er generert.</BodyShort>
+            <BodyShort textColor="subtle">{reports.length} leveranserapport er generert.</BodyShort>
           </div>
 
           {reports.length === 0 ? (
-            <BodyShort textColor="subtle">Ingen revisjonsbevis er generert enda.</BodyShort>
+            <BodyShort textColor="subtle">Ingen leveranserapport er generert enda.</BodyShort>
           ) : (
             <>
               {/* Desktop table */}
