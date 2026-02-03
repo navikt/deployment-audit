@@ -615,6 +615,7 @@ export interface DeploymentNavFilters {
   commit_sha?: string
   start_date?: Date
   end_date?: Date
+  audit_start_year?: number | null
 }
 
 /**
@@ -670,6 +671,12 @@ function buildNavFilterConditions(
   if (filters.end_date) {
     conditions.push(`nav_dep.created_at <= $${idx}`)
     params.push(filters.end_date)
+    idx++
+  }
+
+  if (filters.audit_start_year) {
+    conditions.push(`EXTRACT(YEAR FROM nav_dep.created_at) >= $${idx}`)
+    params.push(filters.audit_start_year)
     idx++
   }
 

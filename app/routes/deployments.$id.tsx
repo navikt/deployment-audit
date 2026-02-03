@@ -95,6 +95,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     commit_sha: sha,
     start_date: range?.startDate,
     end_date: range?.endDate,
+    audit_start_year: app.audit_start_year,
   }
 
   const comments = await getCommentsByDeploymentId(deploymentId)
