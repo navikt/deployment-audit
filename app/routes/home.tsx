@@ -94,7 +94,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     <VStack gap="space-32">
       {/* Add app button */}
       <HStack justify="end">
-        <Button as={Link} to="/apps/discover" size="small" variant="secondary">
+        <Button as={Link} to="/apps/add" size="small" variant="secondary">
           Legg til applikasjon
         </Button>
       </HStack>

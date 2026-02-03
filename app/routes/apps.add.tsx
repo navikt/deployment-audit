@@ -4,10 +4,10 @@ import { Form, useNavigation } from 'react-router'
 import { upsertApplicationRepository } from '../db/application-repositories.server'
 import { createMonitoredApplication, getAllMonitoredApplications } from '../db/monitored-applications.server'
 import { fetchAllTeamsAndApplications, getApplicationInfo } from '../lib/nais.server'
-import type { Route } from './+types/apps.discover'
+import type { Route } from './+types/apps.add'
 
 export function meta(_args: Route.MetaArgs) {
-  return [{ title: 'Oppdag applikasjoner - Pensjon Deployment Audit' }]
+  return [{ title: 'Legg til applikasjon - Pensjon Deployment Audit' }]
 }
 
 export async function loader() {
@@ -124,14 +124,7 @@ export default function AppsDiscover({ loaderData, actionData }: Route.Component
 
   return (
     <VStack gap="space-32">
-      <div>
-        <Heading size="large" spacing>
-          Oppdag applikasjoner
-        </Heading>
-        <BodyShort textColor="subtle">
-          Søk etter team eller applikasjonsnavn. Søket filtrerer i sanntid blant alle tilgjengelige applikasjoner.
-        </BodyShort>
-      </div>
+      <Heading size="large">Legg til applikasjon</Heading>
 
       {actionData?.success && (
         <Alert variant="success" closeButton>
@@ -147,7 +140,7 @@ export default function AppsDiscover({ loaderData, actionData }: Route.Component
           <Box padding="space-20" borderRadius="8" background="sunken">
             <TextField
               label="Søk etter team eller applikasjon"
-              description={`Viser ${totalResults} applikasjoner fra ${totalTeams} team`}
+              description={searchQuery ? `Viser ${totalResults} treff fra ${totalTeams} team` : undefined}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="F.eks. pensjon, pen, rocket..."
@@ -227,12 +220,7 @@ export default function AppsDiscover({ loaderData, actionData }: Route.Component
             </VStack>
           )}
 
-          {!searchQuery && (
-            <Alert variant="info">
-              Skriv inn et søkeord for å begynne. Søket filtrerer automatisk blant {loaderData.allApps.length}{' '}
-              tilgjengelige applikasjoner.
-            </Alert>
-          )}
+          {!searchQuery && <Alert variant="info">Skriv inn et søkeord for å finne applikasjoner.</Alert>}
         </>
       )}
     </VStack>

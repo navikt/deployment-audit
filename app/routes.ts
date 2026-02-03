@@ -8,7 +8,7 @@ export default [
 
   layout('routes/layout.tsx', [
     index('routes/home.tsx'),
-    route('apps/discover', 'routes/apps.discover.tsx'),
+    route('apps/add', 'routes/apps.add.tsx'),
     route('search', 'routes/search.tsx'),
     // Semantic URL structure
     route('team/:team/env/:env/app/:app', 'routes/team.$team.env.$env.app.$app.tsx'),
