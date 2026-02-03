@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { Document, Font, Link, Page, renderToBuffer, StyleSheet, Text, View } from '@react-pdf/renderer'
 import type { AuditReportData, ContributorEntry, ManualApprovalEntry, ReviewerEntry } from '~/db/audit-reports.server'
+import { getUserDisplayName, type UserMappings } from '~/lib/user-display'
 
 // Register fonts from local files (downloaded during Docker build)
 // In production: /app/fonts/
@@ -241,20 +242,13 @@ interface AuditReportPdfProps {
   contentHash: string
   reportId: string
   generatedAt: Date
-  userMappings?: Record<string, { display_name: string | null; nav_ident: string | null }>
+  userMappings?: UserMappings
 }
 
-// Helper to format user name - only display name for PDF (compact)
-function formatUserName(
-  githubUsername: string | null | undefined,
-  userMappings?: Record<string, { display_name: string | null; nav_ident: string | null }>,
-): string {
-  if (!githubUsername) return '-'
-  const mapping = userMappings?.[githubUsername]
-  if (mapping?.display_name) {
-    return mapping.display_name
-  }
-  return githubUsername
+// Helper to format user name - returns '-' for null/undefined
+function formatUserName(githubUsername: string | null | undefined, userMappings?: UserMappings): string {
+  const result = getUserDisplayName(githubUsername, userMappings || {})
+  return result || '-'
 }
 
 function formatDate(date: Date | string): string {

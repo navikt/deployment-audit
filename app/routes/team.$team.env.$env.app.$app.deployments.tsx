@@ -6,6 +6,7 @@ import { type DeploymentFilters, getDeploymentsPaginated } from '~/db/deployment
 import { getMonitoredApplicationByIdentity } from '~/db/monitored-applications.server'
 import { getUserMappings } from '~/db/user-mappings.server'
 import { getDateRangeForPeriod, TIME_PERIOD_OPTIONS, type TimePeriod } from '~/lib/time-periods'
+import { getUserDisplayName, serializeUserMappings } from '~/lib/user-display'
 import styles from '~/styles/common.module.css'
 import type { Route } from './+types/team.$team.env.$env.app.$app.deployments'
 
@@ -59,17 +60,9 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   const deployerUsernames = [...new Set(result.deployments.map((d) => d.deployer_username).filter(Boolean))] as string[]
   const userMappings = await getUserMappings(deployerUsernames)
 
-  // Convert Map to plain object for serialization
-  const userMappingsObject: Record<string, string> = {}
-  for (const [username, mapping] of userMappings) {
-    if (mapping.display_name) {
-      userMappingsObject[username] = mapping.display_name
-    }
-  }
-
   return {
     app,
-    userMappings: userMappingsObject,
+    userMappings: serializeUserMappings(userMappings),
     ...result,
   }
 }
@@ -227,7 +220,7 @@ export default function AppDeployments() {
                     <Detail textColor="subtle">
                       {deployment.deployer_username ? (
                         <Link to={`/users/${deployment.deployer_username}`}>
-                          {userMappings[deployment.deployer_username] || deployment.deployer_username}
+                          {getUserDisplayName(deployment.deployer_username, userMappings)}
                         </Link>
                       ) : (
                         '(ukjent)'

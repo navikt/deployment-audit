@@ -52,6 +52,7 @@ import { getNavIdent, getUserIdentity } from '~/lib/auth.server'
 import { lookupLegacyByCommit, lookupLegacyByPR } from '~/lib/github.server'
 import { verifyDeploymentFourEyes } from '~/lib/sync.server'
 import { getDateRangeForPeriod, type TimePeriod } from '~/lib/time-periods'
+import { getUserDisplayName, serializeUserMappings } from '~/lib/user-display'
 import type { Route } from './+types/deployments.$id'
 
 export async function loader({ params, request }: Route.LoaderArgs) {
@@ -197,7 +198,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     legacyInfo,
     previousDeployment,
     nextDeployment,
-    userMappings: Object.fromEntries(userMappings),
+    userMappings: serializeUserMappings(userMappings),
     appUrl,
     currentUserNavIdent: currentUser?.navIdent || null,
     isCurrentUserInvolved,
@@ -810,11 +811,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
   const status = getFourEyesStatus(deployment)
 
   // Helper to get user display info (falls back to username if no mapping)
-  const getUserDisplay = (githubUsername: string | undefined | null) => {
-    if (!githubUsername) return null
-    const mapping = userMappings[githubUsername]
-    return mapping?.display_name || mapping?.nav_email || githubUsername
-  }
+  const getUserDisplay = (githubUsername: string | undefined | null) => getUserDisplayName(githubUsername, userMappings)
 
   return (
     <VStack gap="space-32">
