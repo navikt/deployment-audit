@@ -1,16 +1,42 @@
-import { isRouteErrorResponse, Links, Meta, Outlet, Scripts, ScrollRestoration } from 'react-router'
+import {
+  data,
+  isRouteErrorResponse,
+  Links,
+  Meta,
+  Outlet,
+  Scripts,
+  ScrollRestoration,
+  useLoaderData,
+} from 'react-router'
 
 import type { Route } from './+types/root'
 import './app.css'
 import '@navikt/ds-css'
 import { Page, Theme } from '@navikt/ds-react'
-import { ThemeProvider, useTheme } from './hooks/useTheme'
+import { ThemeProvider } from './hooks/useTheme'
 import { initializeServer } from './init.server'
+import { getTheme, setThemeCookie, type ThemeValue } from './lib/theme.server'
 
-// Initialize server on first request (loader runs server-side only)
-export async function loader() {
+// Initialize server and get theme from cookie
+export async function loader({ request }: Route.LoaderArgs) {
   initializeServer()
-  return null
+  const theme = await getTheme(request)
+  return { theme }
+}
+
+// Action to set theme cookie
+export async function action({ request }: Route.ActionArgs) {
+  const formData = await request.formData()
+  const theme = formData.get('theme') as ThemeValue
+  if (theme !== 'light' && theme !== 'dark') {
+    return data({ error: 'Invalid theme' }, { status: 400 })
+  }
+  return data(
+    { theme },
+    {
+      headers: { 'Set-Cookie': await setThemeCookie(theme) },
+    },
+  )
 }
 
 export const links: Route.LinksFunction = () => []
@@ -33,19 +59,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
   )
 }
 
-function ThemedApp() {
-  const { theme } = useTheme()
-  return (
-    <Theme theme={theme}>
-      <Outlet />
-    </Theme>
-  )
-}
-
 export default function App() {
+  const { theme } = useLoaderData<typeof loader>()
   return (
-    <ThemeProvider>
-      <ThemedApp />
+    <ThemeProvider initialTheme={theme}>
+      <Theme theme={theme}>
+        <Outlet />
+      </Theme>
     </ThemeProvider>
   )
 }
