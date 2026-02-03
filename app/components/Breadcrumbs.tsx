@@ -35,7 +35,7 @@ const dynamicBreadcrumbs: Array<{
   },
   {
     pattern: /^\/team\/([^/]+)\/env\/([^/]+)\/app\/([^/]+)\/admin$/,
-    getLabel: () => 'Innstillinger',
+    getLabel: () => 'Administrasjon',
     parent: '/team/:team/env/:env/app/:app',
     getParentLabel: (_matches, pathname) => {
       const appName = pathname.split('/')[6]

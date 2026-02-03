@@ -240,10 +240,13 @@ export default function AppAdmin() {
   return (
     <VStack gap="space-32">
       {/* Header */}
-      <HStack gap="space-12" align="center">
-        <CogIcon aria-hidden fontSize="1.5rem" />
-        <Heading size="large">Innstillinger for {app.app_name}</Heading>
-      </HStack>
+      <div>
+        <HStack gap="space-12" align="center">
+          <CogIcon aria-hidden fontSize="1.5rem" />
+          <Heading size="large">Administrasjon for {app.app_name}</Heading>
+        </HStack>
+        <BodyShort textColor="subtle">Administrer leveranserapporter og innstillinger for applikasjonen.</BodyShort>
+      </div>
 
       {/* Success/Error messages */}
       {actionData?.success && (
