@@ -9,3 +9,6 @@
 # Lefthook
 .lefthook
 .idea
+
+*storybook.log
+storybook-static
