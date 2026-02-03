@@ -26,7 +26,6 @@ import {
   Show,
   Tag,
   Textarea,
-  TextField,
   VStack,
 } from '@navikt/ds-react'
 import { useState } from 'react'
@@ -40,11 +39,7 @@ import {
   useSearchParams,
 } from 'react-router'
 import { getUnresolvedAlertsByApp, resolveRepositoryAlert } from '~/db/alerts.server'
-import {
-  getAppConfigAuditLog,
-  getImplicitApprovalSettings,
-  updateImplicitApprovalSettings,
-} from '~/db/app-settings.server'
+import { updateImplicitApprovalSettings } from '~/db/app-settings.server'
 import {
   approveRepository,
   getRepositoriesByAppId,
@@ -76,23 +71,13 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     throw new Response('Application not found', { status: 404 })
   }
 
-  const [
-    repositories,
-    deploymentStats,
-    alerts,
-    auditReports,
-    currentYearReadiness,
-    implicitApprovalSettings,
-    recentConfigChanges,
-  ] = await Promise.all([
+  const [repositories, deploymentStats, alerts, auditReports, currentYearReadiness] = await Promise.all([
     getRepositoriesByAppId(app.id),
     getAppDeploymentStats(app.id, startDate, endDate, app.audit_start_year),
     getUnresolvedAlertsByApp(app.id),
     getAuditReportsForApp(app.id),
     // Check readiness for current year if it's a production app
     app.environment_name.startsWith('prod-') ? checkAuditReadiness(app.id, new Date().getFullYear()) : null,
-    getImplicitApprovalSettings(app.id),
-    getAppConfigAuditLog(app.id, { limit: 5 }),
   ])
 
   const activeRepo = repositories.find((r) => r.status === 'active')
@@ -109,8 +94,6 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     alerts,
     auditReports,
     currentYearReadiness,
-    implicitApprovalSettings,
-    recentConfigChanges,
   }
 }
 
@@ -220,8 +203,6 @@ export default function AppDetail() {
     alerts,
     auditReports,
     currentYearReadiness,
-    implicitApprovalSettings,
-    recentConfigChanges,
   } = useLoaderData<typeof loader>()
   const actionData = useActionData<typeof action>()
   const [searchParams] = useSearchParams()
@@ -699,111 +680,14 @@ export default function AppDetail() {
 
       {/* Settings Section */}
       <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
-        <VStack gap="space-20">
+        <HStack justify="space-between" align="center">
           <Heading size="medium">
             <CogIcon aria-hidden /> Innstillinger
           </Heading>
-
-          <Form method="post">
-            <input type="hidden" name="action" value="update_default_branch" />
-            <input type="hidden" name="app_id" value={app.id} />
-            <HStack gap="space-16" align="end" wrap>
-              <TextField
-                label="Default branch"
-                description="Branchen som PR-er må gå til for å bli godkjent (f.eks. main, master)"
-                name="default_branch"
-                defaultValue={app.default_branch}
-                size="small"
-                style={{ minWidth: '200px' }}
-              />
-              <Button type="submit" size="small" variant="secondary">
-                Lagre
-              </Button>
-            </HStack>
-          </Form>
-
-          <hr style={{ border: 'none', borderTop: '1px solid var(--ax-border-neutral-subtle)', margin: 0 }} />
-
-          {/* Audit Start Year */}
-          <Form method="post">
-            <input type="hidden" name="action" value="update_audit_start_year" />
-            <input type="hidden" name="app_id" value={app.id} />
-            <HStack gap="space-16" align="end" wrap>
-              <TextField
-                label="Startår for revisjon"
-                description="Deployments før dette året ignoreres i statistikk og rapporter"
-                name="audit_start_year"
-                type="number"
-                defaultValue={app.audit_start_year ?? ''}
-                size="small"
-                style={{ minWidth: '120px' }}
-              />
-              <Button type="submit" size="small" variant="secondary">
-                Lagre
-              </Button>
-            </HStack>
-          </Form>
-
-          <hr style={{ border: 'none', borderTop: '1px solid var(--ax-border-neutral-subtle)', margin: 0 }} />
-
-          {/* Implicit Approval Settings */}
-          <VStack gap="space-12">
-            <div>
-              <Heading size="small">Implisitt godkjenning</Heading>
-              <BodyShort textColor="subtle" size="small">
-                Godkjenner automatisk en PR hvis den som merger ikke er PR-oppretteren og ikke har siste commit.
-              </BodyShort>
-            </div>
-
-            <Form method="post">
-              <input type="hidden" name="action" value="update_implicit_approval" />
-              <input type="hidden" name="app_id" value={app.id} />
-              <VStack gap="space-12">
-                <Select
-                  label="Modus"
-                  name="mode"
-                  defaultValue={implicitApprovalSettings.mode}
-                  size="small"
-                  style={{ maxWidth: '300px' }}
-                >
-                  <option value="off">Av</option>
-                  <option value="dependabot_only">Kun Dependabot</option>
-                  <option value="all">Alle</option>
-                </Select>
-
-                <BodyShort size="small" textColor="subtle">
-                  <strong>Kun Dependabot:</strong> Godkjenner automatisk PRer opprettet av Dependabot med kun
-                  Dependabot-commits.
-                  <br />
-                  <strong>Alle:</strong> Godkjenner alle PRer der den som merger verken opprettet PRen eller har siste
-                  commit.
-                </BodyShort>
-
-                <Button type="submit" size="small" variant="secondary">
-                  Lagre innstillinger
-                </Button>
-              </VStack>
-            </Form>
-          </VStack>
-
-          {/* Recent config changes */}
-          {recentConfigChanges.length > 0 && (
-            <>
-              <hr style={{ border: 'none', borderTop: '1px solid var(--ax-border-neutral-subtle)', margin: 0 }} />
-              <VStack gap="space-8">
-                <Label>Siste endringer</Label>
-                <VStack gap="space-4">
-                  {recentConfigChanges.map((change) => (
-                    <Detail key={change.id} textColor="subtle">
-                      {new Date(change.created_at).toLocaleString('no-NO')} -{' '}
-                      {change.changed_by_name || change.changed_by_nav_ident}: {change.setting_key}
-                    </Detail>
-                  ))}
-                </VStack>
-              </VStack>
-            </>
-          )}
-        </VStack>
+          <Button as={Link} to={`${appUrl}/admin`} variant="secondary" size="small" icon={<CogIcon aria-hidden />}>
+            Administrer
+          </Button>
+        </HStack>
       </Box>
     </VStack>
   )

@@ -13,6 +13,7 @@ export default [
     route('search', 'routes/search.tsx'),
     // Semantic URL structure
     route('team/:team/env/:env/app/:app', 'routes/team.$team.env.$env.app.$app.tsx'),
+    route('team/:team/env/:env/app/:app/admin', 'routes/team.$team.env.$env.app.$app.admin.tsx'),
     route('team/:team/env/:env/app/:app/deployments', 'routes/team.$team.env.$env.app.$app.deployments.tsx'),
     route(
       'team/:team/env/:env/app/:app/deployments/:deploymentId',
