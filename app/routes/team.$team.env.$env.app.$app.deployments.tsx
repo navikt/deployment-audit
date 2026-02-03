@@ -136,6 +136,9 @@ export default function AppDeployments() {
                 <option value="not_approved">Ikke godkjent</option>
                 <option value="pending">Venter</option>
                 <option value="legacy">Legacy</option>
+                <option value="legacy_pending">Legacy (venter)</option>
+                <option value="baseline">Baseline</option>
+                <option value="pending_baseline">Baseline (venter)</option>
                 <option value="error">Feil</option>
               </Select>
 

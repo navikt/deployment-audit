@@ -46,7 +46,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       apps.map(async (app) => {
         const repos = await getRepositoriesByAppId(app.id)
         const activeRepo = repos.find((r) => r.status === 'active')
-        const appStats = await getAppDeploymentStats(app.id)
+        const appStats = await getAppDeploymentStats(app.id, undefined, undefined, app.audit_start_year)
         return {
           ...app,
           active_repo: activeRepo ? `${activeRepo.github_owner}/${activeRepo.github_repo_name}` : null,
