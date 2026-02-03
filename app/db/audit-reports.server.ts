@@ -140,10 +140,13 @@ export async function checkAuditReadiness(monitoredAppId: number, year: number):
 
   const deployments = result.rows
   // Legacy deployments are accepted (pre-2025 without verification)
-  const approvedStatuses = ['approved_pr', 'manually_approved', 'legacy']
+  const approvedStatuses = ['approved_pr', 'manually_approved', 'implicitly_approved', 'legacy']
 
   const approved = deployments.filter(
-    (d) => d.four_eyes_status === 'approved_pr' || d.four_eyes_status === 'manually_approved',
+    (d) =>
+      d.four_eyes_status === 'approved_pr' ||
+      d.four_eyes_status === 'manually_approved' ||
+      d.four_eyes_status === 'implicitly_approved',
   )
   const legacy = deployments.filter((d) => d.four_eyes_status === 'legacy')
   const pending = deployments.filter((d) => !approvedStatuses.includes(d.four_eyes_status))

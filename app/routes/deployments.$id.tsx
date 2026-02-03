@@ -397,6 +397,7 @@ export async function action({ request, params }: Route.ActionArgs) {
           updatedDeployment.environment_name,
           undefined,
           updatedDeployment.default_branch || 'main',
+          updatedDeployment.monitored_app_id,
         )
 
         // Reload deployment to get the updated PR data from verification
@@ -581,6 +582,7 @@ export async function action({ request, params }: Route.ActionArgs) {
         deployment.environment_name,
         deployment.trigger_url,
         deployment.default_branch || 'main',
+        deployment.monitored_app_id,
       )
 
       if (success) {
@@ -657,6 +659,13 @@ function getFourEyesStatus(deployment: any): {
         text: 'Manuelt godkjent',
         variant: 'success',
         description: 'Dette deploymentet er manuelt godkjent med dokumentasjon i Slack.',
+      }
+    case 'implicitly_approved':
+      return {
+        text: 'Implisitt godkjent',
+        variant: 'success',
+        description:
+          'Dette deploymentet er implisitt godkjent fordi den som merget PR-en verken opprettet PR-en eller har siste commit.',
       }
     case 'direct_push':
       return {
@@ -799,9 +808,11 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           </Heading>
           <HStack gap="space-8" align="center">
             {/* Godkjenning status tag (only shown for OK/approved states) */}
-            {(deployment.four_eyes_status === 'approved' || deployment.four_eyes_status === 'manually_approved') && (
+            {(deployment.four_eyes_status === 'approved' ||
+              deployment.four_eyes_status === 'manually_approved' ||
+              deployment.four_eyes_status === 'implicitly_approved') && (
               <Tag data-color="success" variant="outline" size="small">
-                Godkjent
+                {deployment.four_eyes_status === 'implicitly_approved' ? 'Implisitt godkjent' : 'Godkjent'}
               </Tag>
             )}
             {/* Method tag */}
@@ -864,31 +875,33 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
       {actionData?.success && <Alert variant="success">{actionData.success}</Alert>}
       {actionData?.error && <Alert variant="error">{actionData.error}</Alert>}
       {/* Four-eyes Alert - only shown for non-OK states */}
-      {deployment.four_eyes_status !== 'approved' && deployment.four_eyes_status !== 'manually_approved' && (
-        <Alert variant={status.variant}>
-          <Heading size="small" spacing>
-            {status.text}
-          </Heading>
-          <BodyShort>
-            {status.description}
-            {(deployment.four_eyes_status === 'unverified_commits' ||
-              deployment.four_eyes_status === 'approved_pr_with_unreviewed') &&
-              previousDeployment?.commit_sha &&
-              deployment.commit_sha && (
-                <>
-                  {' '}
-                  <a
-                    href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/compare/${previousDeployment.commit_sha}...${deployment.commit_sha}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Se endringer på GitHub
-                  </a>
-                </>
-              )}
-          </BodyShort>
-        </Alert>
-      )}
+      {deployment.four_eyes_status !== 'approved' &&
+        deployment.four_eyes_status !== 'manually_approved' &&
+        deployment.four_eyes_status !== 'implicitly_approved' && (
+          <Alert variant={status.variant}>
+            <Heading size="small" spacing>
+              {status.text}
+            </Heading>
+            <BodyShort>
+              {status.description}
+              {(deployment.four_eyes_status === 'unverified_commits' ||
+                deployment.four_eyes_status === 'approved_pr_with_unreviewed') &&
+                previousDeployment?.commit_sha &&
+                deployment.commit_sha && (
+                  <>
+                    {' '}
+                    <a
+                      href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/compare/${previousDeployment.commit_sha}...${deployment.commit_sha}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Se endringer på GitHub
+                    </a>
+                  </>
+                )}
+            </BodyShort>
+          </Alert>
+        )}
       {/* Unverified commits section */}
       {(() => {
         // Filter out commits that are already shown in the PR commits accordion or are the merge commit

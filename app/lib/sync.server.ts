@@ -1,4 +1,5 @@
 import { createRepositoryAlert } from '~/db/alerts.server'
+import { checkImplicitApproval, getImplicitApprovalSettings } from '~/db/app-settings.server'
 import {
   findRepositoryForApp,
   getRepositoriesByAppId,
@@ -448,6 +449,7 @@ export async function verifyDeploymentsFourEyes(filters?: DeploymentFilters & { 
         deployment.environment_name,
         deployment.trigger_url,
         deployment.default_branch || 'main',
+        deployment.monitored_app_id,
       )
 
       if (success) {
@@ -489,6 +491,7 @@ export async function verifyDeploymentFourEyes(
   environmentName: string,
   _triggerUrl?: string | null,
   baseBranch: string = 'main',
+  monitoredAppId?: number,
 ): Promise<boolean> {
   const repoParts = repository.split('/')
   if (repoParts.length !== 2) {
@@ -803,23 +806,10 @@ export async function verifyDeploymentFourEyes(
     }
 
     // Step 5: Determine final status
-    if (unverifiedCommits.length > 0) {
-      console.log(`❌ [Deployment ${deploymentId}] Found ${unverifiedCommits.length} unverified commit(s):`)
-      unverifiedCommits.forEach((c) => {
-        console.log(`      - ${c.sha.substring(0, 7)}: ${c.message.substring(0, 60)}`)
-        console.log(`        Reason: ${c.reason}, PR: ${c.pr_number || 'none'}`)
-      })
+    // First check if we have a regular four-eyes approval
+    const hasStandardApproval = unverifiedCommits.length === 0
 
-      await updateDeploymentFourEyes(deploymentId, {
-        hasFourEyes: false,
-        fourEyesStatus: 'unverified_commits',
-        githubPrNumber: deployedPrNumber,
-        githubPrUrl: deployedPrUrl,
-        githubPrData: deployedPrData,
-        unverifiedCommits,
-        title: deployedPrData?.title || null,
-      })
-    } else {
+    if (hasStandardApproval) {
       console.log(`✅ [Deployment ${deploymentId}] All ${commitsBetween.length} commit(s) verified`)
       await updateDeploymentFourEyes(deploymentId, {
         hasFourEyes: true,
@@ -829,7 +819,71 @@ export async function verifyDeploymentFourEyes(
         githubPrData: deployedPrData,
         title: deployedPrData?.title || null,
       })
+      return true
     }
+
+    // No standard approval - check for implicit approval
+    if (monitoredAppId && deployedPrData) {
+      const implicitSettings = await getImplicitApprovalSettings(monitoredAppId)
+
+      if (implicitSettings.mode !== 'off') {
+        // Get data needed for implicit approval check
+        const prCreator = deployedPrData.creator?.username || ''
+        const mergedBy = deployedPrData.merged_by?.login || ''
+        const commits = deployedPrData.commits || []
+        // Author can be an object { username: string } or a string
+        const getAuthorUsername = (author: unknown): string => {
+          if (typeof author === 'string') return author
+          if (author && typeof author === 'object' && 'username' in author) {
+            return (author as { username: string }).username || ''
+          }
+          return ''
+        }
+        const lastCommitAuthor = commits.length > 0 ? getAuthorUsername(commits[commits.length - 1].author) : ''
+        const allCommitAuthors = commits.map((c: { author: unknown }) => getAuthorUsername(c.author)).filter(Boolean)
+
+        const implicitCheck = checkImplicitApproval({
+          settings: implicitSettings,
+          prCreator,
+          lastCommitAuthor,
+          mergedBy,
+          allCommitAuthors,
+        })
+
+        if (implicitCheck.qualifies) {
+          console.log(`✅ [Deployment ${deploymentId}] Implicitly approved: ${implicitCheck.reason}`)
+          await updateDeploymentFourEyes(deploymentId, {
+            hasFourEyes: true,
+            fourEyesStatus: 'implicitly_approved',
+            githubPrNumber: deployedPrNumber,
+            githubPrUrl: deployedPrUrl,
+            githubPrData: {
+              ...deployedPrData,
+              implicit_approval_reason: implicitCheck.reason,
+            },
+            title: deployedPrData?.title || null,
+          })
+          return true
+        }
+      }
+    }
+
+    // No approval - mark as unverified
+    console.log(`❌ [Deployment ${deploymentId}] Found ${unverifiedCommits.length} unverified commit(s):`)
+    unverifiedCommits.forEach((c) => {
+      console.log(`      - ${c.sha.substring(0, 7)}: ${c.message.substring(0, 60)}`)
+      console.log(`        Reason: ${c.reason}, PR: ${c.pr_number || 'none'}`)
+    })
+
+    await updateDeploymentFourEyes(deploymentId, {
+      hasFourEyes: false,
+      fourEyesStatus: 'unverified_commits',
+      githubPrNumber: deployedPrNumber,
+      githubPrUrl: deployedPrUrl,
+      githubPrData: deployedPrData,
+      unverifiedCommits,
+      title: deployedPrData?.title || null,
+    })
 
     return true
   } catch (error) {

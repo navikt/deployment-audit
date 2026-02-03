@@ -41,6 +41,11 @@ import {
 } from 'react-router'
 import { getUnresolvedAlertsByApp, resolveRepositoryAlert } from '~/db/alerts.server'
 import {
+  getAppConfigAuditLog,
+  getImplicitApprovalSettings,
+  updateImplicitApprovalSettings,
+} from '~/db/app-settings.server'
+import {
   approveRepository,
   getRepositoriesByAppId,
   rejectRepository,
@@ -49,6 +54,7 @@ import {
 import { checkAuditReadiness, getAuditReportsForApp } from '~/db/audit-reports.server'
 import { getAppDeploymentStats } from '~/db/deployments.server'
 import { getMonitoredApplicationByIdentity, updateMonitoredApplication } from '~/db/monitored-applications.server'
+import { getUserIdentity } from '~/lib/auth.server'
 import { getDateRangeForPeriod, TIME_PERIOD_OPTIONS, type TimePeriod } from '~/lib/time-periods'
 import styles from '~/styles/common.module.css'
 
@@ -70,13 +76,23 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     throw new Response('Application not found', { status: 404 })
   }
 
-  const [repositories, deploymentStats, alerts, auditReports, currentYearReadiness] = await Promise.all([
+  const [
+    repositories,
+    deploymentStats,
+    alerts,
+    auditReports,
+    currentYearReadiness,
+    implicitApprovalSettings,
+    recentConfigChanges,
+  ] = await Promise.all([
     getRepositoriesByAppId(app.id),
     getAppDeploymentStats(app.id, startDate, endDate),
     getUnresolvedAlertsByApp(app.id),
     getAuditReportsForApp(app.id),
     // Check readiness for current year if it's a production app
     app.environment_name.startsWith('prod-') ? checkAuditReadiness(app.id, new Date().getFullYear()) : null,
+    getImplicitApprovalSettings(app.id),
+    getAppConfigAuditLog(app.id, { limit: 5 }),
   ])
 
   const activeRepo = repositories.find((r) => r.status === 'active')
@@ -93,12 +109,15 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     alerts,
     auditReports,
     currentYearReadiness,
+    implicitApprovalSettings,
+    recentConfigChanges,
   }
 }
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData()
   const action = formData.get('action')
+  const identity = getUserIdentity(request)
 
   try {
     if (action === 'approve_repo') {
@@ -144,6 +163,28 @@ export async function action({ request }: ActionFunctionArgs) {
       return { success: `Default branch oppdatert til "${defaultBranch.trim()}"` }
     }
 
+    if (action === 'update_implicit_approval') {
+      const appId = parseInt(formData.get('app_id') as string, 10)
+      const mode = formData.get('mode') as 'off' | 'dependabot_only' | 'all'
+
+      if (!identity) {
+        return { error: 'Du må være innlogget for å endre innstillinger' }
+      }
+
+      if (!['off', 'dependabot_only', 'all'].includes(mode)) {
+        return { error: 'Ugyldig modus valgt' }
+      }
+
+      await updateImplicitApprovalSettings({
+        monitoredAppId: appId,
+        settings: { mode },
+        changedByNavIdent: identity.navIdent,
+        changedByName: identity.name || undefined,
+      })
+
+      return { success: 'Implisitt godkjenning-innstillinger oppdatert!' }
+    }
+
     return { error: 'Ukjent handling' }
   } catch (error) {
     console.error('Action error:', error)
@@ -162,6 +203,8 @@ export default function AppDetail() {
     alerts,
     auditReports,
     currentYearReadiness,
+    implicitApprovalSettings,
+    recentConfigChanges,
   } = useLoaderData<typeof loader>()
   const actionData = useActionData<typeof action>()
   const [searchParams] = useSearchParams()
@@ -653,6 +696,66 @@ export default function AppDetail() {
               </Button>
             </HStack>
           </Form>
+
+          <hr style={{ border: 'none', borderTop: '1px solid var(--ax-border-neutral-subtle)', margin: 0 }} />
+
+          {/* Implicit Approval Settings */}
+          <VStack gap="space-12">
+            <div>
+              <Heading size="small">Implisitt godkjenning</Heading>
+              <BodyShort textColor="subtle" size="small">
+                Godkjenner automatisk en PR hvis den som merger ikke er PR-oppretteren og ikke har siste commit.
+              </BodyShort>
+            </div>
+
+            <Form method="post">
+              <input type="hidden" name="action" value="update_implicit_approval" />
+              <input type="hidden" name="app_id" value={app.id} />
+              <VStack gap="space-12">
+                <Select
+                  label="Modus"
+                  name="mode"
+                  defaultValue={implicitApprovalSettings.mode}
+                  size="small"
+                  style={{ maxWidth: '300px' }}
+                >
+                  <option value="off">Av</option>
+                  <option value="dependabot_only">Kun Dependabot</option>
+                  <option value="all">Alle</option>
+                </Select>
+
+                <BodyShort size="small" textColor="subtle">
+                  <strong>Kun Dependabot:</strong> Godkjenner automatisk PRer opprettet av Dependabot med kun
+                  Dependabot-commits.
+                  <br />
+                  <strong>Alle:</strong> Godkjenner alle PRer der den som merger verken opprettet PRen eller har siste
+                  commit.
+                </BodyShort>
+
+                <Button type="submit" size="small" variant="secondary">
+                  Lagre innstillinger
+                </Button>
+              </VStack>
+            </Form>
+          </VStack>
+
+          {/* Recent config changes */}
+          {recentConfigChanges.length > 0 && (
+            <>
+              <hr style={{ border: 'none', borderTop: '1px solid var(--ax-border-neutral-subtle)', margin: 0 }} />
+              <VStack gap="space-8">
+                <Label>Siste endringer</Label>
+                <VStack gap="space-4">
+                  {recentConfigChanges.map((change) => (
+                    <Detail key={change.id} textColor="subtle">
+                      {new Date(change.created_at).toLocaleString('no-NO')} -{' '}
+                      {change.changed_by_name || change.changed_by_nav_ident}: {change.setting_key}
+                    </Detail>
+                  ))}
+                </VStack>
+              </VStack>
+            </>
+          )}
         </VStack>
       </Box>
     </VStack>
