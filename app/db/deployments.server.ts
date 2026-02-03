@@ -380,42 +380,6 @@ export async function getLatestDeploymentForApp(
   return result.rows[0] || null
 }
 
-export async function getDeploymentStats(monitoredAppId?: number): Promise<{
-  total: number
-  with_four_eyes: number
-  without_four_eyes: number
-  repository_mismatch: number
-  percentage: number
-}> {
-  let sql = `
-    SELECT 
-      COUNT(*) as total,
-      COUNT(CASE WHEN has_four_eyes = true THEN 1 END) as with_four_eyes,
-      COUNT(CASE WHEN has_four_eyes = false THEN 1 END) as without_four_eyes,
-      COUNT(CASE WHEN four_eyes_status = 'repository_mismatch' THEN 1 END) as repository_mismatch
-    FROM deployments
-  `
-
-  const params: any[] = []
-  if (monitoredAppId) {
-    sql += ' WHERE monitored_app_id = $1'
-    params.push(monitoredAppId)
-  }
-
-  const result = await pool.query(sql, params)
-  const total = parseInt(result.rows[0].total, 10)
-  const withFourEyes = parseInt(result.rows[0].with_four_eyes, 10)
-  const percentage = total > 0 ? Math.round((withFourEyes / total) * 100) : 0
-
-  return {
-    total,
-    with_four_eyes: withFourEyes,
-    without_four_eyes: parseInt(result.rows[0].without_four_eyes, 10),
-    repository_mismatch: parseInt(result.rows[0].repository_mismatch, 10),
-    percentage,
-  }
-}
-
 export async function getVerificationStats(monitoredAppId?: number): Promise<{
   total: number
   needsVerification: number

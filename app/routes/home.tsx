@@ -1,23 +1,9 @@
 import { BellIcon, CheckmarkCircleIcon, ExclamationmarkTriangleIcon, XMarkOctagonIcon } from '@navikt/aksel-icons'
-import {
-  Alert,
-  BodyShort,
-  Box,
-  Button,
-  Detail,
-  Heading,
-  HGrid,
-  Hide,
-  HStack,
-  Show,
-  Tag,
-  VStack,
-} from '@navikt/ds-react'
-import { Link, useSearchParams } from 'react-router'
-import { StatCard } from '~/components/StatCard'
+import { Alert, BodyShort, Box, Button, Detail, Heading, Hide, HStack, Show, Tag, VStack } from '@navikt/ds-react'
+import { Link } from 'react-router'
 import { getRepositoriesByAppId } from '~/db/application-repositories.server'
 import { getAlertCountsByApp } from '../db/alerts.server'
-import { getAppDeploymentStats, getDeploymentStats } from '../db/deployments.server'
+import { getAppDeploymentStats } from '../db/deployments.server'
 import { getAllMonitoredApplications } from '../db/monitored-applications.server'
 import styles from '../styles/common.module.css'
 import type { Route } from './+types/home'
@@ -29,18 +15,9 @@ export function meta(_args: Route.MetaArgs) {
   ]
 }
 
-type AppStatus = 'all' | 'missing' | 'pending' | 'ok'
-
-export async function loader({ request }: Route.LoaderArgs) {
-  const url = new URL(request.url)
-  const statusFilter = (url.searchParams.get('status') || 'all') as AppStatus
-
+export async function loader(_args: Route.LoaderArgs) {
   try {
-    const [stats, apps, alertCountsByApp] = await Promise.all([
-      getDeploymentStats(),
-      getAllMonitoredApplications(),
-      getAlertCountsByApp(),
-    ])
+    const [apps, alertCountsByApp] = await Promise.all([getAllMonitoredApplications(), getAlertCountsByApp()])
 
     // Fetch active repository and deployment stats for each app
     const appsWithData = await Promise.all(
@@ -57,28 +34,12 @@ export async function loader({ request }: Route.LoaderArgs) {
       }),
     )
 
-    // Filter apps based on status
-    const filteredApps = appsWithData.filter((app) => {
-      if (statusFilter === 'all') return true
-      if (statusFilter === 'missing') return app.stats.without_four_eyes > 0
-      if (statusFilter === 'pending') return app.stats.pending_verification > 0
-      if (statusFilter === 'ok')
-        return app.stats.without_four_eyes === 0 && app.stats.pending_verification === 0 && app.stats.total > 0
-      return true
-    })
-
     return {
-      stats,
-      apps: filteredApps,
-      allAppsCount: appsWithData.length,
-      statusFilter,
+      apps: appsWithData,
     }
   } catch (_error) {
     return {
-      stats: null,
       apps: [],
-      allAppsCount: 0,
-      statusFilter: 'all' as AppStatus,
     }
   }
 }
@@ -117,18 +78,7 @@ function getAppUrl(app: { team_slug: string; environment_name: string; app_name:
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { stats, apps, allAppsCount, statusFilter } = loaderData
-  const [searchParams, setSearchParams] = useSearchParams()
-
-  const updateFilter = (value: string) => {
-    const newParams = new URLSearchParams(searchParams)
-    if (value === 'all') {
-      newParams.delete('status')
-    } else {
-      newParams.set('status', value)
-    }
-    setSearchParams(newParams)
-  }
+  const { apps } = loaderData
 
   // Group apps by team
   type AppWithStats = (typeof apps)[number]
@@ -140,44 +90,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     appsByTeam[app.team_slug].push(app)
   }
 
-  const filterLabels: Record<AppStatus, string> = {
-    all: 'Alle applikasjoner',
-    missing: 'Mangler godkjenning',
-    pending: 'Venter verifisering',
-    ok: 'Alt OK',
-  }
-
   return (
     <VStack gap="space-32">
-      {/* Stats - clickable cards that filter the list */}
-      {stats && stats.total > 0 && (
-        <HGrid gap="space-16" columns={{ xs: 2, sm: 4 }}>
-          <StatCard
-            label="Totalt deployments"
-            value={stats.total}
-            onClick={() => updateFilter('all')}
-            selected={statusFilter === 'all'}
-          />
-          <StatCard
-            label="Godkjent"
-            value={stats.with_four_eyes}
-            subtitle={`${stats.percentage}%`}
-            variant="success"
-            onClick={() => updateFilter('ok')}
-            selected={statusFilter === 'ok'}
-          />
-          <StatCard
-            label="Mangler godkjenning"
-            value={stats.without_four_eyes}
-            subtitle={`${(100 - stats.percentage).toFixed(1)}%`}
-            variant="danger"
-            onClick={() => updateFilter('missing')}
-            selected={statusFilter === 'missing'}
-          />
-          <StatCard label="Applikasjoner" value={allAppsCount} onClick={() => updateFilter('all')} />
-        </HGrid>
-      )}
-
       {/* Add app button */}
       <HStack justify="end">
         <Button as={Link} to="/apps/discover" size="small" variant="secondary">
@@ -185,12 +99,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         </Button>
       </HStack>
 
-      {/* Empty states */}
-      {allAppsCount === 0 && <Alert variant="info">Ingen applikasjoner overvåkes ennå.</Alert>}
-
-      {apps.length === 0 && allAppsCount > 0 && statusFilter !== 'all' && (
-        <Alert variant="success">Ingen applikasjoner matcher filteret "{filterLabels[statusFilter]}".</Alert>
-      )}
+      {/* Empty state */}
+      {apps.length === 0 && <Alert variant="info">Ingen applikasjoner overvåkes ennå.</Alert>}
 
       {/* App list grouped by team */}
       {Object.entries(appsByTeam).map(([teamSlug, teamApps]) => (
