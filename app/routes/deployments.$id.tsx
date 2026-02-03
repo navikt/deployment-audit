@@ -1039,21 +1039,9 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           <Detail>Deployer</Detail>
           <BodyShort>
             {deployment.deployer_username ? (
-              <>
-                <a
-                  href={`https://github.com/${deployment.deployer_username}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {deployment.deployer_username}
-                </a>
-                {getUserDisplay(deployment.deployer_username) && (
-                  <span style={{ color: 'var(--ax-text-neutral-subtle)' }}>
-                    {' '}
-                    ({getUserDisplay(deployment.deployer_username)})
-                  </span>
-                )}
-              </>
+              <a href={`https://github.com/${deployment.deployer_username}`} target="_blank" rel="noopener noreferrer">
+                {getUserDisplay(deployment.deployer_username) || deployment.deployer_username}
+              </a>
             ) : (
               '(ukjent)'
             )}
@@ -1151,14 +1139,9 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  {deployment.github_pr_data.creator.username}
+                  {getUserDisplay(deployment.github_pr_data.creator.username) ||
+                    deployment.github_pr_data.creator.username}
                 </a>
-                {getUserDisplay(deployment.github_pr_data.creator.username) && (
-                  <span style={{ color: 'var(--ax-text-neutral-subtle)' }}>
-                    {' '}
-                    ({getUserDisplay(deployment.github_pr_data.creator.username)})
-                  </span>
-                )}
               </BodyShort>
             </VStack>
 
@@ -1171,14 +1154,9 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    {deployment.github_pr_data.merger.username}
+                    {getUserDisplay(deployment.github_pr_data.merger.username) ||
+                      deployment.github_pr_data.merger.username}
                   </a>
-                  {getUserDisplay(deployment.github_pr_data.merger.username) && (
-                    <span style={{ color: 'var(--ax-text-neutral-subtle)' }}>
-                      {' '}
-                      ({getUserDisplay(deployment.github_pr_data.merger.username)})
-                    </span>
-                  )}
                 </BodyShort>
               </VStack>
             )}
