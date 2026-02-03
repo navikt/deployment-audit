@@ -633,52 +633,6 @@ function AuditReportPdfDocument(props: AuditReportPdfProps) {
         </Page>
       )}
 
-      {/* Page 4: Contributors and Reviewers */}
-      <Page size="A4" style={styles.page}>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Bidragsytere ({reportData.contributors.length})</Text>
-          <View style={styles.table}>
-            <View style={styles.tableHeader}>
-              <Text style={[styles.tableHeaderCell, { width: '25%' }]}>GitHub</Text>
-              <Text style={[styles.tableHeaderCell, { width: '30%' }]}>Navn</Text>
-              <Text style={[styles.tableHeaderCell, { width: '25%' }]}>Nav-ident</Text>
-              <Text style={[styles.tableHeaderCell, { width: '20%' }]}>Deployments</Text>
-            </View>
-            {reportData.contributors.map((c: ContributorEntry, idx: number) => (
-              <View key={c.github_username} style={[styles.tableRow, idx % 2 === 1 ? styles.tableRowAlt : {}]}>
-                <Text style={[styles.tableCell, { width: '25%' }]}>{c.github_username}</Text>
-                <Text style={[styles.tableCell, { width: '30%' }]}>{c.display_name || '-'}</Text>
-                <Text style={[styles.tableCell, { width: '25%' }]}>{c.nav_ident || '-'}</Text>
-                <Text style={[styles.tableCell, { width: '20%' }]}>{c.deployment_count}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Reviewers ({reportData.reviewers.length})</Text>
-          <View style={styles.table}>
-            <View style={styles.tableHeader}>
-              <Text style={[styles.tableHeaderCell, { width: '35%' }]}>GitHub</Text>
-              <Text style={[styles.tableHeaderCell, { width: '40%' }]}>Navn</Text>
-              <Text style={[styles.tableHeaderCell, { width: '25%' }]}>Reviews</Text>
-            </View>
-            {reportData.reviewers.map((r: ReviewerEntry, idx: number) => (
-              <View key={r.github_username} style={[styles.tableRow, idx % 2 === 1 ? styles.tableRowAlt : {}]}>
-                <Text style={[styles.tableCell, { width: '35%' }]}>{r.github_username}</Text>
-                <Text style={[styles.tableCell, { width: '40%' }]}>{r.display_name || '-'}</Text>
-                <Text style={[styles.tableCell, { width: '25%' }]}>{r.review_count}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        <Text
-          style={styles.pageNumber}
-          render={({ pageNumber, totalPages }) => `Side ${pageNumber} av ${totalPages}`}
-        />
-      </Page>
-
       {/* Security methodology page */}
       <Page size="A4" style={styles.page}>
         <View style={styles.section}>
