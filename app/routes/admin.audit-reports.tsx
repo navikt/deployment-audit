@@ -64,6 +64,16 @@ export async function action({ request }: ActionFunctionArgs) {
       return { error: 'Mangler app eller år', readiness: null, generated: null }
     }
 
+    // Block current year - year is not complete
+    const currentYear = new Date().getFullYear()
+    if (year >= currentYear) {
+      return {
+        error: 'Kan ikke generere rapport for inneværende eller fremtidige år',
+        readiness: null,
+        generated: null,
+      }
+    }
+
     // Check readiness first
     const readiness = await checkAuditReadiness(appId, year)
     if (!readiness.is_ready) {
@@ -144,10 +154,11 @@ export default function AdminAuditReports() {
   const isSubmitting = navigation.state === 'submitting'
 
   const [selectedApp, setSelectedApp] = useState<string>('')
-  const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString())
+  const [selectedYear, setSelectedYear] = useState<string>((new Date().getFullYear() - 1).toString())
 
   const currentYear = new Date().getFullYear()
-  const years = Array.from({ length: 5 }, (_, i) => currentYear - i)
+  // Only allow previous years - current year is not complete
+  const years = Array.from({ length: 5 }, (_, i) => currentYear - 1 - i)
 
   return (
     <VStack gap="space-24">
