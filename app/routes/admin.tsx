@@ -1,13 +1,6 @@
-import {
-  ArchiveIcon,
-  ArrowsCirclepathIcon,
-  CheckmarkCircleIcon,
-  FileTextIcon,
-  PersonGroupIcon,
-} from '@navikt/aksel-icons'
-import { Alert, BodyShort, Box, Button, Heading, HGrid, VStack } from '@navikt/ds-react'
-import { Form, Link, useActionData, useLoaderData } from 'react-router'
-import { resolveAlertsForLegacyDeployments } from '~/db/alerts.server'
+import { ArrowsCirclepathIcon, CheckmarkCircleIcon, FileTextIcon, PersonGroupIcon } from '@navikt/aksel-icons'
+import { BodyShort, Box, Heading, HGrid, VStack } from '@navikt/ds-react'
+import { Link, useLoaderData } from 'react-router'
 import { getAllDeployments } from '~/db/deployments.server'
 import type { Route } from './+types/admin'
 
@@ -23,32 +16,8 @@ export async function loader() {
   return { pendingCount }
 }
 
-export async function action({ request }: Route.ActionArgs) {
-  const formData = await request.formData()
-  const intent = formData.get('intent')
-
-  if (intent === 'resolve-legacy-alerts') {
-    try {
-      const result = await resolveAlertsForLegacyDeployments()
-      return {
-        success: `Oppdatert ${result.deploymentsUpdated} deployments til legacy status og løst ${result.alertsResolved} varsler.`,
-        error: null,
-      }
-    } catch (error) {
-      console.error('Resolve legacy alerts error:', error)
-      return {
-        success: null,
-        error: error instanceof Error ? error.message : 'Kunne ikke løse legacy alerts',
-      }
-    }
-  }
-
-  return { success: null, error: 'Ugyldig handling' }
-}
-
 export default function AdminIndex() {
   const { pendingCount } = useLoaderData<typeof loader>()
-  const actionData = useActionData<typeof action>()
   return (
     <VStack gap="space-24">
       <div>
@@ -57,14 +26,6 @@ export default function AdminIndex() {
         </Heading>
         <BodyShort textColor="subtle">Administrer brukere, synkronisering og systeminnstillinger.</BodyShort>
       </div>
-
-      {actionData?.success && (
-        <Alert variant="success" closeButton>
-          {actionData.success}
-        </Alert>
-      )}
-
-      {actionData?.error && <Alert variant="error">{actionData.error}</Alert>}
 
       <HGrid gap="space-16" columns={{ xs: 1, md: 2, lg: 3 }}>
         <Link to="/deployments/verify" style={{ textDecoration: 'none' }}>
@@ -161,24 +122,6 @@ export default function AdminIndex() {
             </VStack>
           </Box>
         </Link>
-
-        <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
-          <VStack gap="space-12">
-            <ArchiveIcon fontSize="2rem" aria-hidden />
-            <div>
-              <Heading size="small" spacing>
-                Legacy-håndtering
-              </Heading>
-              <BodyShort textColor="subtle">Oppdater gamle deployments uten commit SHA til legacy status.</BodyShort>
-            </div>
-            <Form method="post">
-              <input type="hidden" name="intent" value="resolve-legacy-alerts" />
-              <Button type="submit" variant="secondary" size="small">
-                Recheck legacy
-              </Button>
-            </Form>
-          </VStack>
-        </Box>
       </HGrid>
     </VStack>
   )
