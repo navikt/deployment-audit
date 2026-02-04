@@ -15,6 +15,8 @@ import { pool } from '~/db/connection.server'
 import {
   type CommitDataType,
   type CommitSnapshot,
+  type CompareData,
+  type CompareSnapshot,
   CURRENT_SCHEMA_VERSION,
   type PrDataType,
   type PrSnapshot,
@@ -608,5 +610,86 @@ export async function cleanupOldSnapshots(options?: {
   return {
     prSnapshotsDeleted: prResult.rowCount ?? 0,
     commitSnapshotsDeleted: commitResult.rowCount ?? 0,
+  }
+}
+
+// =============================================================================
+// Compare Snapshots (commits between two SHAs)
+// =============================================================================
+
+/**
+ * Save a compare snapshot (commits between two SHAs)
+ */
+export async function saveCompareSnapshot(
+  owner: string,
+  repo: string,
+  baseSha: string,
+  headSha: string,
+  data: CompareData,
+  options?: {
+    source?: 'github' | 'cached'
+    githubAvailable?: boolean
+  },
+): Promise<number> {
+  const result = await pool.query(
+    `INSERT INTO github_compare_snapshots 
+       (owner, repo, base_sha, head_sha, schema_version, data, source, github_available)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     RETURNING id`,
+    [
+      owner,
+      repo,
+      baseSha,
+      headSha,
+      CURRENT_SCHEMA_VERSION,
+      JSON.stringify(data),
+      options?.source ?? 'github',
+      options?.githubAvailable ?? true,
+    ],
+  )
+  return result.rows[0].id
+}
+
+/**
+ * Get the latest compare snapshot for a base/head SHA pair
+ */
+export async function getLatestCompareSnapshot(
+  owner: string,
+  repo: string,
+  baseSha: string,
+  headSha: string,
+  options?: {
+    requireCurrentSchema?: boolean
+  },
+): Promise<CompareSnapshot | null> {
+  const requireCurrent = options?.requireCurrentSchema ?? true
+
+  const result = await pool.query(
+    `SELECT id, owner, repo, base_sha, head_sha, schema_version, 
+            fetched_at, source, github_available, data
+     FROM github_compare_snapshots
+     WHERE owner = $1 AND repo = $2 AND base_sha = $3 AND head_sha = $4
+       ${requireCurrent ? `AND schema_version = ${CURRENT_SCHEMA_VERSION}` : ''}
+     ORDER BY fetched_at DESC
+     LIMIT 1`,
+    [owner, repo, baseSha, headSha],
+  )
+
+  if (result.rows.length === 0) {
+    return null
+  }
+
+  const row = result.rows[0]
+  return {
+    id: row.id,
+    owner: row.owner,
+    repo: row.repo,
+    baseSha: row.base_sha,
+    headSha: row.head_sha,
+    schemaVersion: row.schema_version,
+    fetchedAt: row.fetched_at,
+    source: row.source,
+    githubAvailable: row.github_available,
+    data: row.data,
   }
 }

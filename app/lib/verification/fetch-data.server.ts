@@ -15,12 +15,15 @@ import { pool } from '~/db/connection.server'
 import {
   getAllLatestPrSnapshots,
   getLatestCommitSnapshot,
+  getLatestCompareSnapshot,
   markPrDataUnavailable,
   saveCommitSnapshot,
+  saveCompareSnapshot,
   savePrSnapshotsBatch,
 } from '~/db/github-data.server'
 import { getCommitsBetween, getDetailedPullRequestInfo, getPullRequestForCommit } from '~/lib/github.server'
 import {
+  type CompareData,
   CURRENT_SCHEMA_VERSION,
   type ImplicitApprovalSettings,
   type PrCommit,
@@ -362,7 +365,17 @@ async function fetchCommitsBetween(
   _previousDeploymentDate: string,
   options?: FetchOptions,
 ): Promise<VerificationInput['commitsBetween']> {
-  // Fetch commits between the two SHAs from GitHub
+  // Check cache first
+  if (!options?.forceRefresh) {
+    const cachedCompare = await getLatestCompareSnapshot(owner, repo, fromSha, toSha)
+    if (cachedCompare) {
+      console.log(`   📦 Using cached compare data (${cachedCompare.data.commits.length} commits)`)
+      return buildCommitsBetweenFromCache(owner, repo, baseBranch, cachedCompare.data, options)
+    }
+  }
+
+  // Fetch from GitHub API
+  console.log(`   🌐 Fetching compare from GitHub: ${fromSha.substring(0, 7)}...${toSha.substring(0, 7)}`)
   const commitsRaw = await getCommitsBetween(owner, repo, fromSha, toSha)
 
   if (!commitsRaw) {
@@ -370,25 +383,46 @@ async function fetchCommitsBetween(
     return []
   }
 
-  // Store each commit to database
-  for (const commit of commitsRaw) {
-    await saveCommitSnapshot(owner, repo, commit.sha, 'metadata', {
+  // Build compare data for storage
+  const compareData: CompareData = {
+    commits: commitsRaw.map((commit) => ({
       sha: commit.sha,
       message: commit.message,
       authorUsername: commit.author,
       authorDate: commit.date,
-      committerUsername: commit.author,
       committerDate: commit.committer_date,
       parentShas: commit.parent_shas,
       isMergeCommit: commit.parents_count > 1,
       htmlUrl: commit.html_url,
-    })
+    })),
   }
 
-  // For each commit, find its associated PR
+  // Save compare snapshot to database
+  await saveCompareSnapshot(owner, repo, fromSha, toSha, compareData)
+
+  // Also store individual commit snapshots
+  for (const commit of compareData.commits) {
+    await saveCommitSnapshot(owner, repo, commit.sha, 'metadata', commit)
+  }
+
+  // Build the result with PR data
+  return buildCommitsBetweenFromCache(owner, repo, baseBranch, compareData, options)
+}
+
+/**
+ * Build commitsBetween result from cached compare data,
+ * fetching PR data as needed
+ */
+async function buildCommitsBetweenFromCache(
+  owner: string,
+  repo: string,
+  baseBranch: string,
+  compareData: CompareData,
+  options?: FetchOptions,
+): Promise<VerificationInput['commitsBetween']> {
   const result: VerificationInput['commitsBetween'] = []
 
-  for (const commit of commitsRaw) {
+  for (const commit of compareData.commits) {
     const prNumber = await findPrForCommit(owner, repo, commit.sha, baseBranch)
 
     let prData: VerificationInput['commitsBetween'][0]['pr'] = null
@@ -441,11 +475,11 @@ async function fetchCommitsBetween(
     result.push({
       sha: commit.sha,
       message: commit.message,
-      authorUsername: commit.author,
-      authorDate: commit.date,
-      isMergeCommit: commit.parents_count > 1,
-      parentShas: commit.parent_shas,
-      htmlUrl: commit.html_url,
+      authorUsername: commit.authorUsername,
+      authorDate: commit.authorDate,
+      isMergeCommit: commit.isMergeCommit,
+      parentShas: commit.parentShas,
+      htmlUrl: commit.htmlUrl,
       pr: prData,
     })
   }

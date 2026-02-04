@@ -188,6 +188,33 @@ export interface CommitSnapshot extends SnapshotBase {
   data: unknown
 }
 
+/**
+ * Compare snapshot from database (commits between two SHAs)
+ */
+export interface CompareSnapshot extends SnapshotBase {
+  owner: string
+  repo: string
+  baseSha: string
+  headSha: string
+  data: CompareData
+}
+
+/**
+ * Data stored in compare snapshots
+ */
+export interface CompareData {
+  commits: Array<{
+    sha: string
+    message: string
+    authorUsername: string
+    authorDate: string
+    committerDate: string
+    parentShas: string[]
+    isMergeCommit: boolean
+    htmlUrl: string
+  }>
+}
+
 // =============================================================================
 // PR Data Types (what's stored in snapshots)
 // =============================================================================
