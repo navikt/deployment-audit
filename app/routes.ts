@@ -23,6 +23,7 @@ export default [
     ),
     route('deployments/verify', 'routes/deployments.verify.tsx'),
     route('deployments/:id', 'routes/deployments.$id.tsx'),
+    route('deployments/:id/debug-verify', 'routes/deployments.$id.debug-verify.tsx'),
     route('users/:username', 'routes/users.$username.tsx'),
     route('admin', 'routes/admin.tsx'),
     route('admin/users', 'routes/admin.users.tsx'),

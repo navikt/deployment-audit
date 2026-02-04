@@ -53,6 +53,7 @@ import { lookupLegacyByCommit, lookupLegacyByPR } from '~/lib/github.server'
 import { verifyDeploymentFourEyes } from '~/lib/sync.server'
 import { getDateRangeForPeriod, type TimePeriod } from '~/lib/time-periods'
 import { getUserDisplayName, serializeUserMappings } from '~/lib/user-display'
+import { isVerificationDebugMode } from '~/lib/verification'
 import type { Route } from './+types/deployments.$id'
 
 export async function loader({ params, request }: Route.LoaderArgs) {
@@ -204,6 +205,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     currentUserNavIdent: currentUser?.navIdent || null,
     isCurrentUserInvolved,
     involvementReason,
+    isDebugMode: isVerificationDebugMode,
   }
 }
 
@@ -780,6 +782,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
     appUrl,
     isCurrentUserInvolved,
     involvementReason,
+    isDebugMode,
   } = loaderData
   const [searchParams] = useSearchParams()
   const [commentText, setCommentText] = useState('')
@@ -825,43 +828,53 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
   return (
     <VStack gap="space-32">
       {/* Navigation buttons */}
-      <HStack justify="end" gap="space-8">
-        {previousDeployment ? (
+      <HStack justify="space-between" gap="space-8">
+        {/* Debug button - only shown in debug mode */}
+        <div>
+          {isDebugMode && (
+            <Button as={Link} to={`/deployments/${deployment.id}/debug-verify`} variant="tertiary" size="xsmall">
+              🔬 Debug verifisering
+            </Button>
+          )}
+        </div>
+        <HStack gap="space-8">
+          {previousDeployment ? (
+            <Button
+              as={Link}
+              to={`${appUrl}/deployments/${previousDeployment.id}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`}
+              variant="tertiary"
+              size="xsmall"
+            >
+              ← Forrige
+            </Button>
+          ) : (
+            <Button variant="tertiary" size="xsmall" disabled>
+              ← Forrige
+            </Button>
+          )}
           <Button
             as={Link}
-            to={`${appUrl}/deployments/${previousDeployment.id}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`}
+            to={`${appUrl}/deployments${searchParams.toString() ? `?${searchParams.toString()}` : ''}`}
             variant="tertiary"
             size="xsmall"
           >
-            ← Forrige
+            Alle
           </Button>
-        ) : (
-          <Button variant="tertiary" size="xsmall" disabled>
-            ← Forrige
-          </Button>
-        )}
-        <Button
-          as={Link}
-          to={`${appUrl}/deployments${searchParams.toString() ? `?${searchParams.toString()}` : ''}`}
-          variant="tertiary"
-          size="xsmall"
-        >
-          Alle
-        </Button>
-        {nextDeployment ? (
-          <Button
-            as={Link}
-            to={`${appUrl}/deployments/${nextDeployment.id}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`}
-            variant="tertiary"
-            size="xsmall"
-          >
-            Neste →
-          </Button>
-        ) : (
-          <Button variant="tertiary" size="xsmall" disabled>
-            Neste →
-          </Button>
-        )}
+          {nextDeployment ? (
+            <Button
+              as={Link}
+              to={`${appUrl}/deployments/${nextDeployment.id}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`}
+              variant="tertiary"
+              size="xsmall"
+            >
+              Neste →
+            </Button>
+          ) : (
+            <Button variant="tertiary" size="xsmall" disabled>
+              Neste →
+            </Button>
+          )}
+        </HStack>
       </HStack>
       {/* Main header */}
       <div>
