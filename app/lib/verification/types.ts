@@ -279,8 +279,8 @@ export interface VerificationInput {
  * Settings for implicit approval (single-author PRs, etc.)
  */
 export interface ImplicitApprovalSettings {
-  mode: 'off' | 'single_author' | 'author_is_merger'
-  requireMergerDifferentFromAuthor: boolean
+  mode: 'off' | 'dependabot_only' | 'all'
+  requireMergerDifferentFromAuthor?: boolean // Legacy field, not used in new logic
 }
 
 // =============================================================================

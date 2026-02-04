@@ -397,6 +397,11 @@ export function shouldApproveWithBaseMerge(
 
 /**
  * Check if deployment qualifies for implicit approval.
+ *
+ * Rules:
+ * - mode 'off': Never qualifies
+ * - mode 'dependabot_only': Only Dependabot PRs with only Dependabot commits qualify
+ * - mode 'all': Any PR where merger is not creator AND not last commit author qualifies
  */
 export function checkImplicitApproval(params: {
   settings: ImplicitApprovalSettings
@@ -415,19 +420,8 @@ export function checkImplicitApproval(params: {
   const prCreatorLower = prCreator.toLowerCase()
   const lastCommitAuthorLower = lastCommitAuthor.toLowerCase()
 
-  // mode === 'single_author': Merger different from creator and last author
-  if (settings.mode === 'single_author') {
-    if (mergedByLower !== prCreatorLower && mergedByLower !== lastCommitAuthorLower) {
-      return {
-        qualifies: true,
-        reason: `Merged by ${mergedBy} who is neither PR creator (${prCreator}) nor last commit author (${lastCommitAuthor})`,
-      }
-    }
-    return { qualifies: false }
-  }
-
-  // mode === 'author_is_merger': Allow Dependabot-style PRs
-  if (settings.mode === 'author_is_merger') {
+  // mode === 'dependabot_only': Only Dependabot PRs with only Dependabot commits
+  if (settings.mode === 'dependabot_only') {
     const isDependabotPR = prCreatorLower === 'dependabot[bot]'
     const onlyDependabotCommits = allCommitAuthors.every(
       (author) => author.toLowerCase() === 'dependabot[bot]' || author.toLowerCase() === 'dependabot',
@@ -436,7 +430,19 @@ export function checkImplicitApproval(params: {
     if (isDependabotPR && onlyDependabotCommits && mergedByLower !== prCreatorLower) {
       return {
         qualifies: true,
-        reason: 'Dependabot PR with only Dependabot commits, merged by different user',
+        reason: 'Dependabot-PR med kun Dependabot-commits, merget av en annen bruker',
+      }
+    }
+
+    return { qualifies: false }
+  }
+
+  // mode === 'all': Merger different from creator and last author
+  if (settings.mode === 'all') {
+    if (mergedByLower !== prCreatorLower && mergedByLower !== lastCommitAuthorLower) {
+      return {
+        qualifies: true,
+        reason: `Merget av ${mergedBy} som verken opprettet PR-en (${prCreator}) eller har siste commit (${lastCommitAuthor})`,
       }
     }
   }

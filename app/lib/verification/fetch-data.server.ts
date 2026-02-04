@@ -112,29 +112,36 @@ async function getAppSettings(monitoredAppId: number): Promise<{
   auditStartYear: number | null
   implicitApprovalSettings: ImplicitApprovalSettings
 }> {
-  const result = await pool.query(
-    `SELECT 
-       audit_start_year
-     FROM monitored_applications
-     WHERE id = $1`,
-    [monitoredAppId],
-  )
+  // Get audit_start_year from monitored_applications
+  const appResult = await pool.query(`SELECT audit_start_year FROM monitored_applications WHERE id = $1`, [
+    monitoredAppId,
+  ])
 
-  if (result.rows.length === 0) {
+  if (appResult.rows.length === 0) {
     return {
       auditStartYear: null,
-      implicitApprovalSettings: { mode: 'off', requireMergerDifferentFromAuthor: true },
+      implicitApprovalSettings: { mode: 'off' },
     }
   }
 
-  const row = result.rows[0]
+  // Get implicit approval settings from app_settings
+  const settingsResult = await pool.query(
+    `SELECT setting_value FROM app_settings 
+     WHERE monitored_app_id = $1 AND setting_key = 'implicit_approval'`,
+    [monitoredAppId],
+  )
+
+  let implicitApprovalSettings: ImplicitApprovalSettings = { mode: 'off' }
+  if (settingsResult.rows.length > 0 && settingsResult.rows[0].setting_value) {
+    const settingValue = settingsResult.rows[0].setting_value
+    if (settingValue.mode === 'dependabot_only' || settingValue.mode === 'all') {
+      implicitApprovalSettings = { mode: settingValue.mode }
+    }
+  }
+
   return {
-    auditStartYear: row.audit_start_year,
-    // TODO: Add app_settings table for implicit approval configuration
-    implicitApprovalSettings: {
-      mode: 'off',
-      requireMergerDifferentFromAuthor: true,
-    },
+    auditStartYear: appResult.rows[0].audit_start_year,
+    implicitApprovalSettings,
   }
 }
 
