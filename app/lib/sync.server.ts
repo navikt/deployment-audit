@@ -12,6 +12,13 @@ import {
   updateCommitPrVerification,
   upsertCommits,
 } from '~/db/commits.server'
+
+/**
+ * Feature flag for using the new modular verification system.
+ * Set VERIFICATION_V2=true to use the new system.
+ */
+const USE_VERIFICATION_V2 = process.env.VERIFICATION_V2 === 'true'
+
 import {
   type CreateDeploymentParams,
   createDeployment,
@@ -37,6 +44,7 @@ import {
   verifyPullRequestFourEyes,
 } from '~/lib/github.server'
 import { fetchApplicationDeployments, fetchNewDeployments } from '~/lib/nais.server'
+import { runVerification } from '~/lib/verification'
 
 /**
  * Verify four-eyes approval from already fetched PR data
@@ -479,7 +487,9 @@ export async function verifyDeploymentsFourEyes(filters?: DeploymentFilters & { 
         continue
       }
 
-      const success = await verifyDeploymentFourEyes(
+      // Use V2 verification if feature flag is enabled
+      const verifyFn = USE_VERIFICATION_V2 ? verifyDeploymentFourEyesV2 : verifyDeploymentFourEyes
+      const success = await verifyFn(
         deployment.id,
         deployment.commit_sha,
         `${deployment.detected_github_owner}/${deployment.detected_github_repo_name}`,
@@ -984,6 +994,50 @@ export async function verifyDeploymentFourEyes(
       githubPrNumber: null,
       githubPrUrl: null,
     })
+
+    return false
+  }
+}
+
+/**
+ * New verification function using the modular verification system.
+ * Uses database caching and versioned snapshots for better performance.
+ *
+ * This is an alternative to verifyDeploymentFourEyes that uses the new
+ * modular architecture. Enable via feature flag or call directly.
+ */
+export async function verifyDeploymentFourEyesV2(
+  deploymentId: number,
+  commitSha: string,
+  repository: string,
+  environmentName: string,
+  _triggerUrl?: string | null,
+  baseBranch: string = 'main',
+  monitoredAppId?: number,
+): Promise<boolean> {
+  if (!monitoredAppId) {
+    console.warn(`⚠️  verifyDeploymentFourEyesV2 requires monitoredAppId`)
+    return false
+  }
+
+  try {
+    const result = await runVerification(deploymentId, {
+      commitSha,
+      repository,
+      environmentName,
+      baseBranch,
+      monitoredAppId,
+    })
+
+    return result.status !== 'error'
+  } catch (error) {
+    console.error(`❌ Error in verifyDeploymentFourEyesV2 for deployment ${deploymentId}:`, error)
+
+    // Check if it's a rate limit error
+    if (error instanceof Error && error.message.includes('rate limit')) {
+      console.warn('⚠️  GitHub rate limit reached, stopping verification')
+      throw error
+    }
 
     return false
   }
