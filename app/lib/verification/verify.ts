@@ -1,0 +1,466 @@
+/**
+ * Stateless Verification Logic
+ *
+ * This module contains PURE functions for verifying deployments.
+ * No database calls, no API calls - just logic.
+ *
+ * Input: VerificationInput (all data needed)
+ * Output: VerificationResult (verification decision)
+ */
+
+import type {
+  ImplicitApprovalSettings,
+  PrCommit,
+  PrReview,
+  UnverifiedCommit,
+  UnverifiedReason,
+  VerificationInput,
+  VerificationResult,
+  VerificationStatus,
+} from './types'
+
+// =============================================================================
+// Main Verification Function
+// =============================================================================
+
+/**
+ * Verify a deployment based on the provided input data.
+ * This is a pure function - no side effects, no database/API calls.
+ */
+export function verifyDeployment(input: VerificationInput): VerificationResult {
+  const now = new Date()
+
+  // Case 1: No previous deployment (first deployment)
+  if (!input.previousDeployment) {
+    return {
+      hasFourEyes: false,
+      status: 'pending_baseline',
+      deployedPr: input.deployedPr
+        ? {
+            number: input.deployedPr.number,
+            url: input.deployedPr.url,
+            title: input.deployedPr.metadata.title,
+            author: input.deployedPr.metadata.author.username,
+          }
+        : null,
+      unverifiedCommits: [],
+      approvalDetails: {
+        method: 'pending_baseline',
+        approvers: [],
+        reason: 'First deployment - no previous deployment to compare against',
+      },
+      verifiedAt: now,
+      schemaVersion: input.dataFreshness.schemaVersion,
+    }
+  }
+
+  // Case 2: No commits between deployments (same commit)
+  if (input.commitsBetween.length === 0) {
+    return {
+      hasFourEyes: true,
+      status: 'no_changes',
+      deployedPr: input.deployedPr
+        ? {
+            number: input.deployedPr.number,
+            url: input.deployedPr.url,
+            title: input.deployedPr.metadata.title,
+            author: input.deployedPr.metadata.author.username,
+          }
+        : null,
+      unverifiedCommits: [],
+      approvalDetails: {
+        method: 'no_changes',
+        approvers: [],
+        reason: 'No new commits since previous deployment',
+      },
+      verifiedAt: now,
+      schemaVersion: input.dataFreshness.schemaVersion,
+    }
+  }
+
+  // Case 3: Verify each commit
+  const unverifiedCommits: UnverifiedCommit[] = []
+  const deployedPrCommitShas = new Set(input.deployedPr?.commits.map((c) => c.sha) ?? [])
+
+  // Check deployed PR approval status
+  let deployedPrApproval: { hasFourEyes: boolean; reason: string } | null = null
+  if (input.deployedPr) {
+    deployedPrApproval = verifyFourEyesFromPrData({
+      reviewers: input.deployedPr.reviews,
+      commits: input.deployedPr.commits,
+      baseBranch: input.deployedPr.metadata.baseBranch,
+    })
+  }
+
+  for (const commit of input.commitsBetween) {
+    // Skip merge commits
+    if (commit.isMergeCommit) {
+      continue
+    }
+
+    // Check if commit is in deployed PR
+    if (input.deployedPr && deployedPrCommitShas.has(commit.sha)) {
+      if (deployedPrApproval?.hasFourEyes) {
+        // Commit is in an approved PR - verified
+        continue
+      }
+      // Commit is in an unapproved deployed PR
+      unverifiedCommits.push({
+        sha: commit.sha,
+        message: commit.message.split('\n')[0],
+        author: commit.authorUsername,
+        date: commit.authorDate,
+        htmlUrl: commit.htmlUrl,
+        prNumber: input.deployedPr.number,
+        reason: mapToUnverifiedReason(deployedPrApproval?.reason || 'pr_not_approved'),
+      })
+      continue
+    }
+
+    // Check if commit has its own PR
+    if (commit.pr) {
+      const prApproval = verifyFourEyesFromPrData({
+        reviewers: commit.pr.reviews,
+        commits: commit.pr.commits,
+        baseBranch: commit.pr.baseBranch,
+      })
+
+      if (prApproval.hasFourEyes) {
+        // Commit's PR is approved - verified
+        continue
+      }
+
+      // Commit's PR is not approved
+      unverifiedCommits.push({
+        sha: commit.sha,
+        message: commit.message.split('\n')[0],
+        author: commit.authorUsername,
+        date: commit.authorDate,
+        htmlUrl: commit.htmlUrl,
+        prNumber: commit.pr.number,
+        reason: mapToUnverifiedReason(prApproval.reason),
+      })
+      continue
+    }
+
+    // No PR found for this commit
+    unverifiedCommits.push({
+      sha: commit.sha,
+      message: commit.message.split('\n')[0],
+      author: commit.authorUsername,
+      date: commit.authorDate,
+      htmlUrl: commit.htmlUrl,
+      prNumber: null,
+      reason: 'no_pr',
+    })
+  }
+
+  // Case 4: All commits verified
+  if (unverifiedCommits.length === 0) {
+    return {
+      hasFourEyes: true,
+      status: 'approved',
+      deployedPr: input.deployedPr
+        ? {
+            number: input.deployedPr.number,
+            url: input.deployedPr.url,
+            title: input.deployedPr.metadata.title,
+            author: input.deployedPr.metadata.author.username,
+          }
+        : null,
+      unverifiedCommits: [],
+      approvalDetails: {
+        method: 'pr_review',
+        approvers: extractApprovers(input.deployedPr?.reviews ?? []),
+        reason: `All ${input.commitsBetween.length} commit(s) verified via PR review`,
+      },
+      verifiedAt: now,
+      schemaVersion: input.dataFreshness.schemaVersion,
+    }
+  }
+
+  // Case 5: Check base branch merge approval
+  if (input.deployedPr && unverifiedCommits.length > 0) {
+    const baseMergeResult = shouldApproveWithBaseMerge(
+      input.deployedPr.reviews,
+      unverifiedCommits,
+      input.deployedPr.commits,
+      input.deployedPr.metadata.baseBranch,
+    )
+
+    if (baseMergeResult.approved) {
+      return {
+        hasFourEyes: true,
+        status: 'approved',
+        deployedPr: {
+          number: input.deployedPr.number,
+          url: input.deployedPr.url,
+          title: input.deployedPr.metadata.title,
+          author: input.deployedPr.metadata.author.username,
+        },
+        unverifiedCommits: [],
+        approvalDetails: {
+          method: 'base_merge',
+          approvers: extractApprovers(input.deployedPr.reviews),
+          reason: baseMergeResult.reason,
+        },
+        verifiedAt: now,
+        schemaVersion: input.dataFreshness.schemaVersion,
+      }
+    }
+  }
+
+  // Case 6: Check implicit approval
+  if (input.deployedPr && input.implicitApprovalSettings.mode !== 'off') {
+    const implicitResult = checkImplicitApproval({
+      settings: input.implicitApprovalSettings,
+      prCreator: input.deployedPr.metadata.author.username,
+      lastCommitAuthor: getLastCommitAuthor(input.deployedPr.commits),
+      mergedBy: input.deployedPr.metadata.mergedBy?.username ?? '',
+      allCommitAuthors: input.deployedPr.commits.map((c) => c.authorUsername),
+    })
+
+    if (implicitResult.qualifies) {
+      return {
+        hasFourEyes: true,
+        status: 'implicitly_approved',
+        deployedPr: {
+          number: input.deployedPr.number,
+          url: input.deployedPr.url,
+          title: input.deployedPr.metadata.title,
+          author: input.deployedPr.metadata.author.username,
+        },
+        unverifiedCommits: [],
+        approvalDetails: {
+          method: 'implicit',
+          approvers: input.deployedPr.metadata.mergedBy ? [input.deployedPr.metadata.mergedBy.username] : [],
+          reason: implicitResult.reason ?? 'Implicit approval',
+        },
+        verifiedAt: now,
+        schemaVersion: input.dataFreshness.schemaVersion,
+      }
+    }
+  }
+
+  // Case 7: Unverified commits remain
+  return {
+    hasFourEyes: false,
+    status: 'unverified_commits',
+    deployedPr: input.deployedPr
+      ? {
+          number: input.deployedPr.number,
+          url: input.deployedPr.url,
+          title: input.deployedPr.metadata.title,
+          author: input.deployedPr.metadata.author.username,
+        }
+      : null,
+    unverifiedCommits,
+    approvalDetails: {
+      method: null,
+      approvers: [],
+      reason: `${unverifiedCommits.length} commit(s) not verified`,
+    },
+    verifiedAt: now,
+    schemaVersion: input.dataFreshness.schemaVersion,
+  }
+}
+
+// =============================================================================
+// PR Four-Eyes Verification (from prData)
+// =============================================================================
+
+interface PrDataForVerification {
+  reviewers: PrReview[]
+  commits: PrCommit[]
+  baseBranch: string
+}
+
+/**
+ * Verify four-eyes principle from PR data.
+ * Checks if there's an approval AFTER the last meaningful commit.
+ */
+export function verifyFourEyesFromPrData(prData: PrDataForVerification): {
+  hasFourEyes: boolean
+  reason: string
+} {
+  const { reviewers, commits, baseBranch } = prData
+
+  if (commits.length === 0) {
+    return { hasFourEyes: false, reason: 'No commits found in PR' }
+  }
+
+  // Find the last "real" commit - ignore merge commits bringing base into feature
+  let lastRealCommit = commits[commits.length - 1]
+  let lastRealCommitIndex = commits.length - 1
+
+  for (let i = commits.length - 1; i >= 0; i--) {
+    const commit = commits[i]
+    if (!isBaseBranchMergeCommit(commit.message, baseBranch)) {
+      lastRealCommit = commit
+      lastRealCommitIndex = i
+      break
+    }
+  }
+
+  const lastRealCommitDate = new Date(lastRealCommit.authorDate)
+
+  // Find approved reviews after last real commit
+  const approvedReviewsAfterLastCommit = reviewers.filter((review) => {
+    if (review.state !== 'APPROVED' || !review.submittedAt) {
+      return false
+    }
+    return new Date(review.submittedAt) > lastRealCommitDate
+  })
+
+  if (approvedReviewsAfterLastCommit.length > 0) {
+    const reason =
+      lastRealCommitIndex < commits.length - 1
+        ? `Approved by ${approvedReviewsAfterLastCommit[0].username} (after ignoring ${commits.length - 1 - lastRealCommitIndex} base-merge commit(s))`
+        : `Approved by ${approvedReviewsAfterLastCommit[0].username} after last commit`
+    return { hasFourEyes: true, reason }
+  }
+
+  // No approved reviews after last real commit
+  const approvedReviews = reviewers.filter((r) => r.state === 'APPROVED')
+  if (approvedReviews.length === 0) {
+    return { hasFourEyes: false, reason: 'no_approved_reviews' }
+  }
+
+  return { hasFourEyes: false, reason: 'approval_before_last_commit' }
+}
+
+// =============================================================================
+// Base Branch Merge Detection
+// =============================================================================
+
+/**
+ * Detect if a commit message indicates a merge of base branch into feature branch.
+ */
+export function isBaseBranchMergeCommit(message: string, baseBranch = 'main'): boolean {
+  const patterns = [
+    new RegExp(`^Merge branch '${baseBranch}' into`, 'i'),
+    new RegExp(`^Merge branch '${baseBranch === 'main' ? 'master' : 'main'}' into`, 'i'),
+    new RegExp(`^Merge remote-tracking branch 'origin/${baseBranch}' into`, 'i'),
+  ]
+  return patterns.some((pattern) => pattern.test(message))
+}
+
+interface BaseMergeCheckResult {
+  approved: boolean
+  reason: string
+}
+
+/**
+ * Check if unverified commits can be explained by base branch merge.
+ */
+export function shouldApproveWithBaseMerge(
+  reviews: PrReview[],
+  unverifiedCommits: UnverifiedCommit[],
+  prCommits: PrCommit[],
+  baseBranch = 'main',
+): BaseMergeCheckResult {
+  // Check if PR has any approvals
+  const approvals = reviews.filter((r) => r.state === 'APPROVED')
+  if (approvals.length === 0) {
+    return { approved: false, reason: 'no_approval' }
+  }
+
+  // Find merge commit bringing base into feature
+  const mergeCommit = prCommits.find((c) => isBaseBranchMergeCommit(c.message, baseBranch))
+  if (!mergeCommit) {
+    return { approved: false, reason: 'no_base_merge_commit_found' }
+  }
+
+  const mergeDate = new Date(mergeCommit.authorDate)
+
+  // Check if all unverified commits are before the merge
+  for (const commit of unverifiedCommits) {
+    if (commit.sha === mergeCommit.sha) continue
+
+    const commitDate = new Date(commit.date)
+    if (commitDate >= mergeDate) {
+      return {
+        approved: false,
+        reason: `commit_${commit.sha.substring(0, 7)}_after_merge`,
+      }
+    }
+  }
+
+  return {
+    approved: true,
+    reason: `approved_with_base_merge:${mergeCommit.sha}`,
+  }
+}
+
+// =============================================================================
+// Implicit Approval
+// =============================================================================
+
+/**
+ * Check if deployment qualifies for implicit approval.
+ */
+export function checkImplicitApproval(params: {
+  settings: ImplicitApprovalSettings
+  prCreator: string
+  lastCommitAuthor: string
+  mergedBy: string
+  allCommitAuthors: string[]
+}): { qualifies: boolean; reason?: string } {
+  const { settings, prCreator, lastCommitAuthor, mergedBy, allCommitAuthors } = params
+
+  if (settings.mode === 'off') {
+    return { qualifies: false }
+  }
+
+  const mergedByLower = mergedBy.toLowerCase()
+  const prCreatorLower = prCreator.toLowerCase()
+  const lastCommitAuthorLower = lastCommitAuthor.toLowerCase()
+
+  // mode === 'single_author': Merger different from creator and last author
+  if (settings.mode === 'single_author') {
+    if (mergedByLower !== prCreatorLower && mergedByLower !== lastCommitAuthorLower) {
+      return {
+        qualifies: true,
+        reason: `Merged by ${mergedBy} who is neither PR creator (${prCreator}) nor last commit author (${lastCommitAuthor})`,
+      }
+    }
+    return { qualifies: false }
+  }
+
+  // mode === 'author_is_merger': Allow Dependabot-style PRs
+  if (settings.mode === 'author_is_merger') {
+    const isDependabotPR = prCreatorLower === 'dependabot[bot]'
+    const onlyDependabotCommits = allCommitAuthors.every(
+      (author) => author.toLowerCase() === 'dependabot[bot]' || author.toLowerCase() === 'dependabot',
+    )
+
+    if (isDependabotPR && onlyDependabotCommits && mergedByLower !== prCreatorLower) {
+      return {
+        qualifies: true,
+        reason: 'Dependabot PR with only Dependabot commits, merged by different user',
+      }
+    }
+  }
+
+  return { qualifies: false }
+}
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+function extractApprovers(reviews: PrReview[]): string[] {
+  return reviews.filter((r) => r.state === 'APPROVED').map((r) => r.username)
+}
+
+function getLastCommitAuthor(commits: PrCommit[]): string {
+  if (commits.length === 0) return ''
+  return commits[commits.length - 1].authorUsername
+}
+
+function mapToUnverifiedReason(reason: string): UnverifiedReason {
+  if (reason === 'no_pr') return 'no_pr'
+  if (reason === 'no_approved_reviews') return 'no_approved_reviews'
+  if (reason === 'approval_before_last_commit') return 'approval_before_last_commit'
+  return 'pr_not_approved'
+}
