@@ -183,7 +183,8 @@ export async function runDebugVerification(
   console.log(`   📋 Existing status: ${existingStatus.status} (four_eyes: ${existingStatus.hasFourEyes})`)
 
   // Step 2: Fetch data from GitHub (this stores to snapshots table)
-  console.log(`   📥 Fetching fresh data from GitHub...`)
+  const useCache = options.forceRefresh === false
+  console.log(`   📥 Fetching data${useCache ? ' (using cache if available)' : ' from GitHub'}...`)
   const fetchedData = await fetchVerificationData(
     deploymentId,
     options.commitSha,
@@ -191,7 +192,7 @@ export async function runDebugVerification(
     options.environmentName,
     options.baseBranch,
     options.monitoredAppId,
-    { forceRefresh: true }, // Always force refresh in debug mode
+    { forceRefresh: !useCache },
   )
 
   console.log(`   ✅ Data fetched:`)

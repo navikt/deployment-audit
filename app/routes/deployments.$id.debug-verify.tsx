@@ -11,17 +11,20 @@
  * - Side-by-side comparison
  */
 
-import { Alert, BodyShort, Box, Button, Heading, HStack, Tag, VStack } from '@navikt/ds-react'
-import { Link } from 'react-router'
+import { Alert, BodyShort, Box, Button, Heading, HStack, Switch, Tag, VStack } from '@navikt/ds-react'
+import { Link, useSearchParams } from 'react-router'
 import { getDeploymentById } from '~/db/deployments.server'
 import { type DebugVerificationResult, isVerificationDebugMode, runDebugVerification } from '~/lib/verification'
 import type { Route } from './+types/deployments.$id.debug-verify'
 
-export async function loader({ params }: Route.LoaderArgs) {
+export async function loader({ params, request }: Route.LoaderArgs) {
   // Check debug mode
   if (!isVerificationDebugMode) {
     throw new Response('Debug mode not enabled', { status: 403 })
   }
+
+  const url = new URL(request.url)
+  const useCache = url.searchParams.get('cache') !== 'false' // Default to using cache
 
   const deploymentId = parseInt(params.id, 10)
   if (Number.isNaN(deploymentId)) {
@@ -38,6 +41,7 @@ export async function loader({ params }: Route.LoaderArgs) {
       deployment,
       error: 'Deployment mangler nødvendig data for verifisering',
       debugResult: null,
+      useCache,
     }
   }
 
@@ -46,6 +50,7 @@ export async function loader({ params }: Route.LoaderArgs) {
       deployment,
       error: 'Deployment er ikke koblet til en overvåket applikasjon',
       debugResult: null,
+      useCache,
     }
   }
 
@@ -56,12 +61,14 @@ export async function loader({ params }: Route.LoaderArgs) {
       environmentName: deployment.environment_name,
       baseBranch: deployment.default_branch || 'main',
       monitoredAppId: deployment.monitored_app_id,
+      forceRefresh: !useCache,
     })
 
     return {
       deployment,
       debugResult,
       error: null,
+      useCache,
     }
   } catch (error) {
     console.error('Debug verification failed:', error)
@@ -69,6 +76,7 @@ export async function loader({ params }: Route.LoaderArgs) {
       deployment,
       debugResult: null,
       error: error instanceof Error ? error.message : 'Ukjent feil ved verifisering',
+      useCache,
     }
   }
 }
@@ -84,7 +92,18 @@ function downloadJson(data: unknown, filename: string) {
 }
 
 export default function DebugVerifyPage({ loaderData }: Route.ComponentProps) {
-  const { deployment, debugResult, error } = loaderData
+  const { deployment, debugResult, error, useCache } = loaderData
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  const handleCacheToggle = (checked: boolean) => {
+    const newParams = new URLSearchParams(searchParams)
+    if (checked) {
+      newParams.delete('cache') // Default is cache=true, so remove param
+    } else {
+      newParams.set('cache', 'false')
+    }
+    setSearchParams(newParams)
+  }
 
   const handleExport = () => {
     if (debugResult) {
@@ -103,7 +122,10 @@ export default function DebugVerifyPage({ loaderData }: Route.ComponentProps) {
               Deployment #{deployment.id} - {deployment.commit_sha?.substring(0, 7)}
             </BodyShort>
           </VStack>
-          <HStack gap="space-2">
+          <HStack gap="space-4" align="center">
+            <Switch checked={useCache} onChange={(e) => handleCacheToggle(e.target.checked)}>
+              Bruk cached data
+            </Switch>
             {debugResult && (
               <Button variant="secondary" size="small" onClick={handleExport}>
                 📥 Eksporter JSON
