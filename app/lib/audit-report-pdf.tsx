@@ -328,8 +328,8 @@ function AuditReportPdfDocument(props: AuditReportPdfProps) {
       {/* Page 1: Summary */}
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
-          <Text style={styles.title}>LEVERANSERAPPORT</Text>
-          <Text style={styles.subtitle}>Four-Eyes Principle Compliance Report</Text>
+          <Text style={styles.title}>RAPPORT OM ETTERLEVELSE</Text>
+          <Text style={styles.subtitle}>Leveranser</Text>
         </View>
 
         <View style={styles.section}>
@@ -419,9 +419,9 @@ function AuditReportPdfDocument(props: AuditReportPdfProps) {
       {/* Godkjenningsmetoder page */}
       <Page size="A4" style={styles.page}>
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Godkjenningsmetoder</Text>
+          <Text style={styles.sectionTitle}>Godkjenningsmetoder (fire øyne-prinsipp)</Text>
           <View style={styles.methodologyBox}>
-            <Text style={styles.methodologyTitle}>A. Pull Request (automatisk verifisert)</Text>
+            <Text style={styles.methodologyTitle}>A. Pull Request-godkjenning</Text>
             <Text style={styles.methodologyText}>• PR må være godkjent (approved) av minst én annen person</Text>
             <Text style={styles.methodologyText}>• Siste commit må være før godkjenning (ingen post-commits)</Text>
             <Text style={styles.methodologyText}>• Siste commit kan ikke være fra reviewer</Text>
@@ -429,11 +429,10 @@ function AuditReportPdfDocument(props: AuditReportPdfProps) {
           <View style={styles.methodologyBox}>
             <Text style={styles.methodologyTitle}>B. Manuell godkjenning (etterkontroll)</Text>
             <Text style={styles.methodologyText}>• Krever kommentar med begrunnelse</Text>
-            <Text style={styles.methodologyText}>• Krever lenke til Slack-samtale som dokumenterer review</Text>
             <Text style={styles.methodologyText}>• Godkjenner og tidspunkt registreres</Text>
           </View>
           {legacyCount > 0 && (
-            <View style={[styles.methodologyBox, { backgroundColor: '#FFF4E0', borderLeft: '3px solid #D47500' }]}>
+            <View style={styles.methodologyBox}>
               <Text style={styles.methodologyTitle}>C. Legacy deployments ({legacyCount} stk)</Text>
               <Text style={styles.methodologyText}>
                 Nais-API-et inneholdt ikke commit-SHA for deployments i januar og enkelte dager i februar 2025. Disse
