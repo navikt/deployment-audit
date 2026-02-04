@@ -4,12 +4,13 @@ import { pool } from './connection.server'
 // Sync Job Types and Statuses
 // =============================================================================
 
-export const SYNC_JOB_TYPES = ['nais_sync', 'github_verify'] as const
+export const SYNC_JOB_TYPES = ['nais_sync', 'github_verify', 'fetch_verification_data'] as const
 export type SyncJobType = (typeof SYNC_JOB_TYPES)[number]
 
 export const SYNC_JOB_TYPE_LABELS: Record<SyncJobType, string> = {
   nais_sync: 'NAIS Sync',
   github_verify: 'GitHub Verifisering',
+  fetch_verification_data: 'Hent verifiseringsdata',
 }
 
 export const SYNC_JOB_STATUSES = ['pending', 'running', 'completed', 'failed'] as const
@@ -204,4 +205,34 @@ export async function getSyncJobStats(): Promise<{
     failed: parseInt(result.rows[0].failed, 10),
     lastHour: parseInt(result.rows[0].last_hour, 10),
   }
+}
+
+/**
+ * Get the latest job of a specific type for an app
+ */
+export async function getLatestSyncJob(appId: number, jobType: SyncJobType): Promise<SyncJob | null> {
+  const result = await pool.query(
+    `SELECT id, job_type, monitored_app_id, status, started_at, completed_at,
+            locked_by, lock_expires_at, result, error, created_at
+     FROM sync_jobs
+     WHERE monitored_app_id = $1 AND job_type = $2
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [appId, jobType],
+  )
+  return result.rows[0] || null
+}
+
+/**
+ * Get a sync job by ID
+ */
+export async function getSyncJobById(jobId: number): Promise<SyncJob | null> {
+  const result = await pool.query(
+    `SELECT id, job_type, monitored_app_id, status, started_at, completed_at,
+            locked_by, lock_expires_at, result, error, created_at
+     FROM sync_jobs
+     WHERE id = $1`,
+    [jobId],
+  )
+  return result.rows[0] || null
 }

@@ -41,8 +41,22 @@ import {
 } from '~/db/audit-reports.server'
 import { pool } from '~/db/connection.server'
 import { getMonitoredApplicationByIdentity, updateMonitoredApplication } from '~/db/monitored-applications.server'
+import { acquireSyncLock, getLatestSyncJob, getSyncJobById, releaseSyncLock, type SyncJob } from '~/db/sync-jobs.server'
 import { generateAuditReportPdf } from '~/lib/audit-report-pdf'
 import { requireAdmin } from '~/lib/auth.server'
+import { fetchVerificationDataForAllDeployments } from '~/lib/verification'
+
+// Async function to process data fetch job in background
+async function processFetchDataJobAsync(jobId: number, appId: number) {
+  try {
+    const result = await fetchVerificationDataForAllDeployments(appId)
+    await releaseSyncLock(jobId, 'completed', result as unknown as Record<string, unknown>)
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'Unknown error'
+    await releaseSyncLock(jobId, 'failed', undefined, errorMessage)
+    throw err
+  }
+}
 
 // Async function to process report generation in background
 async function processReportJobAsync(jobId: string, appId: number, year: number, generatedBy: string) {
@@ -120,11 +134,12 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   const currentYear = new Date().getFullYear()
   const selectedYear = Number(url.searchParams.get('year')) || currentYear - 1
 
-  const [implicitApprovalSettings, recentConfigChanges, auditReports, readiness] = await Promise.all([
+  const [implicitApprovalSettings, recentConfigChanges, auditReports, readiness, latestFetchJob] = await Promise.all([
     getImplicitApprovalSettings(app.id),
     getAppConfigAuditLog(app.id, { limit: 10 }),
     getAuditReportsForApp(app.id),
     isProdApp ? checkAuditReadiness(app.id, selectedYear) : null,
+    getLatestSyncJob(app.id, 'fetch_verification_data'),
   ])
 
   return {
@@ -135,6 +150,7 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     isProdApp,
     readiness,
     selectedYear,
+    latestFetchJob,
   }
 }
 
@@ -243,23 +259,59 @@ export async function action({ request }: ActionFunctionArgs) {
     return { jobStarted: jobId }
   }
 
+  if (action === 'fetch_verification_data') {
+    // Try to acquire lock for this job
+    const jobId = await acquireSyncLock('fetch_verification_data', appId, 60) // 60 min timeout
+    if (!jobId) {
+      return { error: 'En datahenting kjører allerede for denne appen' }
+    }
+
+    // Start async processing (fire and forget)
+    processFetchDataJobAsync(jobId, appId).catch((err) => {
+      console.error(`Fetch data job ${jobId} failed:`, err)
+    })
+
+    return { fetchJobStarted: jobId }
+  }
+
+  if (action === 'check_fetch_job_status') {
+    const jobId = parseInt(formData.get('job_id') as string, 10)
+    if (!jobId) {
+      return { error: 'Mangler job_id' }
+    }
+    const job = await getSyncJobById(jobId)
+    return { fetchJobStatus: job }
+  }
+
   return null
 }
 
 export default function AppAdmin() {
-  const { app, implicitApprovalSettings, recentConfigChanges, auditReports, isProdApp, readiness, selectedYear } =
-    useLoaderData<typeof loader>()
+  const {
+    app,
+    implicitApprovalSettings,
+    recentConfigChanges,
+    auditReports,
+    isProdApp,
+    readiness,
+    selectedYear,
+    latestFetchJob,
+  } = useLoaderData<typeof loader>()
   const actionData = useActionData<typeof action>()
   const navigation = useNavigation()
   const revalidator = useRevalidator()
   const isSubmitting = navigation.state === 'submitting'
   const [, setSearchParams] = useSearchParams()
 
-  // Polling state for background job
+  // Polling state for report background job
   const [pendingJobId, setPendingJobId] = useState<string | null>(null)
   const [jobStatus, setJobStatus] = useState<'pending' | 'processing' | 'completed' | 'failed' | null>(null)
   const [jobError, setJobError] = useState<string | null>(null)
   const [jobCompleted, setJobCompleted] = useState(false)
+
+  // Polling state for fetch data job
+  const [fetchJobId, setFetchJobId] = useState<number | null>(null)
+  const [fetchJobStatus, setFetchJobStatus] = useState<SyncJob | null>(latestFetchJob)
 
   const currentYear = new Date().getFullYear()
   // Only allow previous years down to audit_start_year
@@ -280,6 +332,39 @@ export default function AppAdmin() {
       return prev
     })
   }
+
+  // Start polling when fetch job is started
+  useEffect(() => {
+    if (actionData?.fetchJobStarted) {
+      setFetchJobId(actionData.fetchJobStarted)
+    }
+  }, [actionData?.fetchJobStarted])
+
+  // Update fetch job status from action
+  useEffect(() => {
+    if (actionData?.fetchJobStatus) {
+      setFetchJobStatus(actionData.fetchJobStatus)
+    }
+  }, [actionData?.fetchJobStatus])
+
+  // Poll fetch job status
+  useEffect(() => {
+    if (!fetchJobId) return
+    if (fetchJobStatus?.status === 'completed' || fetchJobStatus?.status === 'failed') return
+
+    const interval = setInterval(() => {
+      revalidator.revalidate()
+    }, 3000)
+
+    return () => clearInterval(interval)
+  }, [fetchJobId, fetchJobStatus?.status, revalidator])
+
+  // Update fetch job status from loader
+  useEffect(() => {
+    if (latestFetchJob) {
+      setFetchJobStatus(latestFetchJob)
+    }
+  }, [latestFetchJob])
 
   // Start polling when job is started
   useEffect(() => {
@@ -633,6 +718,93 @@ export default function AppAdmin() {
               </Button>
             </VStack>
           </Form>
+        </VStack>
+      </Box>
+
+      {/* Fetch Verification Data */}
+      <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
+        <VStack gap="space-16">
+          <div>
+            <Heading size="small">Hent verifiseringsdata fra GitHub</Heading>
+            <BodyShort textColor="subtle" size="small">
+              Henter og lagrer data fra GitHub for alle deployments. Kjører kun for deployments som mangler data eller
+              har utdatert schema-versjon.
+            </BodyShort>
+          </div>
+
+          <Form method="post">
+            <input type="hidden" name="action" value="fetch_verification_data" />
+            <input type="hidden" name="app_id" value={app.id} />
+            <HStack gap="space-16" align="center">
+              <Button
+                type="submit"
+                size="small"
+                variant="secondary"
+                loading={fetchJobStatus?.status === 'running'}
+                disabled={fetchJobStatus?.status === 'running'}
+              >
+                {fetchJobStatus?.status === 'running' ? 'Henter data...' : 'Hent data for alle deployments'}
+              </Button>
+            </HStack>
+          </Form>
+
+          {fetchJobStatus && (
+            <Box
+              padding="space-12"
+              borderRadius="4"
+              background={
+                fetchJobStatus.status === 'completed'
+                  ? 'success-soft'
+                  : fetchJobStatus.status === 'failed'
+                    ? 'danger-soft'
+                    : fetchJobStatus.status === 'running'
+                      ? 'info-soft'
+                      : 'neutral-soft'
+              }
+            >
+              <VStack gap="space-8">
+                <HStack gap="space-8" align="center">
+                  {fetchJobStatus.status === 'running' && <Loader size="xsmall" />}
+                  {fetchJobStatus.status === 'completed' && <CheckmarkCircleIcon aria-hidden />}
+                  {fetchJobStatus.status === 'failed' && <ExclamationmarkTriangleIcon aria-hidden />}
+                  <BodyShort size="small" weight="semibold">
+                    {fetchJobStatus.status === 'pending' && 'Venter...'}
+                    {fetchJobStatus.status === 'running' && 'Henter data fra GitHub...'}
+                    {fetchJobStatus.status === 'completed' && 'Datahenting fullført'}
+                    {fetchJobStatus.status === 'failed' && 'Datahenting feilet'}
+                  </BodyShort>
+                </HStack>
+
+                {fetchJobStatus.status === 'completed' && fetchJobStatus.result && (
+                  <HStack gap="space-16" wrap>
+                    <Detail>Totalt: {(fetchJobStatus.result as Record<string, number>).total}</Detail>
+                    <Detail>Hentet: {(fetchJobStatus.result as Record<string, number>).fetched}</Detail>
+                    <Detail>Hoppet over: {(fetchJobStatus.result as Record<string, number>).skipped}</Detail>
+                    {(fetchJobStatus.result as Record<string, number>).errors > 0 && (
+                      <Detail>
+                        <span style={{ color: 'var(--ax-text-danger)' }}>
+                          Feil: {(fetchJobStatus.result as Record<string, number>).errors}
+                        </span>
+                      </Detail>
+                    )}
+                  </HStack>
+                )}
+
+                {fetchJobStatus.status === 'failed' && fetchJobStatus.error && (
+                  <BodyShort size="small">
+                    <span style={{ color: 'var(--ax-text-danger)' }}>{fetchJobStatus.error}</span>
+                  </BodyShort>
+                )}
+
+                <Detail textColor="subtle">
+                  Startet:{' '}
+                  {fetchJobStatus.started_at ? new Date(fetchJobStatus.started_at).toLocaleString('no-NO') : 'N/A'}
+                  {fetchJobStatus.completed_at &&
+                    ` • Fullført: ${new Date(fetchJobStatus.completed_at).toLocaleString('no-NO')}`}
+                </Detail>
+              </VStack>
+            </Box>
+          )}
         </VStack>
       </Box>
 

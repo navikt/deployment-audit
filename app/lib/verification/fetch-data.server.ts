@@ -532,3 +532,147 @@ export async function refreshPrData(
     throw error
   }
 }
+
+// =============================================================================
+// Bulk Data Fetching for All Deployments
+// =============================================================================
+
+export interface BulkFetchProgress {
+  total: number
+  processed: number
+  skipped: number
+  fetched: number
+  errors: number
+}
+
+export interface BulkFetchResult extends BulkFetchProgress {
+  errorDetails: Array<{ deploymentId: number; error: string }>
+}
+
+/**
+ * Fetch verification data for all deployments of an app.
+ * Only fetches if schema version is outdated or no data exists.
+ *
+ * @param monitoredAppId - The app to fetch data for
+ * @param onProgress - Optional callback for progress updates
+ * @returns Summary of the fetch operation
+ */
+export async function fetchVerificationDataForAllDeployments(
+  monitoredAppId: number,
+  onProgress?: (progress: BulkFetchProgress) => void,
+): Promise<BulkFetchResult> {
+  // Get app settings first to know the audit start year
+  const appSettings = await getAppSettings(monitoredAppId)
+
+  // Build query with audit_start_year filter if set
+  let query = `SELECT d.id, d.commit_sha, d.detected_github_owner, d.detected_github_repo_name,
+          d.environment_name, ma.default_branch, d.created_at
+   FROM deployments d
+   JOIN monitored_applications ma ON d.monitored_app_id = ma.id
+   WHERE d.monitored_app_id = $1
+     AND d.commit_sha IS NOT NULL
+     AND d.detected_github_owner IS NOT NULL
+     AND d.detected_github_repo_name IS NOT NULL
+     AND d.commit_sha !~ '^refs/'
+     AND LENGTH(d.commit_sha) >= 7`
+
+  const params: (number | string)[] = [monitoredAppId]
+
+  if (appSettings.auditStartYear) {
+    query += ` AND d.created_at >= $2`
+    params.push(`${appSettings.auditStartYear}-01-01`)
+  }
+
+  query += ` ORDER BY d.created_at DESC`
+
+  const deploymentsResult = await pool.query(query, params)
+
+  const deployments = deploymentsResult.rows
+  const result: BulkFetchResult = {
+    total: deployments.length,
+    processed: 0,
+    skipped: 0,
+    fetched: 0,
+    errors: 0,
+    errorDetails: [],
+  }
+
+  for (const deployment of deployments) {
+    try {
+      const owner = deployment.detected_github_owner
+      const repo = deployment.detected_github_repo_name
+      const commitSha = deployment.commit_sha
+      const baseBranch = deployment.default_branch || 'main'
+
+      // Check if we already have current schema data for this deployment
+      const hasCurrentData = await hasCurrentSchemaData(
+        owner,
+        repo,
+        deployment.id,
+        commitSha,
+        deployment.environment_name,
+        appSettings.auditStartYear,
+      )
+
+      if (hasCurrentData) {
+        result.skipped++
+      } else {
+        // Fetch data (this will store to database)
+        await fetchVerificationData(
+          deployment.id,
+          commitSha,
+          `${owner}/${repo}`,
+          deployment.environment_name,
+          baseBranch,
+          monitoredAppId,
+          { forceRefresh: false }, // Only fetch what's missing
+        )
+        result.fetched++
+      }
+
+      result.processed++
+      onProgress?.(result)
+    } catch (error) {
+      result.errors++
+      result.processed++
+      result.errorDetails.push({
+        deploymentId: deployment.id,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      })
+      onProgress?.(result)
+    }
+  }
+
+  return result
+}
+
+/**
+ * Check if we have current schema version data for a deployment
+ */
+async function hasCurrentSchemaData(
+  owner: string,
+  repo: string,
+  deploymentId: number,
+  commitSha: string,
+  environmentName: string,
+  auditStartYear: number | null,
+): Promise<boolean> {
+  // Get previous deployment to check compare data
+  const previousDeployment = await getPreviousDeployment(deploymentId, owner, repo, environmentName, auditStartYear)
+
+  // Check if we have PR data for this commit
+  const prSnapshot = await getLatestCommitSnapshot(owner, repo, commitSha, 'prs')
+  if (!prSnapshot) {
+    return false
+  }
+
+  // If there's a previous deployment, check if we have compare data
+  if (previousDeployment) {
+    const compareSnapshot = await getLatestCompareSnapshot(owner, repo, previousDeployment.commitSha, commitSha)
+    if (!compareSnapshot) {
+      return false
+    }
+  }
+
+  return true
+}

@@ -25,7 +25,12 @@ import type { VerificationInput, VerificationResult } from './types'
 import { verifyDeployment } from './verify'
 
 // Re-export individual modules
-export { fetchVerificationData } from './fetch-data.server'
+export {
+  type BulkFetchProgress,
+  type BulkFetchResult,
+  fetchVerificationData,
+  fetchVerificationDataForAllDeployments,
+} from './fetch-data.server'
 export { storeVerificationResult } from './store-data.server'
 // Re-export types and constants for convenience
 export type {
