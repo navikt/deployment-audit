@@ -31,6 +31,8 @@ export interface Deployment {
   resources: any // JSONB
   synced_at: Date
   title: string | null
+  slack_message_ts: string | null
+  slack_channel_id: string | null
 }
 
 export interface GitHubPRData {
@@ -937,4 +939,53 @@ export async function searchDeployments(query: string, limit = 10): Promise<Sear
   }
 
   return results
+}
+
+/**
+ * Atomically claim a deployment for Slack notification.
+ * Returns the deployment only if this call successfully claimed it (no prior slack_message_ts).
+ * This ensures only one pod sends the notification even with multiple replicas.
+ */
+export async function claimDeploymentForSlackNotification(
+  deploymentId: number,
+  channelId: string,
+  messageTs: string,
+): Promise<DeploymentWithApp | null> {
+  const result = await pool.query(
+    `UPDATE deployments 
+     SET slack_message_ts = $1, slack_channel_id = $2
+     WHERE id = $3 AND slack_message_ts IS NULL
+     RETURNING *`,
+    [messageTs, channelId, deploymentId],
+  )
+
+  if (result.rows.length === 0) {
+    return null // Already claimed by another pod
+  }
+
+  // Get the full deployment with app info
+  return getDeploymentById(deploymentId)
+}
+
+/**
+ * Get deployments that need Slack notification (no slack_message_ts set)
+ * for apps that have Slack notifications enabled
+ */
+export async function getDeploymentsNeedingSlackNotification(limit = 50): Promise<DeploymentWithApp[]> {
+  const result = await pool.query(
+    `SELECT d.*, 
+            ma.team_slug, ma.environment_name, ma.app_name, ma.default_branch,
+            ma.slack_channel_id as app_slack_channel_id,
+            ma.slack_notifications_enabled
+     FROM deployments d
+     JOIN monitored_applications ma ON d.monitored_app_id = ma.id
+     WHERE d.slack_message_ts IS NULL
+       AND ma.slack_notifications_enabled = true
+       AND ma.slack_channel_id IS NOT NULL
+       AND d.created_at > NOW() - INTERVAL '7 days'
+     ORDER BY d.created_at DESC
+     LIMIT $1`,
+    [limit],
+  )
+  return result.rows
 }

@@ -385,3 +385,118 @@ function registerActionHandlers(app: App): void {
     // Link buttons don't need additional handling
   })
 }
+
+/**
+ * Send notification for a deployment if needed.
+ * Uses atomic database claim to prevent duplicate notifications across pods.
+ *
+ * @param deployment - Deployment with app info (must include app_slack_channel_id)
+ * @param baseUrl - Base URL for links (e.g., https://pensjon-deployment-audit.ansatt.nav.no)
+ * @returns true if notification was sent, false if skipped (already sent or not configured)
+ */
+export async function notifyDeploymentIfNeeded(
+  deployment: {
+    id: number
+    monitored_app_id: number
+    commit_sha: string | null
+    deployer_username: string | null
+    github_pr_number: number | null
+    github_pr_url: string | null
+    github_pr_data: { title: string } | null
+    four_eyes_status: string
+    title: string | null
+    slack_message_ts: string | null
+    team_slug: string
+    environment_name: string
+    app_name: string
+    app_slack_channel_id?: string | null
+    slack_notifications_enabled?: boolean
+  },
+  baseUrl: string,
+): Promise<boolean> {
+  // Skip if already notified
+  if (deployment.slack_message_ts) {
+    return false
+  }
+
+  // Skip if Slack not enabled for this app
+  if (!deployment.slack_notifications_enabled || !deployment.app_slack_channel_id) {
+    return false
+  }
+
+  const app = getSlackApp()
+  if (!app) {
+    return false
+  }
+
+  const channelId = deployment.app_slack_channel_id
+
+  // Determine status for notification
+  const status = mapFourEyesStatus(deployment.four_eyes_status)
+
+  // Only notify for deployments needing attention
+  if (status === 'approved') {
+    return false
+  }
+
+  // Build notification
+  const notification: DeploymentNotification = {
+    deploymentId: deployment.id,
+    appName: deployment.app_name,
+    environmentName: deployment.environment_name,
+    teamSlug: deployment.team_slug,
+    commitSha: deployment.commit_sha || 'unknown',
+    commitMessage: deployment.title || deployment.github_pr_data?.title,
+    deployerName: deployment.deployer_username || 'ukjent',
+    deployerUsername: deployment.deployer_username || 'unknown',
+    prNumber: deployment.github_pr_number || undefined,
+    prUrl: deployment.github_pr_url || undefined,
+    status,
+    detailsUrl: `${baseUrl}/team/${deployment.team_slug}/env/${deployment.environment_name}/app/${deployment.app_name}/deployments/${deployment.id}`,
+  }
+
+  // Send to Slack
+  const messageTs = await sendDeploymentNotification(notification, channelId)
+  if (!messageTs) {
+    return false
+  }
+
+  // Atomically claim this deployment (prevents duplicates across pods)
+  const { claimDeploymentForSlackNotification } = await import('~/db/deployments.server')
+  const claimed = await claimDeploymentForSlackNotification(deployment.id, channelId, messageTs)
+
+  if (!claimed) {
+    // Another pod already claimed it - delete our duplicate message
+    try {
+      await app.client.chat.delete({
+        channel: channelId,
+        ts: messageTs,
+      })
+    } catch {
+      // Ignore deletion errors
+    }
+    return false
+  }
+
+  console.log(`Slack notification sent for deployment ${deployment.id} to channel ${channelId}`)
+  return true
+}
+
+/**
+ * Map four_eyes_status to notification status
+ */
+function mapFourEyesStatus(status: string): DeploymentNotification['status'] {
+  switch (status) {
+    case 'verified':
+    case 'legacy_verified':
+    case 'implicit_verified':
+      return 'approved'
+    case 'pending':
+    case 'unverified':
+      return 'unverified'
+    case 'rejected':
+      return 'rejected'
+    default:
+      return 'pending_approval'
+  }
+}
