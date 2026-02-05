@@ -11,7 +11,7 @@ import styles from '../styles/common.module.css'
 import type { Route } from './+types/layout'
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const identity = requireUser(request)
+  const identity = await requireUser(request)
 
   // Try to get display name from user mappings
   const userMapping = await getUserMappingByNavIdent(identity.navIdent)

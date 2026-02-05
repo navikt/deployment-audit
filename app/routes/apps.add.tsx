@@ -12,7 +12,7 @@ export function meta(_args: Route.MetaArgs) {
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
-  requireAdmin(request)
+  await requireAdmin(request)
 
   try {
     // Get allowed environments from config (comma-separated)
@@ -43,7 +43,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  requireAdmin(request)
+  await requireAdmin(request)
 
   const formData = await request.formData()
   const intent = formData.get('intent')

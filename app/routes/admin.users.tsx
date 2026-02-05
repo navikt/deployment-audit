@@ -27,14 +27,14 @@ import { requireAdmin } from '~/lib/auth.server'
 import styles from '~/styles/common.module.css'
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  requireAdmin(request)
+  await requireAdmin(request)
 
   const [mappings, unmappedUsers] = await Promise.all([getAllUserMappings(), getUnmappedUsers()])
   return { mappings, unmappedUsers }
 }
 
 export async function action({ request }: ActionFunctionArgs) {
-  requireAdmin(request)
+  await requireAdmin(request)
 
   const formData = await request.formData()
   const intent = formData.get('intent')

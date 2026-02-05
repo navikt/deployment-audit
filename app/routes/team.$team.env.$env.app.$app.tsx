@@ -98,7 +98,7 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData()
   const action = formData.get('action')
-  const identity = getUserIdentity(request)
+  const identity = await getUserIdentity(request)
 
   try {
     if (action === 'approve_repo') {

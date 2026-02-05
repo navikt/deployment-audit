@@ -31,7 +31,7 @@ interface DeploymentDiff {
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  requireAdmin(request)
+  await requireAdmin(request)
 
   const { team, env, app } = params
 

@@ -165,7 +165,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const userMappings = await getUserMappings(usernames)
 
   // Check if current user is involved in this deployment (for four-eyes validation)
-  const currentUser = getUserIdentity(request)
+  const currentUser = await getUserIdentity(request)
   let isCurrentUserInvolved = false
   let involvementReason: string | null = null
 
@@ -235,7 +235,7 @@ export async function action({ request, params }: Route.ActionArgs) {
   }
 
   if (intent === 'manual_approval') {
-    const identity = getUserIdentity(request)
+    const identity = await getUserIdentity(request)
     const reason = formData.get('reason') as string
     const slackLink = formData.get('slack_link') as string
 
@@ -322,7 +322,7 @@ export async function action({ request, params }: Route.ActionArgs) {
     const searchType = formData.get('search_type') as string
     const searchValue = formData.get('search_value') as string
     const slackLink = formData.get('slack_link') as string
-    const navIdent = getNavIdent(request)
+    const navIdent = await getNavIdent(request)
 
     if (!navIdent) {
       return { error: 'Kunne ikke identifisere bruker. Vennligst logg inn på nytt.' }
@@ -385,7 +385,7 @@ export async function action({ request, params }: Route.ActionArgs) {
     const prMergedAt = formData.get('pr_merged_at') as string
     const mergedBy = formData.get('merged_by') as string
     const reviewersJson = formData.get('reviewers') as string
-    const navIdent = getNavIdent(request)
+    const navIdent = await getNavIdent(request)
 
     if (!navIdent) {
       return { error: 'Kunne ikke identifisere bruker. Vennligst logg inn på nytt.' }
@@ -469,7 +469,7 @@ export async function action({ request, params }: Route.ActionArgs) {
     const deployer = formData.get('deployer') as string
     const commitSha = formData.get('commit_sha') as string
     const prNumber = formData.get('pr_number') as string
-    const navIdent = getNavIdent(request)
+    const navIdent = await getNavIdent(request)
 
     if (!navIdent) {
       return { error: 'Kunne ikke identifisere bruker. Vennligst logg inn på nytt.' }
@@ -510,7 +510,7 @@ export async function action({ request, params }: Route.ActionArgs) {
   }
 
   if (intent === 'approve_legacy') {
-    const navIdent = getNavIdent(request)
+    const navIdent = await getNavIdent(request)
     const legacyInfo = await getLegacyInfo(deploymentId)
 
     if (!navIdent) {
@@ -555,7 +555,7 @@ export async function action({ request, params }: Route.ActionArgs) {
   }
 
   if (intent === 'reject_legacy') {
-    const navIdent = getNavIdent(request)
+    const navIdent = await getNavIdent(request)
     const reason = formData.get('reason') as string
 
     if (!navIdent) {

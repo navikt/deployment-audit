@@ -3,7 +3,7 @@ import { getAllUserMappings } from '~/db/user-mappings.server'
 import { requireAdmin } from '~/lib/auth.server'
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  requireAdmin(request)
+  await requireAdmin(request)
 
   const mappings = await getAllUserMappings()
 

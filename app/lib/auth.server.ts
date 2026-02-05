@@ -2,8 +2,11 @@
  * Authentication utilities for extracting user identity from tokens.
  *
  * In production (Nais), Wonderwall login proxy adds Bearer tokens with NAV-ident claims.
+ * Tokens are validated using JWKS from Azure AD for cryptographic verification.
  * In development, we fall back to a mock identity from environment variables.
  */
+
+import { isJwtValidationConfigured, validateToken } from './jwt-validation.server'
 
 // Entra ID group IDs
 const GROUP_ADMIN = '1e97cbc6-0687-4d23-aebd-c611035279c1' // pensjon-revisjon
@@ -11,36 +14,12 @@ const GROUP_USER = '415d3817-c83d-44c9-a52b-5116757f8fa8' // teampensjon
 
 export type UserRole = 'admin' | 'user'
 
-interface TokenPayload {
-  NAVident?: string
-  navident?: string
-  name?: string
-  preferred_username?: string
-  email?: string
-  groups?: string[]
-}
-
 function isDevelopment(): boolean {
   return process.env.NODE_ENV === 'development'
 }
 
 function isInNaisCluster(): boolean {
   return !!process.env.NAIS_CLUSTER_NAME
-}
-
-/**
- * Parse JWT payload without verification.
- * In production, token is already verified by Wonderwall.
- */
-function parseTokenPayload(token: string): TokenPayload | null {
-  try {
-    const parts = token.split('.')
-    if (parts.length !== 3) return null
-    const payload = JSON.parse(atob(parts[1]))
-    return payload
-  } catch {
-    return null
-  }
 }
 
 export interface UserIdentity {
@@ -64,31 +43,41 @@ function getRoleFromGroups(groups: string[] | undefined): UserRole | null {
 /**
  * Extract user identity from request.
  *
- * - In production: Parses Bearer token from Authorization header
+ * - In production: Validates JWT token cryptographically using JWKS
  * - In development (outside cluster): Falls back to DEV_NAV_IDENT and DEV_USER_ROLE env vars
  *
  * @returns UserIdentity if authenticated and authorized, null otherwise
  */
-export function getUserIdentity(request: Request): UserIdentity | null {
+export async function getUserIdentity(request: Request): Promise<UserIdentity | null> {
   const authHeader = request.headers.get('Authorization')
 
-  // Try to parse real token first (works in both dev and prod)
+  // Try to validate real token (works in both dev and prod if configured)
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.slice(7)
-    const payload = parseTokenPayload(token)
 
-    if (payload) {
-      const navIdent = payload.NAVident || payload.navident
-      const role = getRoleFromGroups(payload.groups)
+    // Use full JWT validation if configured (in Nais cluster)
+    if (isJwtValidationConfigured()) {
+      const result = await validateToken(token)
 
-      if (navIdent && role) {
-        return {
-          navIdent,
-          name: payload.name,
-          email: payload.email || payload.preferred_username,
-          role,
+      if (result.success) {
+        const role = getRoleFromGroups(result.payload.groups)
+
+        if (role) {
+          return {
+            navIdent: result.payload.navIdent,
+            name: result.payload.name,
+            email: result.payload.email,
+            role,
+          }
         }
+        // User has valid token but not in authorized groups
+        console.warn(`User ${result.payload.navIdent} not in authorized groups`)
+        return null
       }
+
+      // Token validation failed
+      console.warn(`JWT validation failed: ${result.error.code} - ${result.error.message}`)
+      return null
     }
   }
 
@@ -118,16 +107,17 @@ export function getUserIdentity(request: Request): UserIdentity | null {
  *
  * @returns NAV-ident string if authenticated, null otherwise
  */
-export function getNavIdent(request: Request): string | null {
-  return getUserIdentity(request)?.navIdent || null
+export async function getNavIdent(request: Request): Promise<string | null> {
+  const identity = await getUserIdentity(request)
+  return identity?.navIdent || null
 }
 
 /**
  * Require user to be authenticated with at least 'user' role.
  * Throws 403 Response if not authorized.
  */
-export function requireUser(request: Request): UserIdentity {
-  const user = getUserIdentity(request)
+export async function requireUser(request: Request): Promise<UserIdentity> {
+  const user = await getUserIdentity(request)
   if (!user) {
     throw new Response('Forbidden - no valid authorization', { status: 403 })
   }
@@ -138,8 +128,8 @@ export function requireUser(request: Request): UserIdentity {
  * Require user to be authenticated with 'admin' role.
  * Throws 403 Response if not authorized.
  */
-export function requireAdmin(request: Request): UserIdentity {
-  const user = getUserIdentity(request)
+export async function requireAdmin(request: Request): Promise<UserIdentity> {
+  const user = await getUserIdentity(request)
   if (!user || user.role !== 'admin') {
     throw new Response('Forbidden - admin access required', { status: 403 })
   }

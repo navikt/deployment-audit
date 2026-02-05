@@ -114,7 +114,7 @@ export function meta({ data }: { data: Awaited<ReturnType<typeof loader>> | unde
 }
 
 export async function loader({ params, request }: LoaderFunctionArgs) {
-  requireAdmin(request)
+  await requireAdmin(request)
 
   const { team, env, app: appName } = params
   if (!team || !env || !appName) {
@@ -156,7 +156,7 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
 }
 
 export async function action({ request }: ActionFunctionArgs) {
-  const user = requireAdmin(request)
+  const user = await requireAdmin(request)
 
   const formData = await request.formData()
   const action = formData.get('action') as string

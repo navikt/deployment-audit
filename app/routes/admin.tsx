@@ -10,7 +10,7 @@ export function meta(_args: Route.MetaArgs) {
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
-  requireAdmin(request)
+  await requireAdmin(request)
 
   const allDeployments = await getAllDeployments()
   const pendingCount = allDeployments.filter(

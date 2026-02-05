@@ -20,7 +20,7 @@ import { requireAdmin } from '~/lib/auth.server'
 import styles from '~/styles/common.module.css'
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  requireAdmin(request)
+  await requireAdmin(request)
 
   const reports = await getAllAuditReports()
   return { reports }
