@@ -1,8 +1,9 @@
-import { ArrowsCirclepathIcon, CheckmarkCircleIcon, FileTextIcon, PersonGroupIcon } from '@navikt/aksel-icons'
+import { ArrowsCirclepathIcon, BugIcon, CheckmarkCircleIcon, FileTextIcon, PersonGroupIcon } from '@navikt/aksel-icons'
 import { BodyShort, Box, Heading, HGrid, VStack } from '@navikt/ds-react'
 import { Link, useLoaderData } from 'react-router'
 import { getAllDeployments } from '~/db/deployments.server'
 import { requireAdmin } from '~/lib/auth.server'
+import { isVerificationDebugMode } from '~/lib/verification'
 import type { Route } from './+types/admin'
 
 export function meta(_args: Route.MetaArgs) {
@@ -16,11 +17,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   const pendingCount = allDeployments.filter(
     (d) => d.four_eyes_status === 'pending' || d.four_eyes_status === 'error',
   ).length
-  return { pendingCount }
+  return { pendingCount, debugMode: isVerificationDebugMode }
 }
 
 export default function AdminIndex() {
-  const { pendingCount } = useLoaderData<typeof loader>()
+  const { pendingCount, debugMode } = useLoaderData<typeof loader>()
   return (
     <VStack gap="space-24">
       <div>
@@ -125,6 +126,30 @@ export default function AdminIndex() {
             </VStack>
           </Box>
         </Link>
+
+        {debugMode && (
+          <Link to="/admin/verification-diff" style={{ textDecoration: 'none' }}>
+            <Box
+              padding="space-24"
+              borderRadius="8"
+              background="raised"
+              borderColor="info-subtle"
+              borderWidth="1"
+              data-color="info"
+              className="admin-card"
+            >
+              <VStack gap="space-12">
+                <BugIcon fontSize="2rem" aria-hidden />
+                <div>
+                  <Heading size="small" spacing>
+                    Verifiseringsavvik
+                  </Heading>
+                  <BodyShort textColor="subtle">Sammenlign gammel og ny verifiseringslogikk. (Debug)</BodyShort>
+                </div>
+              </VStack>
+            </Box>
+          </Link>
+        )}
       </HGrid>
     </VStack>
   )

@@ -32,5 +32,6 @@ export default [
     route('admin/audit-reports', 'routes/admin.audit-reports.tsx'),
     route('admin/audit-reports/:id/pdf', 'routes/admin.audit-reports.$id.pdf.ts'),
     route('admin/audit-reports/:id/view', 'routes/admin.audit-reports.$id.view.ts'),
+    route('admin/verification-diff', 'routes/admin.verification-diff.tsx'),
   ]),
 ] satisfies RouteConfig

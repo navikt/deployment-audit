@@ -254,6 +254,7 @@ async function findPrForCommit(
   repo: string,
   commitSha: string,
   baseBranch?: string,
+  cacheOnly = false,
 ): Promise<number | null> {
   // First check our cached PR associations
   const cached = await getLatestCommitSnapshot(owner, repo, commitSha, 'prs')
@@ -264,7 +265,12 @@ async function findPrForCommit(
     if (matchingPrs.length > 0) {
       return matchingPrs[0].number
     }
+    // If we have cached data (even empty), return null in cache-only mode
+    if (cacheOnly) return null
   }
+
+  // In cache-only mode, don't fetch from GitHub
+  if (cacheOnly) return null
 
   // Fetch from GitHub API
   const prInfo = await getPullRequestForCommit(owner, repo, commitSha, true, baseBranch)
@@ -410,20 +416,21 @@ async function fetchCommitsBetween(
 }
 
 /**
- * Build commitsBetween result from cached compare data,
- * fetching PR data as needed
+ * Build commitsBetween result from cached compare data.
+ * If cacheOnly is true, only uses cached data (no GitHub API calls).
  */
-async function buildCommitsBetweenFromCache(
+export async function buildCommitsBetweenFromCache(
   owner: string,
   repo: string,
   baseBranch: string,
   compareData: CompareData,
-  options?: FetchOptions,
+  options?: FetchOptions & { cacheOnly?: boolean },
 ): Promise<VerificationInput['commitsBetween']> {
   const result: VerificationInput['commitsBetween'] = []
+  const cacheOnly = options?.cacheOnly ?? false
 
   for (const commit of compareData.commits) {
-    const prNumber = await findPrForCommit(owner, repo, commit.sha, baseBranch)
+    const prNumber = await findPrForCommit(owner, repo, commit.sha, baseBranch, cacheOnly)
 
     let prData: VerificationInput['commitsBetween'][0]['pr'] = null
 
@@ -447,8 +454,8 @@ async function buildCommitsBetweenFromCache(
       }
     }
 
-    if (prNumber && !prData) {
-      // Fetch from GitHub
+    if (prNumber && !prData && !cacheOnly) {
+      // Fetch from GitHub (only if not cache-only mode)
       try {
         const { metadata, reviews, commits: prCommits } = await fetchPrFromGitHub(owner, repo, prNumber)
 
