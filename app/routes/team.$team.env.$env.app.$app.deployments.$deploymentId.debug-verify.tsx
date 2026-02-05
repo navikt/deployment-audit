@@ -15,7 +15,7 @@ import { Alert, BodyShort, Box, Button, Heading, HStack, Switch, Tag, VStack } f
 import { Link, useSearchParams } from 'react-router'
 import { getDeploymentById } from '~/db/deployments.server'
 import { type DebugVerificationResult, isVerificationDebugMode, runDebugVerification } from '~/lib/verification'
-import type { Route } from './+types/deployments.$id.debug-verify'
+import type { Route } from './+types/team.$team.env.$env.app.$app.deployments.$deploymentId.debug-verify'
 
 export async function loader({ params, request }: Route.LoaderArgs) {
   // Check debug mode
@@ -26,7 +26,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const url = new URL(request.url)
   const useCache = url.searchParams.get('cache') !== 'false' // Default to using cache
 
-  const deploymentId = parseInt(params.id, 10)
+  const deploymentId = parseInt(params.deploymentId, 10)
   if (Number.isNaN(deploymentId)) {
     throw new Response('Invalid deployment ID', { status: 400 })
   }
@@ -131,7 +131,9 @@ export default function DebugVerifyPage({ loaderData }: Route.ComponentProps) {
                 📥 Eksporter JSON
               </Button>
             )}
-            <Link to={`/deployments/${deployment.id}`}>
+            <Link
+              to={`/team/${deployment.team_slug}/env/${deployment.environment_name}/app/${deployment.app_name}/deployments/${deployment.id}`}
+            >
               <Button variant="secondary" size="small">
                 ← Tilbake
               </Button>

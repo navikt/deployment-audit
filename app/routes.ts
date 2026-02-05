@@ -16,14 +16,21 @@ export default [
     // Semantic URL structure
     route('team/:team/env/:env/app/:app', 'routes/team.$team.env.$env.app.$app.tsx'),
     route('team/:team/env/:env/app/:app/admin', 'routes/team.$team.env.$env.app.$app.admin.tsx'),
+    route(
+      'team/:team/env/:env/app/:app/admin/verification-diff',
+      'routes/team.$team.env.$env.app.$app.admin.verification-diff.tsx',
+    ),
     route('team/:team/env/:env/app/:app/deployments', 'routes/team.$team.env.$env.app.$app.deployments.tsx'),
     route(
       'team/:team/env/:env/app/:app/deployments/:deploymentId',
       'routes/team.$team.env.$env.app.$app.deployments.$deploymentId.tsx',
     ),
+    route(
+      'team/:team/env/:env/app/:app/deployments/:deploymentId/debug-verify',
+      'routes/team.$team.env.$env.app.$app.deployments.$deploymentId.debug-verify.tsx',
+    ),
     route('deployments/verify', 'routes/deployments.verify.tsx'),
     route('deployments/:id', 'routes/deployments.$id.tsx'),
-    route('deployments/:id/debug-verify', 'routes/deployments.$id.debug-verify.tsx'),
     route('users/:username', 'routes/users.$username.tsx'),
     route('admin', 'routes/admin.tsx'),
     route('admin/users', 'routes/admin.users.tsx'),
@@ -32,6 +39,5 @@ export default [
     route('admin/audit-reports', 'routes/admin.audit-reports.tsx'),
     route('admin/audit-reports/:id/pdf', 'routes/admin.audit-reports.$id.pdf.ts'),
     route('admin/audit-reports/:id/view', 'routes/admin.audit-reports.$id.view.ts'),
-    route('admin/verification-diff', 'routes/admin.verification-diff.tsx'),
   ]),
 ] satisfies RouteConfig

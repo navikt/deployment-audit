@@ -1,5 +1,5 @@
 /**
- * Verification Diff Page
+ * Verification Diff Page (App-specific)
  *
  * Shows deployments where old and new verification results differ.
  * Only considers deployments with:
@@ -9,20 +9,19 @@
  */
 
 import { Link as AkselLink, BodyShort, Box, Heading, Table, Tag, VStack } from '@navikt/ds-react'
-import type { LoaderFunctionArgs } from 'react-router'
 import { Link, useLoaderData } from 'react-router'
 import { pool } from '~/db/connection.server'
+import { getMonitoredApplicationByIdentity } from '~/db/monitored-applications.server'
 import { requireAdmin } from '~/lib/auth.server'
 import { isVerificationDebugMode } from '~/lib/verification'
 import { buildCommitsBetweenFromCache } from '~/lib/verification/fetch-data.server'
 import type { CompareData, PrCommit, PrMetadata, PrReview, VerificationInput } from '~/lib/verification/types'
 import { verifyDeployment } from '~/lib/verification/verify'
+import type { Route } from './+types/team.$team.env.$env.app.$app.admin.verification-diff'
 
 interface DeploymentDiff {
   id: number
   commitSha: string
-  appName: string
-  teamSlug: string
   environmentName: string
   createdAt: string
   oldStatus: string | null
@@ -31,17 +30,30 @@ interface DeploymentDiff {
   newHasFourEyes: boolean
 }
 
-export async function loader({ request }: LoaderFunctionArgs) {
+export async function loader({ request, params }: Route.LoaderArgs) {
   requireAdmin(request)
+
+  const { team, env, app } = params
 
   if (!isVerificationDebugMode) {
     return { diffs: [], debugModeEnabled: false }
   }
 
-  // Find deployments that have compare snapshots (GitHub data downloaded)
-  // and match the criteria
-  const result = await pool.query(`
-    WITH valid_deployments AS (
+  // Get the monitored app
+  const monitoredApp = await getMonitoredApplicationByIdentity(team, env, app)
+  if (!monitoredApp) {
+    return { diffs: [], debugModeEnabled: true, appContext: null }
+  }
+
+  const appContext = {
+    teamSlug: monitoredApp.team_slug,
+    environmentName: monitoredApp.environment_name,
+    appName: monitoredApp.app_name,
+  }
+
+  // Find deployments for this app that have compare snapshots
+  const result = await pool.query(
+    `WITH valid_deployments AS (
       SELECT 
         d.id,
         d.commit_sha,
@@ -52,13 +64,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
         d.created_at,
         d.detected_github_owner,
         d.detected_github_repo_name,
-        ma.app_name,
-        ma.team_slug,
         ma.default_branch,
         ma.audit_start_year
       FROM deployments d
       JOIN monitored_applications ma ON d.monitored_app_id = ma.id
-      WHERE d.commit_sha IS NOT NULL
+      WHERE d.monitored_app_id = $1
+        AND d.commit_sha IS NOT NULL
         AND d.detected_github_owner IS NOT NULL
         AND d.detected_github_repo_name IS NOT NULL
         AND d.commit_sha !~ '^refs/'
@@ -75,8 +86,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
     )
     SELECT * FROM deployments_with_data
     ORDER BY created_at DESC
-    LIMIT 500
-  `)
+    LIMIT 500`,
+    [monitoredApp.id],
+  )
 
   const diffs: DeploymentDiff[] = []
 
@@ -191,8 +203,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
       diffs.push({
         id: row.id,
         commitSha: row.commit_sha,
-        appName: row.app_name,
-        teamSlug: row.team_slug,
         environmentName: row.environment_name,
         createdAt: row.created_at,
         oldStatus: row.four_eyes_status,
@@ -203,11 +213,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
   }
 
-  return { diffs, debugModeEnabled: true }
+  return { diffs, debugModeEnabled: true, appContext }
 }
 
 export default function VerificationDiffPage() {
-  const { diffs, debugModeEnabled } = useLoaderData<typeof loader>()
+  const { diffs, debugModeEnabled, appContext } = useLoaderData<typeof loader>()
 
   if (!debugModeEnabled) {
     return (
@@ -245,7 +255,7 @@ export default function VerificationDiffPage() {
             <Table.Header>
               <Table.Row>
                 <Table.HeaderCell>Deployment</Table.HeaderCell>
-                <Table.HeaderCell>App</Table.HeaderCell>
+                <Table.HeaderCell>Miljø</Table.HeaderCell>
                 <Table.HeaderCell>Dato</Table.HeaderCell>
                 <Table.HeaderCell>Gammel status</Table.HeaderCell>
                 <Table.HeaderCell>Ny status</Table.HeaderCell>
@@ -256,15 +266,18 @@ export default function VerificationDiffPage() {
               {diffs.map((diff) => (
                 <Table.Row key={diff.id}>
                   <Table.DataCell>
-                    <AkselLink as={Link} to={`/deployments/${diff.id}/debug-verify`}>
+                    <AkselLink
+                      as={Link}
+                      to={
+                        appContext
+                          ? `/team/${appContext.teamSlug}/env/${diff.environmentName}/app/${appContext.appName}/deployments/${diff.id}/debug-verify`
+                          : `/deployments/${diff.id}`
+                      }
+                    >
                       {diff.commitSha.substring(0, 7)}
                     </AkselLink>
                   </Table.DataCell>
-                  <Table.DataCell>
-                    <AkselLink as={Link} to={`/team/${diff.teamSlug}/env/${diff.environmentName}/app/${diff.appName}`}>
-                      {diff.appName}
-                    </AkselLink>
-                  </Table.DataCell>
+                  <Table.DataCell>{diff.environmentName}</Table.DataCell>
                   <Table.DataCell>{new Date(diff.createdAt).toLocaleDateString('no-NO')}</Table.DataCell>
                   <Table.DataCell>
                     <Tag variant="neutral" size="small">

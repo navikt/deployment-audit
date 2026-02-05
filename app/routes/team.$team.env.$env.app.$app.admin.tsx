@@ -44,7 +44,7 @@ import { getMonitoredApplicationByIdentity, updateMonitoredApplication } from '~
 import { acquireSyncLock, getLatestSyncJob, getSyncJobById, releaseSyncLock, type SyncJob } from '~/db/sync-jobs.server'
 import { generateAuditReportPdf } from '~/lib/audit-report-pdf'
 import { requireAdmin } from '~/lib/auth.server'
-import { fetchVerificationDataForAllDeployments } from '~/lib/verification'
+import { fetchVerificationDataForAllDeployments, isVerificationDebugMode } from '~/lib/verification'
 
 // Async function to process data fetch job in background
 async function processFetchDataJobAsync(jobId: number, appId: number) {
@@ -151,6 +151,7 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     readiness,
     selectedYear,
     latestFetchJob,
+    debugMode: isVerificationDebugMode,
   }
 }
 
@@ -296,6 +297,7 @@ export default function AppAdmin() {
     readiness,
     selectedYear,
     latestFetchJob,
+    debugMode,
   } = useLoaderData<typeof loader>()
   const actionData = useActionData<typeof action>()
   const navigation = useNavigation()
@@ -807,6 +809,26 @@ export default function AppAdmin() {
           )}
         </VStack>
       </Box>
+
+      {/* Debug: Verification Diff */}
+      {debugMode && (
+        <Box padding="space-24" borderRadius="8" background="raised" borderColor="info-subtle" borderWidth="1">
+          <VStack gap="space-16">
+            <div>
+              <Heading size="small">Debug: Verifiseringsavvik</Heading>
+              <BodyShort textColor="subtle" size="small">
+                Sammenlign gammel og ny verifiseringslogikk for å finne avvik.
+              </BodyShort>
+            </div>
+            <AkselLink
+              as={Link}
+              to={`/team/${app.team_slug}/env/${app.environment_name}/app/${app.app_name}/admin/verification-diff`}
+            >
+              Se verifiseringsavvik →
+            </AkselLink>
+          </VStack>
+        </Box>
+      )}
 
       {/* Recent config changes */}
       {recentConfigChanges.length > 0 && (
