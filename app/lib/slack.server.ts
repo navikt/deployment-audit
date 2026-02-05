@@ -109,6 +109,7 @@ export interface DeploymentNotification {
 export async function sendDeploymentNotification(
   notification: DeploymentNotification,
   channelId?: string,
+  sentBy?: string,
 ): Promise<string | null> {
   const app = getSlackApp()
   if (!app) {
@@ -123,15 +124,30 @@ export async function sendDeploymentNotification(
   }
 
   const blocks = buildDeploymentBlocks(notification)
+  const text = `${getStatusEmoji(notification.status)} Deployment: ${notification.appName} (${notification.environmentName})`
 
   try {
     const result = await app.client.chat.postMessage({
       channel,
       blocks: blocks as KnownBlock[],
-      text: `${getStatusEmoji(notification.status)} Deployment: ${notification.appName} (${notification.environmentName})`,
+      text,
     })
 
-    return result.ts || null
+    const messageTs = result.ts
+    if (messageTs) {
+      // Store notification in database
+      const { createSlackNotification } = await import('~/db/slack-notifications.server')
+      await createSlackNotification({
+        deploymentId: notification.deploymentId,
+        channelId: channel,
+        messageTs,
+        messageBlocks: blocks as unknown as Record<string, unknown>[],
+        messageText: text,
+        sentBy,
+      })
+    }
+
+    return messageTs || null
   } catch (error) {
     console.error('Failed to send Slack notification:', error)
     return null
@@ -145,6 +161,7 @@ export async function updateDeploymentNotification(
   messageTs: string,
   notification: DeploymentNotification,
   channelId?: string,
+  triggeredBy?: string,
 ): Promise<boolean> {
   const app = getSlackApp()
   if (!app) return false
@@ -153,14 +170,27 @@ export async function updateDeploymentNotification(
   if (!channel) return false
 
   const blocks = buildDeploymentBlocks(notification)
+  const text = `${getStatusEmoji(notification.status)} Deployment: ${notification.appName} (${notification.environmentName})`
 
   try {
     await app.client.chat.update({
       channel,
       ts: messageTs,
       blocks: blocks as KnownBlock[],
-      text: `${getStatusEmoji(notification.status)} Deployment: ${notification.appName} (${notification.environmentName})`,
+      text,
     })
+
+    // Log the update in database
+    const { getSlackNotificationByMessage, updateSlackNotification } = await import('~/db/slack-notifications.server')
+    const existing = await getSlackNotificationByMessage(channel, messageTs)
+    if (existing) {
+      await updateSlackNotification(existing.id, {
+        messageBlocks: blocks as unknown as Record<string, unknown>[],
+        messageText: text,
+        triggeredBy,
+      })
+    }
+
     return true
   } catch (error) {
     console.error('Failed to update Slack notification:', error)
@@ -352,13 +382,25 @@ function registerActionHandlers(app: App): void {
 
       // Get user info
       const userId = body.user.id
-      const userName = body.user.id
 
-      console.log(`Slack: User ${userName} (${userId}) approved deployment ${deploymentId}`)
+      console.log(`Slack: User ${userId} approved deployment ${deploymentId}`)
 
-      // TODO: Call the actual approval logic
-      // For now, just update the message to show it was approved
+      // Log the interaction
       if (body.channel?.id && body.message?.ts) {
+        const { getSlackNotificationByMessage, logSlackInteraction } = await import('~/db/slack-notifications.server')
+        const notification = await getSlackNotificationByMessage(body.channel.id, body.message.ts)
+        if (notification) {
+          await logSlackInteraction({
+            notificationId: notification.id,
+            actionId: 'approve_deployment',
+            slackUserId: userId,
+            slackUsername: 'username' in body.user ? body.user.username : undefined,
+            actionValue: value,
+          })
+        }
+
+        // TODO: Call the actual approval logic
+        // For now, just update the message to show it was approved
         await client.chat.update({
           channel: body.channel.id,
           ts: body.message.ts,
@@ -371,7 +413,7 @@ function registerActionHandlers(app: App): void {
               },
             },
           ],
-          text: `Deployment ${deploymentId} godkjent av ${userName}`,
+          text: `Deployment ${deploymentId} godkjent av ${userId}`,
         })
       }
     } catch (error) {
@@ -379,10 +421,30 @@ function registerActionHandlers(app: App): void {
     }
   })
 
-  // View details is a link button, no handler needed
-  app.action('view_details', async ({ ack }) => {
+  // View details is a link button, but we log the interaction
+  app.action<BlockAction>('view_details', async ({ ack, body, action }) => {
     await ack()
-    // Link buttons don't need additional handling
+
+    try {
+      if (body.channel?.id && body.message?.ts) {
+        const buttonAction = action as { value?: string }
+        const value = buttonAction.value ? JSON.parse(buttonAction.value) : {}
+
+        const { getSlackNotificationByMessage, logSlackInteraction } = await import('~/db/slack-notifications.server')
+        const notification = await getSlackNotificationByMessage(body.channel.id, body.message.ts)
+        if (notification) {
+          await logSlackInteraction({
+            notificationId: notification.id,
+            actionId: 'view_details',
+            slackUserId: body.user.id,
+            slackUsername: 'username' in body.user ? body.user.username : undefined,
+            actionValue: value,
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Error logging view_details interaction:', error)
+    }
   })
 }
 
