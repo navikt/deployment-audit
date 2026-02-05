@@ -1,4 +1,4 @@
-import { ArrowsCirclepathIcon, CheckmarkCircleIcon, FileTextIcon, PersonGroupIcon } from '@navikt/aksel-icons'
+import { ArrowsCirclepathIcon, ChatIcon, CheckmarkCircleIcon, FileTextIcon, PersonGroupIcon } from '@navikt/aksel-icons'
 import { BodyShort, Box, Heading, HGrid, VStack } from '@navikt/ds-react'
 import { Link, useLoaderData } from 'react-router'
 import { getAllDeployments } from '~/db/deployments.server'
@@ -121,6 +121,27 @@ export default function AdminIndex() {
                 <BodyShort textColor="subtle">
                   Overvåk synkroniseringsjobber og distribuert låsing mellom podder.
                 </BodyShort>
+              </div>
+            </VStack>
+          </Box>
+        </Link>
+
+        <Link to="/admin/slack" style={{ textDecoration: 'none' }}>
+          <Box
+            padding="space-24"
+            borderRadius="8"
+            background="raised"
+            borderColor="neutral-subtle"
+            borderWidth="1"
+            className="admin-card"
+          >
+            <VStack gap="space-12">
+              <ChatIcon fontSize="2rem" aria-hidden />
+              <div>
+                <Heading size="small" spacing>
+                  Slack-integrasjon
+                </Heading>
+                <BodyShort textColor="subtle">Konfigurer Slack-varsler og test integrasjonen.</BodyShort>
               </div>
             </VStack>
           </Box>
