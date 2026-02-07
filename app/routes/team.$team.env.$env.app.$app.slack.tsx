@@ -1,4 +1,4 @@
-import { ChatIcon, ClockIcon, PaperplaneIcon } from '@navikt/aksel-icons'
+import { ChatIcon, ClockIcon } from '@navikt/aksel-icons'
 import { Link as AkselLink, Alert, BodyShort, Box, Detail, Heading, HStack, Table, Tag, VStack } from '@navikt/ds-react'
 import { type LoaderFunctionArgs, redirect, useLoaderData } from 'react-router'
 import { getMonitoredApplicationByIdentity } from '~/db/monitored-applications.server'
