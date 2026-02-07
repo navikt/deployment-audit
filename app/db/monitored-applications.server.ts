@@ -30,6 +30,17 @@ export async function getApplicationsByTeam(teamSlug: string): Promise<Monitored
   return result.rows
 }
 
+export async function getApplicationsByTeamAndEnv(
+  teamSlug: string,
+  environmentName: string,
+): Promise<MonitoredApplication[]> {
+  const result = await pool.query(
+    'SELECT * FROM monitored_applications WHERE team_slug = $1 AND environment_name = $2 AND is_active = true ORDER BY app_name',
+    [teamSlug, environmentName],
+  )
+  return result.rows
+}
+
 export async function getMonitoredApplicationById(id: number): Promise<MonitoredApplication | null> {
   const result = await pool.query('SELECT * FROM monitored_applications WHERE id = $1', [id])
   return result.rows[0] || null

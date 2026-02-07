@@ -15,6 +15,7 @@ export default [
     route('search', 'routes/search.tsx'),
     // Semantic URL structure
     route('team/:team', 'routes/team.$team.tsx'),
+    route('team/:team/env/:env', 'routes/team.$team.env.$env.tsx'),
     route('team/:team/env/:env/app/:app', 'routes/team.$team.env.$env.app.$app.tsx'),
     route('team/:team/env/:env/app/:app/admin', 'routes/team.$team.env.$env.app.$app.admin.tsx'),
     route('team/:team/env/:env/app/:app/slack', 'routes/team.$team.env.$env.app.$app.slack.tsx'),

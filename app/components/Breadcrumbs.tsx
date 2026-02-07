@@ -33,6 +33,15 @@ const dynamicBreadcrumbs: Array<{
     },
     parent: '/',
   },
+  // Team/env page: /team/:team/env/:env
+  {
+    pattern: /^\/team\/([^/]+)\/env\/([^/]+)$/,
+    getLabel: (_matches, pathname) => {
+      const env = pathname.split('/')[4]
+      return env || 'Environment'
+    },
+    parent: '/team/:team',
+  },
   // New semantic URL structure: /team/:team/env/:env/app/:app
   {
     pattern: /^\/team\/([^/]+)\/env\/([^/]+)\/app\/([^/]+)$/,
@@ -40,7 +49,7 @@ const dynamicBreadcrumbs: Array<{
       const appName = pathname.split('/')[6]
       return appName || 'Applikasjon'
     },
-    parent: '/team/:team',
+    parent: '/team/:team/env/:env',
   },
   {
     pattern: /^\/team\/([^/]+)\/env\/([^/]+)\/app\/([^/]+)\/admin$/,
@@ -136,15 +145,16 @@ function buildBreadcrumbs(pathname: string, matches: ReturnType<typeof useMatche
     return crumbs
   }
 
-  // Helper to add team/env/app crumbs with team clickable
+  // Helper to add team/env/app crumbs with team and env clickable
   function addSemanticCrumbs(pathname: string, includeApp = true, includeDeployments = false, deploymentId?: string) {
     const semanticMatch = pathname.match(/^\/team\/([^/]+)\/env\/([^/]+)\/app\/([^/]+)/)
     if (semanticMatch) {
       const [, team, env, app] = semanticMatch
       const teamPath = `/team/${team}`
+      const envPath = `/team/${team}/env/${env}`
       const appPath = `/team/${team}/env/${env}/app/${app}`
       crumbs.push({ path: teamPath, label: team })
-      crumbs.push({ path: null, label: env })
+      crumbs.push({ path: envPath, label: env })
       if (includeApp) {
         crumbs.push({ path: appPath, label: app })
       }
@@ -198,14 +208,22 @@ function buildBreadcrumbs(pathname: string, matches: ReturnType<typeof useMatche
         addSemanticCrumbs(pathname, true, true)
       } else if (dynamic.parent === '/team/:team/env/:env/app/:app') {
         addSemanticCrumbs(pathname, true)
-      } else if (dynamic.parent === '/team/:team') {
-        // App page with team as parent
+      } else if (dynamic.parent === '/team/:team/env/:env') {
+        // App page with team/env as parent
         const semanticMatch = pathname.match(/^\/team\/([^/]+)\/env\/([^/]+)\/app\/([^/]+)/)
         if (semanticMatch) {
           const [, team, env] = semanticMatch
           const teamPath = `/team/${team}`
+          const envPath = `/team/${team}/env/${env}`
           crumbs.push({ path: teamPath, label: team })
-          crumbs.push({ path: null, label: env })
+          crumbs.push({ path: envPath, label: env })
+        }
+      } else if (dynamic.parent === '/team/:team') {
+        // Team/env page or app page with team as parent
+        const envMatch = pathname.match(/^\/team\/([^/]+)\/env\/([^/]+)$/)
+        if (envMatch) {
+          const [, team] = envMatch
+          crumbs.push({ path: `/team/${team}`, label: team })
         }
       } else if (dynamic.parent && dynamic.parent !== '/' && breadcrumbConfig[dynamic.parent]) {
         // Add static parent (but not home, that's already added)

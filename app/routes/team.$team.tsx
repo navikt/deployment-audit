@@ -1,6 +1,6 @@
 import { ExternalLinkIcon } from '@navikt/aksel-icons'
 import { Link as AkselLink, Box, Heading, HStack, Tag, VStack } from '@navikt/ds-react'
-import { type LoaderFunctionArgs, useLoaderData } from 'react-router'
+import { Link, type LoaderFunctionArgs, useLoaderData } from 'react-router'
 import { AppCard, type AppCardData } from '~/components/AppCard'
 import { getAlertCountsByApp } from '~/db/alerts.server'
 import { getRepositoriesByAppId } from '~/db/application-repositories.server'
@@ -77,7 +77,9 @@ export default function TeamPage() {
           {environments.map((env) => (
             <VStack key={env} gap="space-16">
               <HStack gap="space-8" align="center">
-                <Heading size="small">{env}</Heading>
+                <Link to={`/team/${team}/env/${env}`} className="no-underline hover:underline">
+                  <Heading size="small">{env}</Heading>
+                </Link>
                 <Tag size="xsmall" variant="neutral">
                   {appsByEnv[env].length} {appsByEnv[env].length === 1 ? 'app' : 'apper'}
                 </Tag>

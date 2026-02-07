@@ -122,7 +122,7 @@ export const AppPage: Story = {
         crumbs={[
           { path: '/', label: 'Hjem' },
           { path: '/team/pensjondeployer', label: 'pensjondeployer' },
-          { path: null, label: 'prod-fss' },
+          { path: '/team/pensjondeployer/env/prod-fss', label: 'prod-fss' },
           { path: '/team/pensjondeployer/env/prod-fss/app/pensjon-pen', label: 'pensjon-pen' },
         ]}
       />
@@ -138,7 +138,7 @@ export const AppDeployments: Story = {
         crumbs={[
           { path: '/', label: 'Hjem' },
           { path: '/team/pensjondeployer', label: 'pensjondeployer' },
-          { path: null, label: 'prod-fss' },
+          { path: '/team/pensjondeployer/env/prod-fss', label: 'prod-fss' },
           { path: '/team/pensjondeployer/env/prod-fss/app/pensjon-pen', label: 'pensjon-pen' },
           { path: '/team/pensjondeployer/env/prod-fss/app/pensjon-pen/deployments', label: 'Deployments' },
         ]}
@@ -155,7 +155,7 @@ export const DeploymentDetail: Story = {
         crumbs={[
           { path: '/', label: 'Hjem' },
           { path: '/team/pensjondeployer', label: 'pensjondeployer' },
-          { path: null, label: 'prod-fss' },
+          { path: '/team/pensjondeployer/env/prod-fss', label: 'prod-fss' },
           { path: '/team/pensjondeployer/env/prod-fss/app/pensjon-pen', label: 'pensjon-pen' },
           { path: '/team/pensjondeployer/env/prod-fss/app/pensjon-pen/deployments', label: 'Deployments' },
           { path: '/team/pensjondeployer/env/prod-fss/app/pensjon-pen/deployments/123', label: 'abc1234' },
@@ -173,6 +173,21 @@ export const TeamPage: Story = {
         crumbs={[
           { path: '/', label: 'Hjem' },
           { path: '/team/pensjondeployer', label: 'pensjondeployer' },
+        ]}
+      />
+    </MemoryRouter>
+  ),
+}
+
+export const TeamEnvPage: Story = {
+  name: 'Team/Env-side',
+  render: () => (
+    <MemoryRouter>
+      <MockBreadcrumbs
+        crumbs={[
+          { path: '/', label: 'Hjem' },
+          { path: '/team/pensjondeployer', label: 'pensjondeployer' },
+          { path: '/team/pensjondeployer/env/prod-fss', label: 'prod-fss' },
         ]}
       />
     </MemoryRouter>
