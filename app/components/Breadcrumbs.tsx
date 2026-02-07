@@ -274,15 +274,17 @@ export function Breadcrumbs() {
               <HStack key={`${crumb.label}-${index}`} gap="space-4" align="center">
                 {index > 0 && <ChevronRightIcon aria-hidden fontSize="1rem" />}
                 {isLast ? (
-                  <Detail aria-current="page">{isHome ? <HouseIcon aria-label="Hjem" /> : crumb.label}</Detail>
+                  <Detail aria-current="page">
+                    {isHome ? <HouseIcon aria-label="Hjem" /> : crumb.label.toLowerCase()}
+                  </Detail>
                 ) : isClickable && crumb.path ? (
                   <Link to={crumb.path} style={{ textDecoration: 'none' }}>
                     <Detail className="breadcrumb-link">
-                      {isHome ? <HouseIcon aria-label="Hjem" fontSize="1rem" /> : crumb.label}
+                      {isHome ? <HouseIcon aria-label="Hjem" fontSize="1rem" /> : crumb.label.toLowerCase()}
                     </Detail>
                   </Link>
                 ) : (
-                  <Detail textColor="subtle">{crumb.label}</Detail>
+                  <Detail textColor="subtle">{crumb.label.toLowerCase()}</Detail>
                 )}
               </HStack>
             )
