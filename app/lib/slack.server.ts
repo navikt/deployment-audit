@@ -44,6 +44,9 @@ export function getSlackApp(): App | null {
 
     // Register action handlers
     registerActionHandlers(slackApp)
+
+    // Register event handlers
+    registerEventHandlers(slackApp)
   }
 
   return slackApp
@@ -561,4 +564,273 @@ function mapFourEyesStatus(status: string): DeploymentNotification['status'] {
     default:
       return 'pending_approval'
   }
+}
+
+/**
+ * Register event handlers for Slack events
+ */
+function registerEventHandlers(app: App): void {
+  // Handle Home Tab opened
+  app.event('app_home_opened', async ({ event, client }) => {
+    try {
+      const userId = event.user
+
+      // Try to find matching GitHub username from user mappings using Slack member ID
+      const { getUserMappingBySlackId } = await import('~/db/user-mappings.server')
+      const userMapping = await getUserMappingBySlackId(userId)
+      const githubUsername = userMapping?.github_username
+
+      // Fetch data for Home Tab
+      const { getDeploymentsByDeployer, getRecentDeploymentsForHomeTab, getHomeTabSummaryStats } = await import(
+        '~/db/deployments.server'
+      )
+
+      const [userDeployments, recentDeployments, stats] = await Promise.all([
+        githubUsername ? getDeploymentsByDeployer(githubUsername, 5) : Promise.resolve([]),
+        getRecentDeploymentsForHomeTab(10),
+        getHomeTabSummaryStats(),
+      ])
+
+      // Build and publish Home Tab
+      const blocks = buildHomeTabBlocks({
+        slackUserId: userId,
+        githubUsername,
+        userDeployments,
+        recentDeployments,
+        stats,
+      })
+
+      await client.views.publish({
+        user_id: userId,
+        view: {
+          type: 'home',
+          blocks,
+        },
+      })
+    } catch (error) {
+      console.error('Error updating Home Tab:', error)
+    }
+  })
+}
+
+/**
+ * Build blocks for Slack Home Tab
+ */
+function buildHomeTabBlocks({
+  slackUserId,
+  githubUsername,
+  userDeployments,
+  recentDeployments,
+  stats,
+}: {
+  slackUserId: string
+  githubUsername: string | null | undefined
+  userDeployments: Array<{
+    id: number
+    app_name: string
+    environment_name: string
+    team_slug: string
+    commit_sha: string | null
+    has_four_eyes: boolean
+    four_eyes_status: string
+    created_at: Date
+  }>
+  recentDeployments: Array<{
+    id: number
+    app_name: string
+    environment_name: string
+    team_slug: string
+    commit_sha: string | null
+    deployer_username: string | null
+    has_four_eyes: boolean
+    four_eyes_status: string
+    created_at: Date
+  }>
+  stats: {
+    totalApps: number
+    totalDeployments: number
+    withoutFourEyes: number
+    pendingVerification: number
+  }
+}): KnownBlock[] {
+  const baseUrl = process.env.BASE_URL || 'https://pensjon-deployment-audit.ansatt.nav.no'
+  const blocks: KnownBlock[] = []
+
+  // Header
+  blocks.push({
+    type: 'header',
+    text: {
+      type: 'plain_text',
+      text: '📊 Deployment Audit',
+      emoji: true,
+    },
+  })
+
+  blocks.push({
+    type: 'context',
+    elements: [
+      {
+        type: 'mrkdwn',
+        text: `Hei <@${slackUserId}>! ${githubUsername ? `(GitHub: ${githubUsername})` : ''}`,
+      },
+    ],
+  })
+
+  blocks.push({ type: 'divider' })
+
+  // Section 1: User's deployments
+  blocks.push({
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: '*🚀 Dine siste deployments*',
+    },
+  })
+
+  if (!githubUsername) {
+    blocks.push({
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: '_Koble Slack-brukeren din til GitHub i admin-panelet for å se dine deployments._',
+        },
+      ],
+    })
+  } else if (userDeployments.length === 0) {
+    blocks.push({
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: '_Ingen deployments funnet._',
+        },
+      ],
+    })
+  } else {
+    for (const d of userDeployments) {
+      const statusEmoji = d.has_four_eyes ? '✅' : d.four_eyes_status === 'pending' ? '⏳' : '⚠️'
+      const shortSha = d.commit_sha?.substring(0, 7) || 'ukjent'
+      const url = `${baseUrl}/team/${d.team_slug}/env/${d.environment_name}/app/${d.app_name}/deployments/${d.id}`
+
+      blocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `${statusEmoji} *${d.app_name}* (${d.environment_name})\n\`${shortSha}\` • <!date^${Math.floor(new Date(d.created_at).getTime() / 1000)}^{date_short_pretty} {time}|${new Date(d.created_at).toLocaleDateString()}>`,
+        },
+        accessory: {
+          type: 'button',
+          text: {
+            type: 'plain_text',
+            text: 'Se detaljer',
+            emoji: true,
+          },
+          url,
+          action_id: `view_deployment_${d.id}`,
+        },
+      })
+    }
+  }
+
+  blocks.push({ type: 'divider' })
+
+  // Section 2: Overview stats
+  blocks.push({
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: '*📈 Oversikt*',
+    },
+  })
+
+  blocks.push({
+    type: 'section',
+    fields: [
+      {
+        type: 'mrkdwn',
+        text: `*Overvåkede apper:*\n${stats.totalApps}`,
+      },
+      {
+        type: 'mrkdwn',
+        text: `*Totalt deployments:*\n${stats.totalDeployments}`,
+      },
+      {
+        type: 'mrkdwn',
+        text: `*⚠️ Mangler godkjenning:*\n${stats.withoutFourEyes}`,
+      },
+      {
+        type: 'mrkdwn',
+        text: `*⏳ Venter verifisering:*\n${stats.pendingVerification}`,
+      },
+    ],
+  })
+
+  blocks.push({
+    type: 'actions',
+    elements: [
+      {
+        type: 'button',
+        text: {
+          type: 'plain_text',
+          text: '🏠 Åpne dashboard',
+          emoji: true,
+        },
+        url: baseUrl,
+        action_id: 'open_dashboard',
+      },
+    ],
+  })
+
+  blocks.push({ type: 'divider' })
+
+  // Section 3: Recent activity
+  blocks.push({
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: '*🕐 Siste aktivitet*',
+    },
+  })
+
+  if (recentDeployments.length === 0) {
+    blocks.push({
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: '_Ingen aktivitet._',
+        },
+      ],
+    })
+  } else {
+    const activityLines = recentDeployments.map((d) => {
+      const statusEmoji = d.has_four_eyes ? '✅' : d.four_eyes_status === 'pending' ? '⏳' : '⚠️'
+      const shortSha = d.commit_sha?.substring(0, 7) || 'ukjent'
+      const deployer = d.deployer_username || 'ukjent'
+      return `${statusEmoji} \`${shortSha}\` *${d.app_name}* (${d.environment_name}) av ${deployer}`
+    })
+
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: activityLines.join('\n'),
+      },
+    })
+  }
+
+  // Footer
+  blocks.push({ type: 'divider' })
+  blocks.push({
+    type: 'context',
+    elements: [
+      {
+        type: 'mrkdwn',
+        text: `_Oppdatert ${new Date().toLocaleString('nb-NO')}_`,
+      },
+    ],
+  })
+
+  return blocks
 }

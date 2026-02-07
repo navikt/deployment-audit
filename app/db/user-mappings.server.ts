@@ -193,3 +193,11 @@ export async function getUserMappingByNavIdent(navIdent: string): Promise<UserMa
   const result = await pool.query('SELECT * FROM user_mappings WHERE UPPER(nav_ident) = UPPER($1)', [navIdent])
   return result.rows[0] || null
 }
+
+/**
+ * Get user mapping by Slack member ID
+ */
+export async function getUserMappingBySlackId(slackMemberId: string): Promise<UserMapping | null> {
+  const result = await pool.query('SELECT * FROM user_mappings WHERE slack_member_id = $1', [slackMemberId])
+  return result.rows[0] || null
+}

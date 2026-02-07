@@ -989,3 +989,52 @@ export async function getDeploymentsNeedingSlackNotification(limit = 50): Promis
   )
   return result.rows
 }
+
+/**
+ * Get recent deployments for Slack Home Tab
+ */
+export async function getRecentDeploymentsForHomeTab(limit = 10): Promise<DeploymentWithApp[]> {
+  const result = await pool.query(
+    `SELECT d.*, 
+            ma.team_slug, ma.environment_name, ma.app_name
+     FROM deployments d
+     JOIN monitored_applications ma ON d.monitored_app_id = ma.id
+     WHERE ma.is_active = true
+     ORDER BY d.created_at DESC
+     LIMIT $1`,
+    [limit],
+  )
+  return result.rows
+}
+
+/**
+ * Get summary stats for Slack Home Tab
+ */
+export async function getHomeTabSummaryStats(): Promise<{
+  totalApps: number
+  totalDeployments: number
+  withoutFourEyes: number
+  pendingVerification: number
+}> {
+  const result = await pool.query(`
+    SELECT 
+      (SELECT COUNT(*) FROM monitored_applications WHERE is_active = true) as total_apps,
+      (SELECT COUNT(*) FROM deployments d 
+       JOIN monitored_applications ma ON d.monitored_app_id = ma.id 
+       WHERE ma.is_active = true) as total_deployments,
+      (SELECT COUNT(*) FROM deployments d 
+       JOIN monitored_applications ma ON d.monitored_app_id = ma.id 
+       WHERE ma.is_active = true AND d.has_four_eyes = false 
+       AND d.four_eyes_status NOT IN ('legacy', 'pending')) as without_four_eyes,
+      (SELECT COUNT(*) FROM deployments d 
+       JOIN monitored_applications ma ON d.monitored_app_id = ma.id 
+       WHERE ma.is_active = true AND d.four_eyes_status = 'pending') as pending_verification
+  `)
+  const row = result.rows[0]
+  return {
+    totalApps: parseInt(row.total_apps, 10) || 0,
+    totalDeployments: parseInt(row.total_deployments, 10) || 0,
+    withoutFourEyes: parseInt(row.without_four_eyes, 10) || 0,
+    pendingVerification: parseInt(row.pending_verification, 10) || 0,
+  }
+}
