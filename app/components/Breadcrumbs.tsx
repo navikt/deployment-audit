@@ -24,6 +24,15 @@ const dynamicBreadcrumbs: Array<{
   parent: string
   getParentLabel?: (matches: ReturnType<typeof useMatches>, pathname: string) => string
 }> = [
+  // Team page: /team/:team
+  {
+    pattern: /^\/team\/([^/]+)$/,
+    getLabel: (_matches, pathname) => {
+      const team = pathname.split('/')[2]
+      return team || 'Team'
+    },
+    parent: '/',
+  },
   // New semantic URL structure: /team/:team/env/:env/app/:app
   {
     pattern: /^\/team\/([^/]+)\/env\/([^/]+)\/app\/([^/]+)$/,
@@ -31,7 +40,7 @@ const dynamicBreadcrumbs: Array<{
       const appName = pathname.split('/')[6]
       return appName || 'Applikasjon'
     },
-    parent: '/',
+    parent: '/team/:team',
   },
   {
     pattern: /^\/team\/([^/]+)\/env\/([^/]+)\/app\/([^/]+)\/admin$/,
@@ -122,30 +131,44 @@ function buildBreadcrumbs(pathname: string, matches: ReturnType<typeof useMatche
     return crumbs
   }
 
+  // Helper to add team/env/app crumbs with team clickable
+  function addSemanticCrumbs(pathname: string, includeApp = true, includeDeployments = false, deploymentId?: string) {
+    const semanticMatch = pathname.match(/^\/team\/([^/]+)\/env\/([^/]+)\/app\/([^/]+)/)
+    if (semanticMatch) {
+      const [, team, env, app] = semanticMatch
+      const teamPath = `/team/${team}`
+      const appPath = `/team/${team}/env/${env}/app/${app}`
+      crumbs.push({ path: teamPath, label: team })
+      crumbs.push({ path: null, label: env })
+      if (includeApp) {
+        crumbs.push({ path: appPath, label: app })
+      }
+      if (includeDeployments) {
+        crumbs.push({ path: `${appPath}/deployments`, label: 'Deployments' })
+      }
+      if (deploymentId) {
+        crumbs.push({ path: `${appPath}/deployments/${deploymentId}`, label: deploymentId })
+      }
+    }
+  }
+
   // Check dynamic patterns
   for (const dynamic of dynamicBreadcrumbs) {
     if (dynamic.pattern.test(pathname)) {
       // Add parent breadcrumbs first
       // Handle: /team/:team/env/:env/app/:app/deployments/:id/debug-verify
       if (dynamic.parent === '/team/:team/env/:env/app/:app/deployments/:id') {
-        const semanticMatch = pathname.match(/^\/team\/([^/]+)\/env\/([^/]+)\/app\/([^/]+)\/deployments\/(\d+)/)
-        if (semanticMatch) {
-          const [, team, env, app, deploymentId] = semanticMatch
-          const appPath = `/team/${team}/env/${env}/app/${app}`
-          crumbs.push({ path: null, label: team })
-          crumbs.push({ path: null, label: env })
-          crumbs.push({ path: appPath, label: app })
-          crumbs.push({ path: `${appPath}/deployments`, label: 'Deployments' })
-          crumbs.push({ path: `${appPath}/deployments/${deploymentId}`, label: deploymentId })
-        }
+        const match = pathname.match(/\/deployments\/(\d+)/)
+        addSemanticCrumbs(pathname, true, true, match?.[1])
       }
       // Handle: /team/:team/env/:env/app/:app/admin/verification-diff/:id
       else if (dynamic.parent === '/team/:team/env/:env/app/:app/admin/verification-diff') {
         const semanticMatch = pathname.match(/^\/team\/([^/]+)\/env\/([^/]+)\/app\/([^/]+)/)
         if (semanticMatch) {
           const [, team, env, app] = semanticMatch
+          const teamPath = `/team/${team}`
           const appPath = `/team/${team}/env/${env}/app/${app}`
-          crumbs.push({ path: null, label: team })
+          crumbs.push({ path: teamPath, label: team })
           crumbs.push({ path: null, label: env })
           crumbs.push({ path: appPath, label: app })
           crumbs.push({ path: `${appPath}/admin`, label: 'Administrasjon' })
@@ -157,8 +180,9 @@ function buildBreadcrumbs(pathname: string, matches: ReturnType<typeof useMatche
         const semanticMatch = pathname.match(/^\/team\/([^/]+)\/env\/([^/]+)\/app\/([^/]+)/)
         if (semanticMatch) {
           const [, team, env, app] = semanticMatch
+          const teamPath = `/team/${team}`
           const appPath = `/team/${team}/env/${env}/app/${app}`
-          crumbs.push({ path: null, label: team })
+          crumbs.push({ path: teamPath, label: team })
           crumbs.push({ path: null, label: env })
           crumbs.push({ path: appPath, label: app })
           crumbs.push({ path: `${appPath}/admin`, label: 'Administrasjon' })
@@ -166,32 +190,16 @@ function buildBreadcrumbs(pathname: string, matches: ReturnType<typeof useMatche
       }
       // Semantic URL structure: /team/:team/env/:env/app/:app/deployments/:id
       else if (dynamic.parent === '/team/:team/env/:env/app/:app/deployments') {
-        const semanticMatch = pathname.match(/^\/team\/([^/]+)\/env\/([^/]+)\/app\/([^/]+)/)
-        if (semanticMatch) {
-          const [, team, env, app] = semanticMatch
-          const appPath = `/team/${team}/env/${env}/app/${app}`
-          // Add team and env as non-clickable context
-          crumbs.push({ path: null, label: team })
-          crumbs.push({ path: null, label: env })
-          crumbs.push({ path: appPath, label: app })
-          crumbs.push({ path: `${appPath}/deployments`, label: 'Deployments' })
-        }
+        addSemanticCrumbs(pathname, true, true)
       } else if (dynamic.parent === '/team/:team/env/:env/app/:app') {
-        const semanticMatch = pathname.match(/^\/team\/([^/]+)\/env\/([^/]+)\/app\/([^/]+)/)
-        if (semanticMatch) {
-          const [, team, env, app] = semanticMatch
-          const appPath = `/team/${team}/env/${env}/app/${app}`
-          // Add team and env as non-clickable context
-          crumbs.push({ path: null, label: team })
-          crumbs.push({ path: null, label: env })
-          crumbs.push({ path: appPath, label: app })
-        }
-      } else if (dynamic.parent === '/' && pathname.startsWith('/team/')) {
-        // App detail page: add team and env as non-clickable context
+        addSemanticCrumbs(pathname, true)
+      } else if (dynamic.parent === '/team/:team') {
+        // App page with team as parent
         const semanticMatch = pathname.match(/^\/team\/([^/]+)\/env\/([^/]+)\/app\/([^/]+)/)
         if (semanticMatch) {
           const [, team, env] = semanticMatch
-          crumbs.push({ path: null, label: team })
+          const teamPath = `/team/${team}`
+          crumbs.push({ path: teamPath, label: team })
           crumbs.push({ path: null, label: env })
         }
       } else if (dynamic.parent && dynamic.parent !== '/' && breadcrumbConfig[dynamic.parent]) {

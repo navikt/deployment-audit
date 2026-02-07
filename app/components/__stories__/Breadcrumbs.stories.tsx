@@ -121,7 +121,7 @@ export const AppPage: Story = {
       <MockBreadcrumbs
         crumbs={[
           { path: '/', label: 'Hjem' },
-          { path: null, label: 'pensjondeployer' },
+          { path: '/team/pensjondeployer', label: 'pensjondeployer' },
           { path: null, label: 'prod-fss' },
           { path: '/team/pensjondeployer/env/prod-fss/app/pensjon-pen', label: 'pensjon-pen' },
         ]}
@@ -137,7 +137,7 @@ export const AppDeployments: Story = {
       <MockBreadcrumbs
         crumbs={[
           { path: '/', label: 'Hjem' },
-          { path: null, label: 'pensjondeployer' },
+          { path: '/team/pensjondeployer', label: 'pensjondeployer' },
           { path: null, label: 'prod-fss' },
           { path: '/team/pensjondeployer/env/prod-fss/app/pensjon-pen', label: 'pensjon-pen' },
           { path: '/team/pensjondeployer/env/prod-fss/app/pensjon-pen/deployments', label: 'Deployments' },
@@ -154,11 +154,25 @@ export const DeploymentDetail: Story = {
       <MockBreadcrumbs
         crumbs={[
           { path: '/', label: 'Hjem' },
-          { path: null, label: 'pensjondeployer' },
+          { path: '/team/pensjondeployer', label: 'pensjondeployer' },
           { path: null, label: 'prod-fss' },
           { path: '/team/pensjondeployer/env/prod-fss/app/pensjon-pen', label: 'pensjon-pen' },
           { path: '/team/pensjondeployer/env/prod-fss/app/pensjon-pen/deployments', label: 'Deployments' },
           { path: '/team/pensjondeployer/env/prod-fss/app/pensjon-pen/deployments/123', label: 'abc1234' },
+        ]}
+      />
+    </MemoryRouter>
+  ),
+}
+
+export const TeamPage: Story = {
+  name: 'Team-side',
+  render: () => (
+    <MemoryRouter>
+      <MockBreadcrumbs
+        crumbs={[
+          { path: '/', label: 'Hjem' },
+          { path: '/team/pensjondeployer', label: 'pensjondeployer' },
         ]}
       />
     </MemoryRouter>
