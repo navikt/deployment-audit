@@ -31,6 +31,10 @@ export default [
       'team/:team/env/:env/app/:app/admin/status-history',
       'routes/team.$team.env.$env.app.$app.admin.status-history.tsx',
     ),
+    route(
+      'team/:team/env/:env/app/:app/admin/sync-job/:jobId',
+      'routes/team.$team.env.$env.app.$app.admin.sync-job.$jobId.tsx',
+    ),
     route('team/:team/env/:env/app/:app/deployments', 'routes/team.$team.env.$env.app.$app.deployments.tsx'),
     route(
       'team/:team/env/:env/app/:app/deployments/:deploymentId',

@@ -21,6 +21,7 @@ import {
   saveCompareSnapshot,
   savePrSnapshotsBatch,
 } from '~/db/github-data.server'
+import { heartbeatSyncJob, isSyncJobCancelled, logSyncJobMessage, updateSyncJobProgress } from '~/db/sync-jobs.server'
 import { getCommitsBetween, getDetailedPullRequestInfo, getPullRequestForCommit } from '~/lib/github.server'
 import {
   type CompareData,
@@ -561,13 +562,17 @@ export interface BulkFetchResult extends BulkFetchProgress {
  * Only fetches if schema version is outdated or no data exists.
  *
  * @param monitoredAppId - The app to fetch data for
+ * @param options - Optional job tracking options (jobId for progress/cancel/heartbeat/logging)
  * @param onProgress - Optional callback for progress updates
  * @returns Summary of the fetch operation
  */
 export async function fetchVerificationDataForAllDeployments(
   monitoredAppId: number,
+  options?: { jobId?: number },
   onProgress?: (progress: BulkFetchProgress) => void,
 ): Promise<BulkFetchResult> {
+  const jobId = options?.jobId
+
   // Get app settings first to know the audit start year
   const appSettings = await getAppSettings(monitoredAppId)
 
@@ -604,7 +609,18 @@ export async function fetchVerificationDataForAllDeployments(
     errorDetails: [],
   }
 
+  if (jobId) {
+    await logSyncJobMessage(jobId, 'info', `Starter datahenting for ${deployments.length} deployments`)
+    await updateSyncJobProgress(jobId, result)
+  }
+
   for (const deployment of deployments) {
+    // Check for cancellation
+    if (jobId && (await isSyncJobCancelled(jobId))) {
+      await logSyncJobMessage(jobId, 'info', `Jobb avbrutt etter ${result.processed} av ${result.total} deployments`)
+      break
+    }
+
     try {
       const owner = deployment.detected_github_owner
       const repo = deployment.detected_github_repo_name
@@ -635,19 +651,48 @@ export async function fetchVerificationDataForAllDeployments(
           { forceRefresh: false }, // Only fetch what's missing
         )
         result.fetched++
+        if (jobId) {
+          await logSyncJobMessage(jobId, 'info', `Hentet data for deployment ${deployment.id}`, {
+            commitSha: commitSha.substring(0, 7),
+            repo: `${owner}/${repo}`,
+          })
+        }
       }
 
       result.processed++
       onProgress?.(result)
+
+      // Update progress and heartbeat
+      if (jobId) {
+        await updateSyncJobProgress(jobId, result)
+        await heartbeatSyncJob(jobId)
+      }
     } catch (error) {
       result.errors++
       result.processed++
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       result.errorDetails.push({
         deploymentId: deployment.id,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
       })
       onProgress?.(result)
+
+      if (jobId) {
+        await logSyncJobMessage(jobId, 'error', `Feil for deployment ${deployment.id}`, {
+          deploymentId: deployment.id,
+          error: errorMessage,
+        })
+        await updateSyncJobProgress(jobId, result)
+      }
     }
+  }
+
+  if (jobId) {
+    await logSyncJobMessage(
+      jobId,
+      'info',
+      `Datahenting fullført: ${result.fetched} hentet, ${result.skipped} hoppet over, ${result.errors} feil`,
+    )
   }
 
   return result

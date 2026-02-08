@@ -14,7 +14,7 @@ export const SYNC_JOB_TYPE_LABELS: Record<SyncJobType, string> = {
   reverify_app: 'Reverifisering',
 }
 
-export const SYNC_JOB_STATUSES = ['pending', 'running', 'completed', 'failed'] as const
+export const SYNC_JOB_STATUSES = ['pending', 'running', 'completed', 'failed', 'cancelled'] as const
 export type SyncJobStatus = (typeof SYNC_JOB_STATUSES)[number]
 
 export const SYNC_JOB_STATUS_LABELS: Record<SyncJobStatus, string> = {
@@ -22,6 +22,7 @@ export const SYNC_JOB_STATUS_LABELS: Record<SyncJobStatus, string> = {
   running: 'Kjører',
   completed: 'Fullført',
   failed: 'Feilet',
+  cancelled: 'Avbrutt',
 }
 
 export interface SyncJob {
@@ -236,4 +237,127 @@ export async function getSyncJobById(jobId: number): Promise<SyncJob | null> {
     [jobId],
   )
   return result.rows[0] || null
+}
+
+// =============================================================================
+// Progress, Cancellation, Heartbeat, and Force Release
+// =============================================================================
+
+/**
+ * Update sync job progress (stores progress in result JSONB field)
+ */
+export async function updateSyncJobProgress(jobId: number, progress: Record<string, unknown> | object): Promise<void> {
+  await pool.query(`UPDATE sync_jobs SET result = $2 WHERE id = $1 AND status = 'running'`, [
+    jobId,
+    JSON.stringify(progress),
+  ])
+}
+
+/**
+ * Cancel a running sync job (cooperative cancellation via DB signal)
+ */
+export async function cancelSyncJob(jobId: number): Promise<boolean> {
+  const result = await pool.query(
+    `UPDATE sync_jobs 
+     SET status = 'cancelled', completed_at = NOW()
+     WHERE id = $1 AND status = 'running'
+     RETURNING id`,
+    [jobId],
+  )
+  if (result.rowCount && result.rowCount > 0) {
+    console.log(`🛑 Cancelled sync job ${jobId}`)
+    return true
+  }
+  return false
+}
+
+/**
+ * Check if a sync job has been cancelled
+ */
+export async function isSyncJobCancelled(jobId: number): Promise<boolean> {
+  const result = await pool.query(`SELECT status FROM sync_jobs WHERE id = $1`, [jobId])
+  return result.rows[0]?.status === 'cancelled'
+}
+
+/**
+ * Extend lock expiration (heartbeat) for a running sync job
+ */
+export async function heartbeatSyncJob(jobId: number, extendMinutes: number = 5): Promise<void> {
+  await pool.query(
+    `UPDATE sync_jobs 
+     SET lock_expires_at = NOW() + INTERVAL '1 minute' * $2
+     WHERE id = $1 AND status = 'running'`,
+    [jobId, extendMinutes],
+  )
+}
+
+/**
+ * Force-release a sync job lock (admin action for stale jobs)
+ */
+export async function forceReleaseSyncJob(jobId: number): Promise<boolean> {
+  const result = await pool.query(
+    `UPDATE sync_jobs 
+     SET status = 'failed', 
+         completed_at = NOW(),
+         error = 'Tvangsfrigjort av administrator'
+     WHERE id = $1 AND status = 'running'
+     RETURNING id`,
+    [jobId],
+  )
+  if (result.rowCount && result.rowCount > 0) {
+    console.log(`🔓 Force-released sync job ${jobId}`)
+    return true
+  }
+  return false
+}
+
+// =============================================================================
+// Sync Job Logs
+// =============================================================================
+
+export interface SyncJobLog {
+  id: number
+  job_id: number
+  level: 'info' | 'warn' | 'error'
+  message: string
+  details: Record<string, unknown> | null
+  created_at: string
+}
+
+/**
+ * Log a message for a sync job
+ */
+export async function logSyncJobMessage(
+  jobId: number,
+  level: 'info' | 'warn' | 'error',
+  message: string,
+  details?: Record<string, unknown>,
+): Promise<void> {
+  await pool.query(`INSERT INTO sync_job_logs (job_id, level, message, details) VALUES ($1, $2, $3, $4)`, [
+    jobId,
+    level,
+    message,
+    details ? JSON.stringify(details) : null,
+  ])
+}
+
+/**
+ * Get logs for a sync job (supports incremental fetching via afterId)
+ */
+export async function getSyncJobLogs(
+  jobId: number,
+  options?: { afterId?: number; limit?: number },
+): Promise<SyncJobLog[]> {
+  const afterId = options?.afterId || 0
+  const limit = options?.limit || 500
+
+  const result = await pool.query(
+    `SELECT id, job_id, level, message, details, created_at
+     FROM sync_job_logs
+     WHERE job_id = $1 AND id > $2
+     ORDER BY id ASC
+     LIMIT $3`,
+    [jobId, afterId, limit],
+  )
+  return result.rows
 }

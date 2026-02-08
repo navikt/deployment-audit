@@ -76,6 +76,14 @@ const dynamicBreadcrumbs: Array<{
     parent: '/team/:team/env/:env/app/:app/admin',
   },
   {
+    pattern: /^\/team\/([^/]+)\/env\/([^/]+)\/app\/([^/]+)\/admin\/sync-job\/(\d+)$/,
+    getLabel: (_matches, pathname) => {
+      const jobId = pathname.split('/')[8]
+      return `Jobb #${jobId}`
+    },
+    parent: '/team/:team/env/:env/app/:app/admin',
+  },
+  {
     pattern: /^\/team\/([^/]+)\/env\/([^/]+)\/app\/([^/]+)\/admin\/verification-diff\/(\d+)$/,
     getLabel: (_matches, pathname) => {
       const deploymentId = pathname.split('/')[8]

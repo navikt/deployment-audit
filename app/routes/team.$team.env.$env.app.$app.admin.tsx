@@ -33,7 +33,15 @@ import {
 import { getGitHubDataStatsForApp } from '~/db/github-data.server'
 import { getMonitoredApplicationByIdentity, updateMonitoredApplication } from '~/db/monitored-applications.server'
 import { createReportJob, updateReportJobStatus } from '~/db/report-jobs.server'
-import { acquireSyncLock, getLatestSyncJob, getSyncJobById, releaseSyncLock, type SyncJob } from '~/db/sync-jobs.server'
+import {
+  acquireSyncLock,
+  cancelSyncJob,
+  forceReleaseSyncJob,
+  getLatestSyncJob,
+  getSyncJobById,
+  releaseSyncLock,
+  type SyncJob,
+} from '~/db/sync-jobs.server'
 import { generateAuditReportPdf } from '~/lib/audit-report-pdf'
 import { requireAdmin } from '~/lib/auth.server'
 import { fetchVerificationDataForAllDeployments } from '~/lib/verification'
@@ -42,11 +50,21 @@ import type { Route } from './+types/team.$team.env.$env.app.$app.admin'
 // Async function to process data fetch job in background
 async function processFetchDataJobAsync(jobId: number, appId: number) {
   try {
-    const result = await fetchVerificationDataForAllDeployments(appId)
+    const result = await fetchVerificationDataForAllDeployments(appId, { jobId })
+    // Only release as completed if not cancelled
+    const job = await getSyncJobById(jobId)
+    if (job?.status === 'cancelled') {
+      // Already marked as cancelled, just update result
+      return
+    }
     await releaseSyncLock(jobId, 'completed', result as unknown as Record<string, unknown>)
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'Unknown error'
-    await releaseSyncLock(jobId, 'failed', undefined, errorMessage)
+    // Don't overwrite cancelled status
+    const job = await getSyncJobById(jobId)
+    if (job?.status !== 'cancelled') {
+      await releaseSyncLock(jobId, 'failed', undefined, errorMessage)
+    }
     throw err
   }
 }
@@ -244,7 +262,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   if (action === 'fetch_verification_data') {
     // Try to acquire lock for this job
-    const jobId = await acquireSyncLock('fetch_verification_data', appId, 60) // 60 min timeout
+    const jobId = await acquireSyncLock('fetch_verification_data', appId, 5) // 5 min timeout, extended by heartbeat
     if (!jobId) {
       return { error: 'En datahenting kjører allerede for denne appen' }
     }
@@ -264,6 +282,30 @@ export async function action({ request }: Route.ActionArgs) {
     }
     const job = await getSyncJobById(jobId)
     return { fetchJobStatus: job }
+  }
+
+  if (action === 'cancel_fetch_job') {
+    const jobId = parseInt(formData.get('job_id') as string, 10)
+    if (!jobId) {
+      return { error: 'Mangler job_id' }
+    }
+    const cancelled = await cancelSyncJob(jobId)
+    if (!cancelled) {
+      return { error: 'Kunne ikke avbryte jobben (kanskje den allerede er ferdig?)' }
+    }
+    return { success: 'Jobben ble avbrutt' }
+  }
+
+  if (action === 'force_release_job') {
+    const jobId = parseInt(formData.get('job_id') as string, 10)
+    if (!jobId) {
+      return { error: 'Mangler job_id' }
+    }
+    const released = await forceReleaseSyncJob(jobId)
+    if (!released) {
+      return { error: 'Kunne ikke frigjøre jobben' }
+    }
+    return { success: 'Jobben ble tvangsfrigjort' }
   }
 
   if (action === 'update_slack_config') {
@@ -349,7 +391,12 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
   // Poll fetch job status
   useEffect(() => {
     if (!fetchJobId) return
-    if (fetchJobStatus?.status === 'completed' || fetchJobStatus?.status === 'failed') return
+    if (
+      fetchJobStatus?.status === 'completed' ||
+      fetchJobStatus?.status === 'failed' ||
+      fetchJobStatus?.status === 'cancelled'
+    )
+      return
 
     const interval = setInterval(() => {
       revalidator.revalidate()
@@ -828,10 +875,10 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
             </VStack>
           </Box>
 
-          <Form method="post">
-            <input type="hidden" name="action" value="fetch_verification_data" />
-            <input type="hidden" name="app_id" value={app.id} />
-            <HStack gap="space-16" align="center">
+          <HStack gap="space-16" align="center">
+            <Form method="post">
+              <input type="hidden" name="action" value="fetch_verification_data" />
+              <input type="hidden" name="app_id" value={app.id} />
               <Button
                 type="submit"
                 size="small"
@@ -841,8 +888,28 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
               >
                 {fetchJobStatus?.status === 'running' ? 'Henter data...' : 'Hent data for alle deployments'}
               </Button>
-            </HStack>
-          </Form>
+            </Form>
+            {fetchJobStatus?.status === 'running' && (
+              <Form method="post">
+                <input type="hidden" name="action" value="cancel_fetch_job" />
+                <input type="hidden" name="job_id" value={fetchJobStatus.id} />
+                <Button type="submit" size="small" variant="danger">
+                  Stopp
+                </Button>
+              </Form>
+            )}
+            {fetchJobStatus?.status === 'running' &&
+              fetchJobStatus.lock_expires_at &&
+              new Date(fetchJobStatus.lock_expires_at) < new Date() && (
+                <Form method="post">
+                  <input type="hidden" name="action" value="force_release_job" />
+                  <input type="hidden" name="job_id" value={fetchJobStatus.id} />
+                  <Button type="submit" size="small" variant="danger">
+                    Tvangsfrigjør
+                  </Button>
+                </Form>
+              )}
+          </HStack>
 
           {fetchJobStatus && (
             <Box
@@ -853,9 +920,11 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
                   ? 'success-soft'
                   : fetchJobStatus.status === 'failed'
                     ? 'danger-soft'
-                    : fetchJobStatus.status === 'running'
-                      ? 'info-soft'
-                      : 'neutral-soft'
+                    : fetchJobStatus.status === 'cancelled'
+                      ? 'warning-soft'
+                      : fetchJobStatus.status === 'running'
+                        ? 'info-soft'
+                        : 'neutral-soft'
               }
             >
               <VStack gap="space-8">
@@ -863,20 +932,26 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
                   {fetchJobStatus.status === 'running' && <Loader size="xsmall" />}
                   {fetchJobStatus.status === 'completed' && <CheckmarkCircleIcon aria-hidden />}
                   {fetchJobStatus.status === 'failed' && <ExclamationmarkTriangleIcon aria-hidden />}
+                  {fetchJobStatus.status === 'cancelled' && <ExclamationmarkTriangleIcon aria-hidden />}
                   <BodyShort size="small" weight="semibold">
                     {fetchJobStatus.status === 'pending' && 'Venter...'}
                     {fetchJobStatus.status === 'running' && 'Henter data fra GitHub...'}
                     {fetchJobStatus.status === 'completed' && 'Datahenting fullført'}
                     {fetchJobStatus.status === 'failed' && 'Datahenting feilet'}
+                    {fetchJobStatus.status === 'cancelled' && 'Datahenting avbrutt'}
                   </BodyShort>
                 </HStack>
 
-                {fetchJobStatus.status === 'completed' && fetchJobStatus.result && (
+                {/* Progress counters (shown for running AND terminal states) */}
+                {fetchJobStatus.result && (
                   <HStack gap="space-16" wrap>
-                    <Detail>Totalt: {(fetchJobStatus.result as Record<string, number>).total}</Detail>
-                    <Detail>Hentet: {(fetchJobStatus.result as Record<string, number>).fetched}</Detail>
-                    <Detail>Hoppet over: {(fetchJobStatus.result as Record<string, number>).skipped}</Detail>
-                    {(fetchJobStatus.result as Record<string, number>).errors > 0 && (
+                    <Detail>
+                      Prosessert: {(fetchJobStatus.result as Record<string, number>).processed ?? 0} /{' '}
+                      {(fetchJobStatus.result as Record<string, number>).total ?? 0}
+                    </Detail>
+                    <Detail>Hentet: {(fetchJobStatus.result as Record<string, number>).fetched ?? 0}</Detail>
+                    <Detail>Hoppet over: {(fetchJobStatus.result as Record<string, number>).skipped ?? 0}</Detail>
+                    {((fetchJobStatus.result as Record<string, number>).errors ?? 0) > 0 && (
                       <Detail>
                         <span style={{ color: 'var(--ax-text-danger)' }}>
                           Feil: {(fetchJobStatus.result as Record<string, number>).errors}
@@ -892,12 +967,22 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
                   </BodyShort>
                 )}
 
-                <Detail textColor="subtle">
-                  Startet:{' '}
-                  {fetchJobStatus.started_at ? new Date(fetchJobStatus.started_at).toLocaleString('no-NO') : 'N/A'}
-                  {fetchJobStatus.completed_at &&
-                    ` • Fullført: ${new Date(fetchJobStatus.completed_at).toLocaleString('no-NO')}`}
-                </Detail>
+                <HStack gap="space-8" align="center">
+                  <Detail textColor="subtle">
+                    Startet:{' '}
+                    {fetchJobStatus.started_at ? new Date(fetchJobStatus.started_at).toLocaleString('no-NO') : 'N/A'}
+                    {fetchJobStatus.completed_at &&
+                      ` • Fullført: ${new Date(fetchJobStatus.completed_at).toLocaleString('no-NO')}`}
+                  </Detail>
+                  {fetchJobStatus.id && (
+                    <AkselLink
+                      as={Link}
+                      to={`/team/${app.team_slug}/env/${app.environment_name}/app/${app.app_name}/admin/sync-job/${fetchJobStatus.id}`}
+                    >
+                      <Detail>Se logg →</Detail>
+                    </AkselLink>
+                  )}
+                </HStack>
               </VStack>
             </Box>
           )}
