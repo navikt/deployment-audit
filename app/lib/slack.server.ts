@@ -572,15 +572,20 @@ function mapFourEyesStatus(status: string): DeploymentNotification['status'] {
 function registerEventHandlers(app: App): void {
   // Handle Home Tab opened
   app.event('app_home_opened', async ({ event, client }) => {
+    console.log('[Slack Home Tab] Event received:', { user: event.user, tab: event.tab })
+
     try {
       const userId = event.user
 
       // Try to find matching GitHub username from user mappings using Slack member ID
+      console.log('[Slack Home Tab] Looking up user mapping for Slack ID:', userId)
       const { getUserMappingBySlackId } = await import('~/db/user-mappings.server')
       const userMapping = await getUserMappingBySlackId(userId)
       const githubUsername = userMapping?.github_username
+      console.log('[Slack Home Tab] User mapping result:', { githubUsername, hasMapping: !!userMapping })
 
       // Fetch data for Home Tab
+      console.log('[Slack Home Tab] Fetching data...')
       const { getDeploymentsByDeployer, getRecentDeploymentsForHomeTab, getHomeTabSummaryStats } = await import(
         '~/db/deployments.server'
       )
@@ -590,6 +595,11 @@ function registerEventHandlers(app: App): void {
         getRecentDeploymentsForHomeTab(10),
         getHomeTabSummaryStats(),
       ])
+      console.log('[Slack Home Tab] Data fetched:', {
+        userDeploymentsCount: userDeployments.length,
+        recentDeploymentsCount: recentDeployments.length,
+        stats,
+      })
 
       // Build and publish Home Tab
       const blocks = buildHomeTabBlocks({
@@ -599,7 +609,9 @@ function registerEventHandlers(app: App): void {
         recentDeployments,
         stats,
       })
+      console.log('[Slack Home Tab] Built blocks, count:', blocks.length)
 
+      console.log('[Slack Home Tab] Publishing view...')
       await client.views.publish({
         user_id: userId,
         view: {
@@ -607,10 +619,13 @@ function registerEventHandlers(app: App): void {
           blocks,
         },
       })
+      console.log('[Slack Home Tab] View published successfully')
     } catch (error) {
-      console.error('Error updating Home Tab:', error)
+      console.error('[Slack Home Tab] Error updating Home Tab:', error)
     }
   })
+
+  console.log('[Slack] Event handlers registered (app_home_opened)')
 }
 
 /**
