@@ -1,4 +1,10 @@
-import { ArrowsCirclepathIcon, CheckmarkCircleIcon, ClockIcon, XMarkOctagonIcon } from '@navikt/aksel-icons'
+import {
+  ArrowsCirclepathIcon,
+  CheckmarkCircleIcon,
+  ClockIcon,
+  ExclamationmarkTriangleIcon,
+  XMarkOctagonIcon,
+} from '@navikt/aksel-icons'
 import {
   Alert,
   BodyShort,
@@ -14,7 +20,7 @@ import {
   Tag,
   VStack,
 } from '@navikt/ds-react'
-import { Form } from 'react-router'
+import { Form, useSearchParams } from 'react-router'
 import {
   cleanupOldSyncJobs,
   getAllSyncJobs,
@@ -26,6 +32,13 @@ import {
 import { requireAdmin } from '~/lib/auth.server'
 import styles from '~/styles/common.module.css'
 import type { Route } from './+types/admin.sync-jobs'
+
+const JOB_TYPE_LABELS: Record<string, string> = {
+  nais_sync: 'NAIS Sync',
+  github_verify: 'GitHub Verifisering',
+  fetch_verification_data: 'Hent verifiseringsdata',
+  reverify_app: 'Reverifisering',
+}
 
 export function meta(_args: Route.MetaArgs) {
   return [{ title: 'Sync Jobs - Admin - Pensjon Deployment Audit' }]
@@ -131,28 +144,83 @@ function StatusTag({ status }: { status: SyncJobStatus }) {
           </HStack>
         </Tag>
       )
+    case 'cancelled':
+      return (
+        <Tag data-color="warning" variant="moderate" size="small">
+          <HStack gap="space-4" align="center">
+            <ExclamationmarkTriangleIcon aria-hidden />
+            Avbrutt
+          </HStack>
+        </Tag>
+      )
   }
 }
 
 function JobTypeTag({ type }: { type: SyncJobType }) {
-  switch (type) {
-    case 'nais_sync':
-      return (
-        <Tag data-color="accent" variant="outline" size="small">
-          Nais Sync
-        </Tag>
-      )
-    case 'github_verify':
-      return (
-        <Tag data-color="info" variant="outline" size="small">
-          GitHub Verify
-        </Tag>
-      )
-  }
+  return (
+    <Tag data-color="accent" variant="outline" size="small">
+      {JOB_TYPE_LABELS[type] || type}
+    </Tag>
+  )
+}
+
+function StatCard({
+  label,
+  value,
+  color,
+  active,
+  onClick,
+}: {
+  label: string
+  value: number
+  color?: 'info' | 'success' | 'danger' | 'warning'
+  active: boolean
+  onClick: () => void
+}) {
+  const borderColor = color ? (`${color}-subtle` as const) : ('neutral-subtle' as const)
+  return (
+    <Box
+      padding="space-16"
+      borderRadius="8"
+      background={active ? (color ? `${color}-softA` : 'neutral-softA') : 'raised'}
+      borderColor={borderColor}
+      borderWidth={active ? '2' : '1'}
+      data-color={color}
+      onClick={onClick}
+      style={{ cursor: 'pointer' }}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onClick()
+        }
+      }}
+    >
+      <BodyShort size="small" textColor="subtle">
+        {label}
+      </BodyShort>
+      <Heading size="large">{value}</Heading>
+    </Box>
+  )
 }
 
 export default function AdminSyncJobs({ loaderData, actionData }: Route.ComponentProps) {
   const { jobs, stats, filters } = loaderData
+  const [, setSearchParams] = useSearchParams()
+
+  function setStatusFilter(status: string | null) {
+    setSearchParams((prev) => {
+      if (status) {
+        prev.set('status', status)
+      } else {
+        prev.delete('status')
+      }
+      return prev
+    })
+  }
+
+  const activeStatus = filters.status
 
   return (
     <VStack gap="space-24">
@@ -175,58 +243,37 @@ export default function AdminSyncJobs({ loaderData, actionData }: Route.Componen
         </Alert>
       )}
 
-      <HGrid gap="space-16" columns={{ xs: 2, md: 5 }}>
-        <Box padding="space-16" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
-          <BodyShort size="small" textColor="subtle">
-            Totalt
-          </BodyShort>
-          <Heading size="large">{stats.total}</Heading>
-        </Box>
-        <Box
-          padding="space-16"
-          borderRadius="8"
-          background="raised"
-          borderColor="info-subtle"
-          borderWidth="1"
-          data-color="info"
-        >
-          <BodyShort size="small" textColor="subtle">
-            Kjører nå
-          </BodyShort>
-          <Heading size="large">{stats.running}</Heading>
-        </Box>
-        <Box
-          padding="space-16"
-          borderRadius="8"
-          background="raised"
-          borderColor="success-subtle"
-          borderWidth="1"
-          data-color="success"
-        >
-          <BodyShort size="small" textColor="subtle">
-            Fullført
-          </BodyShort>
-          <Heading size="large">{stats.completed}</Heading>
-        </Box>
-        <Box
-          padding="space-16"
-          borderRadius="8"
-          background="raised"
-          borderColor="danger-subtle"
-          borderWidth="1"
-          data-color="danger"
-        >
-          <BodyShort size="small" textColor="subtle">
-            Feilet
-          </BodyShort>
-          <Heading size="large">{stats.failed}</Heading>
-        </Box>
-        <Box padding="space-16" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
-          <BodyShort size="small" textColor="subtle">
-            Siste time
-          </BodyShort>
-          <Heading size="large">{stats.lastHour}</Heading>
-        </Box>
+      <HGrid gap="space-16" columns={{ xs: 2, md: 6 }}>
+        <StatCard label="Totalt" value={stats.total} active={!activeStatus} onClick={() => setStatusFilter(null)} />
+        <StatCard
+          label="Kjører nå"
+          value={stats.running}
+          color="info"
+          active={activeStatus === 'running'}
+          onClick={() => setStatusFilter('running')}
+        />
+        <StatCard
+          label="Fullført"
+          value={stats.completed}
+          color="success"
+          active={activeStatus === 'completed'}
+          onClick={() => setStatusFilter('completed')}
+        />
+        <StatCard
+          label="Feilet"
+          value={stats.failed}
+          color="danger"
+          active={activeStatus === 'failed'}
+          onClick={() => setStatusFilter('failed')}
+        />
+        <StatCard
+          label="Avbrutt"
+          value={stats.cancelled}
+          color="warning"
+          active={activeStatus === 'cancelled'}
+          onClick={() => setStatusFilter('cancelled')}
+        />
+        <StatCard label="Siste time" value={stats.lastHour} active={false} onClick={() => setStatusFilter(null)} />
       </HGrid>
 
       <HStack gap="space-16" justify="space-between" wrap>
@@ -237,12 +284,15 @@ export default function AdminSyncJobs({ loaderData, actionData }: Route.Componen
               <option value="running">Kjører</option>
               <option value="completed">Fullført</option>
               <option value="failed">Feilet</option>
+              <option value="cancelled">Avbrutt</option>
               <option value="pending">Venter</option>
             </Select>
             <Select label="Type" name="type" defaultValue={filters.jobType || ''} size="small">
               <option value="">Alle</option>
-              <option value="nais_sync">Nais Sync</option>
-              <option value="github_verify">GitHub Verify</option>
+              <option value="nais_sync">NAIS Sync</option>
+              <option value="github_verify">GitHub Verifisering</option>
+              <option value="fetch_verification_data">Hent verifiseringsdata</option>
+              <option value="reverify_app">Reverifisering</option>
             </Select>
             <Button type="submit" size="small" variant="secondary" style={{ alignSelf: 'flex-end' }}>
               Filtrer
