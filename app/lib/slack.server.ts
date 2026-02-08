@@ -14,6 +14,20 @@
 
 import { App, type BlockAction, LogLevel } from '@slack/bolt'
 import type { KnownBlock } from '@slack/types'
+import {
+  claimDeploymentForSlackNotification,
+  getAppsWithIssues,
+  getDeploymentsByDeployer,
+  getHomeTabSummaryStats,
+  getRecentDeploymentsForHomeTab,
+} from '~/db/deployments.server'
+import {
+  createSlackNotification,
+  getSlackNotificationByMessage,
+  logSlackInteraction,
+  updateSlackNotification,
+} from '~/db/slack-notifications.server'
+import { getUserMappingBySlackId } from '~/db/user-mappings.server'
 
 // Singleton Slack app instance
 let slackApp: App | null = null
@@ -142,7 +156,6 @@ export async function sendDeploymentNotification(
     const messageTs = result.ts
     if (messageTs) {
       // Store notification in database
-      const { createSlackNotification } = await import('~/db/slack-notifications.server')
       await createSlackNotification({
         deploymentId: notification.deploymentId,
         channelId: channel,
@@ -187,7 +200,6 @@ export async function updateDeploymentNotification(
     })
 
     // Log the update in database
-    const { getSlackNotificationByMessage, updateSlackNotification } = await import('~/db/slack-notifications.server')
     const existing = await getSlackNotificationByMessage(channel, messageTs)
     if (existing) {
       await updateSlackNotification(existing.id, {
@@ -393,7 +405,6 @@ function registerActionHandlers(app: App): void {
 
       // Log the interaction
       if (body.channel?.id && body.message?.ts) {
-        const { getSlackNotificationByMessage, logSlackInteraction } = await import('~/db/slack-notifications.server')
         const notification = await getSlackNotificationByMessage(body.channel.id, body.message.ts)
         if (notification) {
           await logSlackInteraction({
@@ -436,7 +447,6 @@ function registerActionHandlers(app: App): void {
         const buttonAction = action as { value?: string }
         const value = buttonAction.value ? JSON.parse(buttonAction.value) : {}
 
-        const { getSlackNotificationByMessage, logSlackInteraction } = await import('~/db/slack-notifications.server')
         const notification = await getSlackNotificationByMessage(body.channel.id, body.message.ts)
         if (notification) {
           await logSlackInteraction({
@@ -530,7 +540,6 @@ export async function notifyDeploymentIfNeeded(
   }
 
   // Atomically claim this deployment (prevents duplicates across pods)
-  const { claimDeploymentForSlackNotification } = await import('~/db/deployments.server')
   const claimed = await claimDeploymentForSlackNotification(deployment.id, channelId, messageTs)
 
   if (!claimed) {
@@ -582,15 +591,12 @@ function registerEventHandlers(app: App): void {
 
       // Try to find matching GitHub username from user mappings using Slack member ID
       console.log('[Slack Home Tab] Looking up user mapping for Slack ID:', userId)
-      const { getUserMappingBySlackId } = await import('~/db/user-mappings.server')
       const userMapping = await getUserMappingBySlackId(userId)
       const githubUsername = userMapping?.github_username
       console.log('[Slack Home Tab] User mapping result:', { githubUsername, hasMapping: !!userMapping })
 
       // Fetch data for Home Tab
       console.log('[Slack Home Tab] Fetching data...')
-      const { getDeploymentsByDeployer, getRecentDeploymentsForHomeTab, getHomeTabSummaryStats, getAppsWithIssues } =
-        await import('~/db/deployments.server')
 
       const [userDeployments, recentDeployments, stats, appsWithIssues] = await Promise.all([
         githubUsername ? getDeploymentsByDeployer(githubUsername, 5) : Promise.resolve([]),

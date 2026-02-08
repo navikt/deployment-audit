@@ -18,8 +18,14 @@
  * ```
  */
 
+import { getImplicitApprovalSettings } from '~/db/app-settings.server'
 import { pool } from '~/db/connection.server'
-import { fetchVerificationData } from './fetch-data.server'
+import {
+  getCompareSnapshotForCommit,
+  getPreviousDeploymentForDiff,
+  getPrSnapshotsForDiff,
+} from '~/db/verification-diff.server'
+import { buildCommitsBetweenFromCache, fetchVerificationData } from './fetch-data.server'
 import { storeVerificationResult } from './store-data.server'
 import type { CompareData, PrCommit, PrMetadata, PrReview, VerificationInput, VerificationResult } from './types'
 import { verifyDeployment } from './verify'
@@ -318,12 +324,6 @@ export async function reverifyDeployment(deploymentId: number): Promise<{
   oldHasFourEyes: boolean | null
   newHasFourEyes: boolean
 } | null> {
-  const { getPreviousDeploymentForDiff, getCompareSnapshotForCommit, getPrSnapshotsForDiff } = await import(
-    '~/db/verification-diff.server'
-  )
-  const { buildCommitsBetweenFromCache } = await import('./fetch-data.server')
-  const { getImplicitApprovalSettings } = await import('~/db/app-settings.server')
-
   // Get deployment with app context
   const row = await pool.query(
     `SELECT

@@ -51,6 +51,7 @@ import { getMonitoredApplicationById } from '~/db/monitored-applications.server'
 import { getUserMappings } from '~/db/user-mappings.server'
 import { getNavIdent, getUserIdentity } from '~/lib/auth.server'
 import { lookupLegacyByCommit, lookupLegacyByPR } from '~/lib/github.server'
+import { notifyDeploymentIfNeeded } from '~/lib/slack.server'
 import { verifyDeploymentFourEyes } from '~/lib/sync.server'
 import { getDateRangeForPeriod, type TimePeriod } from '~/lib/time-periods'
 import { getUserDisplayName, serializeUserMappings } from '~/lib/user-display'
@@ -714,7 +715,6 @@ export async function action({ request, params }: Route.ActionArgs) {
     }
 
     try {
-      const { notifyDeploymentIfNeeded } = await import('~/lib/slack.server')
       const baseUrl = new URL(request.url).origin
 
       const sent = await notifyDeploymentIfNeeded(
