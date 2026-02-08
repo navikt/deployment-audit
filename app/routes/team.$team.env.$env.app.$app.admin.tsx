@@ -39,34 +39,40 @@ import {
   forceReleaseSyncJob,
   getLatestSyncJob,
   getSyncJobById,
+  getSyncJobOptions,
   releaseSyncLock,
   type SyncJob,
 } from '~/db/sync-jobs.server'
 import { generateAuditReportPdf } from '~/lib/audit-report-pdf'
 import { requireAdmin } from '~/lib/auth.server'
+import { runWithJobContext } from '~/lib/logger.server'
 import { fetchVerificationDataForAllDeployments } from '~/lib/verification'
 import type { Route } from './+types/team.$team.env.$env.app.$app.admin'
 
 // Async function to process data fetch job in background
 async function processFetchDataJobAsync(jobId: number, appId: number) {
-  try {
-    const result = await fetchVerificationDataForAllDeployments(appId, { jobId })
-    // Only release as completed if not cancelled
-    const job = await getSyncJobById(jobId)
-    if (job?.status === 'cancelled') {
-      // Already marked as cancelled, just update result
-      return
+  const options = await getSyncJobOptions(jobId)
+  const debug = options?.debug === true
+
+  await runWithJobContext(jobId, debug, async () => {
+    try {
+      const result = await fetchVerificationDataForAllDeployments(appId, { jobId })
+      // Only release as completed if not cancelled
+      const job = await getSyncJobById(jobId)
+      if (job?.status === 'cancelled') {
+        return
+      }
+      await releaseSyncLock(jobId, 'completed', result as unknown as Record<string, unknown>)
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error'
+      // Don't overwrite cancelled status
+      const job = await getSyncJobById(jobId)
+      if (job?.status !== 'cancelled') {
+        await releaseSyncLock(jobId, 'failed', undefined, errorMessage)
+      }
+      throw err
     }
-    await releaseSyncLock(jobId, 'completed', result as unknown as Record<string, unknown>)
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : 'Unknown error'
-    // Don't overwrite cancelled status
-    const job = await getSyncJobById(jobId)
-    if (job?.status !== 'cancelled') {
-      await releaseSyncLock(jobId, 'failed', undefined, errorMessage)
-    }
-    throw err
-  }
+  })
 }
 
 // Async function to process report generation in background

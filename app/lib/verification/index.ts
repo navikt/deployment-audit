@@ -25,6 +25,7 @@ import {
   getPreviousDeploymentForDiff,
   getPrSnapshotsForDiff,
 } from '~/db/verification-diff.server'
+import { logger } from '~/lib/logger.server'
 import { buildCommitsBetweenFromCache, fetchVerificationData } from './fetch-data.server'
 import { storeVerificationResult } from './store-data.server'
 import type { CompareData, PrCommit, PrMetadata, PrReview, VerificationInput, VerificationResult } from './types'
@@ -98,10 +99,10 @@ export async function runVerification(
   deploymentId: number,
   options: RunVerificationOptions,
 ): Promise<VerificationResult> {
-  console.log(`🔍 Starting verification for deployment ${deploymentId}`)
+  logger.info(`🔍 Starting verification for deployment ${deploymentId}`)
 
   // Step 1: Fetch all data needed for verification
-  console.log(`   📥 Fetching data from GitHub/cache...`)
+  logger.info(`   📥 Fetching data from GitHub/cache...`)
   const input = await fetchVerificationData(
     deploymentId,
     options.commitSha,
@@ -112,22 +113,22 @@ export async function runVerification(
     { forceRefresh: options.forceRefresh },
   )
 
-  console.log(`   ✅ Data fetched:`)
-  console.log(`      - Deployed PR: ${input.deployedPr?.number || 'none'}`)
-  console.log(`      - Commits between: ${input.commitsBetween.length}`)
-  console.log(`      - Previous deployment: ${input.previousDeployment?.id || 'none'}`)
+  logger.info(`   ✅ Data fetched:`)
+  logger.info(`      - Deployed PR: ${input.deployedPr?.number || 'none'}`)
+  logger.info(`      - Commits between: ${input.commitsBetween.length}`)
+  logger.info(`      - Previous deployment: ${input.previousDeployment?.id || 'none'}`)
 
   // Step 2: Run stateless verification
-  console.log(`   🧪 Running verification logic...`)
+  logger.info(`   🧪 Running verification logic...`)
   const result = verifyDeployment(input)
 
-  console.log(`   ✅ Verification complete:`)
-  console.log(`      - Status: ${result.status}`)
-  console.log(`      - Four eyes: ${result.hasFourEyes}`)
-  console.log(`      - Unverified commits: ${result.unverifiedCommits.length}`)
+  logger.info(`   ✅ Verification complete:`)
+  logger.info(`      - Status: ${result.status}`)
+  logger.info(`      - Four eyes: ${result.hasFourEyes}`)
+  logger.info(`      - Unverified commits: ${result.unverifiedCommits.length}`)
 
   // Step 3: Store the result
-  console.log(`   💾 Storing verification result...`)
+  logger.info(`   💾 Storing verification result...`)
 
   // Collect snapshot IDs from the fetched data
   // In a full implementation, fetchVerificationData would return these
@@ -138,8 +139,8 @@ export async function runVerification(
 
   const { verificationRunId } = await storeVerificationResult(deploymentId, result, snapshotIds)
 
-  console.log(`   ✅ Stored as verification run #${verificationRunId}`)
-  console.log(`🎉 Verification complete for deployment ${deploymentId}`)
+  logger.info(`   ✅ Stored as verification run #${verificationRunId}`)
+  logger.info(`🎉 Verification complete for deployment ${deploymentId}`)
 
   return result
 }
@@ -188,15 +189,15 @@ export async function runDebugVerification(
   deploymentId: number,
   options: RunVerificationOptions,
 ): Promise<DebugVerificationResult> {
-  console.log(`🔬 [DEBUG] Starting debug verification for deployment ${deploymentId}`)
+  logger.info(`🔬 [DEBUG] Starting debug verification for deployment ${deploymentId}`)
 
   // Step 1: Get existing status from deployment
   const existingStatus = await getExistingVerificationStatus(deploymentId)
-  console.log(`   📋 Existing status: ${existingStatus.status} (four_eyes: ${existingStatus.hasFourEyes})`)
+  logger.info(`   📋 Existing status: ${existingStatus.status} (four_eyes: ${existingStatus.hasFourEyes})`)
 
   // Step 2: Fetch data from GitHub (this stores to snapshots table)
   const useCache = options.forceRefresh === false
-  console.log(`   📥 Fetching data${useCache ? ' (using cache if available)' : ' from GitHub'}...`)
+  logger.info(`   📥 Fetching data${useCache ? ' (using cache if available)' : ' from GitHub'}...`)
   const fetchedData = await fetchVerificationData(
     deploymentId,
     options.commitSha,
@@ -207,17 +208,17 @@ export async function runDebugVerification(
     { forceRefresh: !useCache },
   )
 
-  console.log(`   ✅ Data fetched:`)
-  console.log(`      - Deployed PR: ${fetchedData.deployedPr?.number || 'none'}`)
-  console.log(`      - Commits between: ${fetchedData.commitsBetween.length}`)
+  logger.info(`   ✅ Data fetched:`)
+  logger.info(`      - Deployed PR: ${fetchedData.deployedPr?.number || 'none'}`)
+  logger.info(`      - Commits between: ${fetchedData.commitsBetween.length}`)
 
   // Step 3: Run verification (but don't store result)
-  console.log(`   🧪 Running verification logic...`)
+  logger.info(`   🧪 Running verification logic...`)
   const newResult = verifyDeployment(fetchedData)
 
-  console.log(`   ✅ New verification result:`)
-  console.log(`      - Status: ${newResult.status}`)
-  console.log(`      - Four eyes: ${newResult.hasFourEyes}`)
+  logger.info(`   ✅ New verification result:`)
+  logger.info(`      - Status: ${newResult.status}`)
+  logger.info(`      - Four eyes: ${newResult.hasFourEyes}`)
 
   // Step 4: Build comparison
   // Normalize equivalent statuses for comparison
@@ -246,18 +247,18 @@ export async function runDebugVerification(
   }
 
   if (comparison.statusChanged || comparison.hasFourEyesChanged) {
-    console.log(`   ⚠️  DIFFERENCE DETECTED:`)
+    logger.info(`   ⚠️  DIFFERENCE DETECTED:`)
     if (comparison.statusChanged) {
-      console.log(`      Status: ${comparison.oldStatus} → ${comparison.newStatus}`)
+      logger.info(`      Status: ${comparison.oldStatus} → ${comparison.newStatus}`)
     }
     if (comparison.hasFourEyesChanged) {
-      console.log(`      Four eyes: ${comparison.oldHasFourEyes} → ${comparison.newHasFourEyes}`)
+      logger.info(`      Four eyes: ${comparison.oldHasFourEyes} → ${comparison.newHasFourEyes}`)
     }
   } else {
-    console.log(`   ✅ No difference - results match`)
+    logger.info(`   ✅ No difference - results match`)
   }
 
-  console.log(`🔬 [DEBUG] Debug verification complete (result NOT saved)`)
+  logger.info(`🔬 [DEBUG] Debug verification complete (result NOT saved)`)
 
   return {
     existingStatus,

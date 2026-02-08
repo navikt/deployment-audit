@@ -1,6 +1,7 @@
 import { createAppAuth } from '@octokit/auth-app'
 import { Octokit } from '@octokit/rest'
 import type { GitHubPRData } from '~/db/deployments.server'
+import { logger } from '~/lib/logger.server'
 
 let octokit: Octokit | null = null
 let requestCount = 0
@@ -25,7 +26,7 @@ function getGitHubClient(): Octokit {
 
     // Prefer GitHub App authentication
     if (appId && privateKey && installationId) {
-      console.log('🔐 Using GitHub App authentication')
+      logger.info('🔐 Using GitHub App authentication')
 
       // Handle private key - can be base64 encoded or raw PEM
       let decodedPrivateKey = privateKey
@@ -44,21 +45,21 @@ function getGitHubClient(): Octokit {
         log: {
           debug: () => {},
           info: () => {},
-          warn: console.warn,
-          error: console.error,
+          warn: (msg: string) => logger.warn(msg),
+          error: (msg: string) => logger.error(msg),
         },
       })
     } else if (pat) {
       // Fallback to Personal Access Token
-      console.log('🔑 Using Personal Access Token authentication')
+      logger.info('🔑 Using Personal Access Token authentication')
 
       octokit = new Octokit({
         auth: pat,
         log: {
           debug: () => {},
           info: () => {},
-          warn: console.warn,
-          error: console.error,
+          warn: (msg: string) => logger.warn(msg),
+          error: (msg: string) => logger.error(msg),
         },
       })
     } else {
@@ -88,7 +89,7 @@ function getGitHubClient(): Octokit {
       // Add page number if paginating
       const pageInfo = options.page ? ` (page ${options.page})` : ''
 
-      console.log(`🌐 [GitHub #${requestCount}] ${method} ${url}${pageInfo}`)
+      logger.info(`🌐 [GitHub #${requestCount}] ${method} ${url}${pageInfo}`)
     })
 
     // Add response hook for rate limit info
@@ -96,7 +97,7 @@ function getGitHubClient(): Octokit {
       const remaining = response.headers['x-ratelimit-remaining']
       const limit = response.headers['x-ratelimit-limit']
       if (remaining && parseInt(remaining, 10) < 100) {
-        console.warn(`⚠️  GitHub rate limit: ${remaining}/${limit} remaining`)
+        logger.warn(`⚠️  GitHub rate limit: ${remaining}/${limit} remaining`)
       }
     })
   }
@@ -122,7 +123,7 @@ export async function getPullRequestForCommit(
   const client = getGitHubClient()
 
   try {
-    console.log(
+    logger.info(
       `🔎 Searching for PRs associated with commit ${sha} in ${owner}/${repo}${baseBranch ? ` (base: ${baseBranch})` : ''}`,
     )
 
@@ -132,10 +133,10 @@ export async function getPullRequestForCommit(
       commit_sha: sha,
     })
 
-    console.log(`📊 Found ${response.data.length} PR(s) associated with commit ${sha}`)
+    logger.info(`📊 Found ${response.data.length} PR(s) associated with commit ${sha}`)
 
     if (response.data.length === 0) {
-      console.log(`❌ No PRs found for commit ${sha}`)
+      logger.info(`❌ No PRs found for commit ${sha}`)
       return null
     }
 
@@ -143,18 +144,18 @@ export async function getPullRequestForCommit(
     const filteredPRs = baseBranch ? response.data.filter((pr) => pr.base.ref === baseBranch) : response.data
 
     if (baseBranch && filteredPRs.length !== response.data.length) {
-      console.log(`   🔍 Filtered to ${filteredPRs.length} PR(s) targeting ${baseBranch}`)
+      logger.info(`   🔍 Filtered to ${filteredPRs.length} PR(s) targeting ${baseBranch}`)
     }
 
     // Log all PRs found
     filteredPRs.forEach((pr, index) => {
-      console.log(
+      logger.info(
         `   PR ${index + 1}: #${pr.number} - ${pr.title} (${pr.state}, merged: ${pr.merged_at ? 'yes' : 'no'}, base: ${pr.base.ref})`,
       )
     })
 
     if (filteredPRs.length === 0) {
-      console.log(`❌ No PRs found for commit ${sha} targeting ${baseBranch}`)
+      logger.info(`❌ No PRs found for commit ${sha} targeting ${baseBranch}`)
       return null
     }
 
@@ -170,7 +171,7 @@ export async function getPullRequestForCommit(
         // Check if this commit is the PR's merge/squash commit
         // For squash merges, the merge_commit_sha is the squashed commit
         if (pr.merge_commit_sha === sha) {
-          console.log(`✅ Commit ${sha.substring(0, 7)} is the merge/squash commit for PR #${pr.number}`)
+          logger.info(`✅ Commit ${sha.substring(0, 7)} is the merge/squash commit for PR #${pr.number}`)
           return {
             number: pr.number,
             title: pr.title,
@@ -223,18 +224,18 @@ export async function getPullRequestForCommit(
             }))
             prCommitsMetadataCache.set(metadataCacheKey, prCommitsMetadata)
           } catch (err) {
-            console.warn(`Could not fetch commits for PR #${pr.number}:`, err)
+            logger.warn(`Could not fetch commits for PR #${pr.number}: ${err}`)
             continue
           }
         } else {
-          console.log(`   📋 Using cached commits for PR #${pr.number} (${prCommitShas.length} commits)`)
+          logger.info(`   📋 Using cached commits for PR #${pr.number} (${prCommitShas.length} commits)`)
         }
 
         // Check if our commit is in the PR's commit list (exact SHA match)
         const isInPR = prCommitShas.includes(sha)
 
         if (isInPR) {
-          console.log(`✅ Commit ${sha.substring(0, 7)} is an original commit in PR #${pr.number}`)
+          logger.info(`✅ Commit ${sha.substring(0, 7)} is an original commit in PR #${pr.number}`)
           return {
             number: pr.number,
             title: pr.title,
@@ -276,7 +277,7 @@ export async function getPullRequestForCommit(
               const messageMatch = prCommit.messageFirstLine === commitMessageFirstLine
 
               if (authorMatch && dateMatch && messageMatch) {
-                console.log(
+                logger.info(
                   `✅ Commit ${sha.substring(0, 7)} matches PR #${pr.number} via rebase (original: ${prCommit.sha.substring(0, 7)})`,
                 )
                 return {
@@ -291,23 +292,23 @@ export async function getPullRequestForCommit(
               }
             }
           } catch (err) {
-            console.warn(`Could not fetch commit ${sha} for rebase matching:`, err)
+            logger.warn(`Could not fetch commit ${sha} for rebase matching: ${err}`)
           }
         }
 
-        console.log(
+        logger.info(
           `⚠️  Commit ${sha.substring(0, 7)} is NOT in PR #${pr.number}'s original commits and no rebase match found`,
         )
       }
 
       // None of the associated PRs contain this commit as an original commit
-      console.log(`❌ Commit ${sha.substring(0, 7)} was not an original commit in any associated PR`)
+      logger.info(`❌ Commit ${sha.substring(0, 7)} was not an original commit in any associated PR`)
       return null
     }
 
     // Return the first (most relevant) PR (default behavior for backward compatibility)
     const pr = filteredPRs[0]
-    console.log(`✅ Using PR #${pr.number} for verification`)
+    logger.info(`✅ Using PR #${pr.number} for verification`)
 
     return {
       number: pr.number,
@@ -317,7 +318,7 @@ export async function getPullRequestForCommit(
       state: pr.state,
     }
   } catch (error) {
-    console.error(`❌ Error fetching PR for commit ${sha}:`, error)
+    logger.error(`❌ Error fetching PR for commit ${sha}:`, error)
 
     // Re-throw rate limit errors so they can be handled properly upstream
     if (error instanceof Error && error.message.includes('rate limit')) {
@@ -369,7 +370,7 @@ export async function findPRForRebasedCommit(
   const normalizedAuthorDate = new Date(commitAuthorDate).toISOString()
   const normalizedMessageFirstLine = commitMessage.split('\n')[0].trim()
 
-  console.log(
+  logger.info(
     `🔄 Attempting rebase match for commit ${commitSha.substring(0, 7)} (author: ${normalizedAuthor}, date: ${normalizedAuthorDate.substring(0, 19)}, base: ${baseBranch})`,
   )
 
@@ -395,7 +396,7 @@ export async function findPRForRebasedCommit(
       return true
     })
 
-    console.log(`   📋 Checking ${relevantPRs.length} recently merged PRs for rebase match`)
+    logger.info(`   📋 Checking ${relevantPRs.length} recently merged PRs for rebase match`)
 
     for (const pr of relevantPRs) {
       const cacheKey = `${owner}/${repo}#${pr.number}-metadata`
@@ -439,7 +440,7 @@ export async function findPRForRebasedCommit(
           prCommits = allPrCommitsData
           prCommitsMetadataCache.set(cacheKey, prCommits)
         } catch (err) {
-          console.warn(`   Could not fetch commits for PR #${pr.number}:`, err)
+          logger.warn(`   Could not fetch commits for PR #${pr.number}:: ${err}`)
           continue
         }
       }
@@ -459,10 +460,10 @@ export async function findPRForRebasedCommit(
         }
 
         if (authorMatch && dateMatch && messageMatch) {
-          console.log(
+          logger.info(
             `   ✅ Rebase match found! Commit ${commitSha.substring(0, 7)} matches PR #${pr.number} commit ${prCommit.sha.substring(0, 7)}`,
           )
-          console.log(`      Original: ${prCommit.sha.substring(0, 7)} → Rebased: ${commitSha.substring(0, 7)}`)
+          logger.info(`      Original: ${prCommit.sha.substring(0, 7)} → Rebased: ${commitSha.substring(0, 7)}`)
 
           return {
             number: pr.number,
@@ -477,10 +478,10 @@ export async function findPRForRebasedCommit(
       }
     }
 
-    console.log(`   ❌ No rebase match found for commit ${commitSha.substring(0, 7)}`)
+    logger.info(`   ❌ No rebase match found for commit ${commitSha.substring(0, 7)}`)
     return null
   } catch (error) {
-    console.error(`❌ Error finding PR for rebased commit ${commitSha}:`, error)
+    logger.error(`❌ Error finding PR for rebased commit ${commitSha}:`, error)
 
     if (error instanceof Error && error.message.includes('rate limit')) {
       throw error
@@ -544,7 +545,7 @@ export async function getPullRequestCommits(
 ): Promise<PullRequestCommit[]> {
   const client = getGitHubClient()
 
-  console.log(`   📄 Fetching commits for PR #${pull_number}...`)
+  logger.info(`   📄 Fetching commits for PR #${pull_number}...`)
 
   // Use paginate to automatically handle all pages efficiently
   const allCommits = await client.paginate(client.pulls.listCommits, {
@@ -554,7 +555,7 @@ export async function getPullRequestCommits(
     per_page: 100,
   })
 
-  console.log(`      Total: ${allCommits.length} commits`)
+  logger.info(`      Total: ${allCommits.length} commits`)
 
   return allCommits as PullRequestCommit[]
 }
@@ -600,7 +601,7 @@ export async function verifyPullRequestFourEyes(
   pull_number: number,
 ): Promise<{ hasFourEyes: boolean; reason: string }> {
   try {
-    console.log(`🔍 Verifying four-eyes for PR #${pull_number} in ${owner}/${repo}`)
+    logger.info(`🔍 Verifying four-eyes for PR #${pull_number} in ${owner}/${repo}`)
 
     const client = getGitHubClient()
 
@@ -614,25 +615,25 @@ export async function verifyPullRequestFourEyes(
     const prCreator = prResponse.data.user?.login || ''
     const isDependabotPR = prCreator === 'dependabot[bot]' || prCreator.includes('dependabot')
 
-    console.log(`   🤖 PR creator: ${prCreator} (Dependabot: ${isDependabotPR})`)
+    logger.info(`   🤖 PR creator: ${prCreator} (Dependabot: ${isDependabotPR})`)
 
     const [reviews, commits] = await Promise.all([
       getPullRequestReviews(owner, repo, pull_number),
       getPullRequestCommits(owner, repo, pull_number),
     ])
 
-    console.log(`   📝 Found ${reviews.length} review(s) and ${commits.length} commit(s)`)
+    logger.info(`   📝 Found ${reviews.length} review(s) and ${commits.length} commit(s)`)
 
     if (commits.length === 0) {
-      console.log(`   ❌ No commits found in PR`)
+      logger.info(`   ❌ No commits found in PR`)
       return { hasFourEyes: false, reason: 'No commits found in PR' }
     }
 
     // Get the timestamp of the last commit
     const lastCommit = commits[commits.length - 1]
     const lastCommitDate = new Date(lastCommit.commit.author.date)
-    console.log(`   📅 Last commit: ${lastCommit.sha.substring(0, 7)} at ${lastCommitDate.toISOString()}`)
-    console.log(`   📝 Last commit message: ${lastCommit.commit.message.split('\n')[0].substring(0, 80)}`)
+    logger.info(`   📅 Last commit: ${lastCommit.sha.substring(0, 7)} at ${lastCommitDate.toISOString()}`)
+    logger.info(`   📝 Last commit message: ${lastCommit.commit.message.split('\n')[0].substring(0, 80)}`)
 
     // Find approved reviews that came after the last commit
     const approvedReviewsAfterLastCommit = reviews.filter((review) => {
@@ -643,23 +644,23 @@ export async function verifyPullRequestFourEyes(
       return reviewDate > lastCommitDate
     })
 
-    console.log(`   ✅ ${approvedReviewsAfterLastCommit.length} approved review(s) after last commit`)
+    logger.info(`   ✅ ${approvedReviewsAfterLastCommit.length} approved review(s) after last commit`)
 
     if (approvedReviewsAfterLastCommit.length > 0) {
       const result = {
         hasFourEyes: true,
         reason: `Approved by ${approvedReviewsAfterLastCommit[0].user?.login || 'unknown'} after last commit`,
       }
-      console.log(`   ✅ Result: ${result.reason}`)
+      logger.info(`   ✅ Result: ${result.reason}`)
       return result
     }
 
     // Check if there are any approved reviews (even before last commit)
     const approvedReviews = reviews.filter((r) => r.state === 'APPROVED')
-    console.log(`   ✅ ${approvedReviews.length} total approved review(s) found`)
+    logger.info(`   ✅ ${approvedReviews.length} total approved review(s) found`)
 
     if (approvedReviews.length === 0) {
-      console.log(`   ❌ No approved reviews found`)
+      logger.info(`   ❌ No approved reviews found`)
       return { hasFourEyes: false, reason: 'No approved reviews found' }
     }
 
@@ -671,7 +672,7 @@ export async function verifyPullRequestFourEyes(
     })
 
     const approvalDate = new Date(mostRecentApproval.submitted_at || 0)
-    console.log(
+    logger.info(
       `   📅 Most recent approval: ${mostRecentApproval.user?.login || 'unknown'} at ${approvalDate.toISOString()}`,
     )
 
@@ -681,11 +682,11 @@ export async function verifyPullRequestFourEyes(
       return commitDate > approvalDate
     })
 
-    console.log(`   📊 ${commitsAfterApproval.length} commit(s) after most recent approval`)
+    logger.info(`   📊 ${commitsAfterApproval.length} commit(s) after most recent approval`)
 
     if (commitsAfterApproval.length === 0) {
       // This shouldn't happen since we already checked approvedReviewsAfterLastCommit
-      console.log(`   ✅ Approval was after last commit`)
+      logger.info(`   ✅ Approval was after last commit`)
       return {
         hasFourEyes: true,
         reason: `Approved by ${mostRecentApproval.user?.login || 'unknown'} after last commit`,
@@ -697,7 +698,7 @@ export async function verifyPullRequestFourEyes(
       const isMainMerge = isMergeFromMainBranch(commit)
       const commitAuthor = commit.author?.login || commit.commit.author?.name || 'unknown'
       const message = commit.commit.message.split('\n')[0].substring(0, 80)
-      console.log(
+      logger.info(
         `   📝 Commit ${index + 1} after approval: ${commit.sha.substring(0, 7)} by ${commitAuthor} - ${message} (${commit.parents.length} parent(s), main merge: ${isMainMerge})`,
       )
     })
@@ -711,14 +712,14 @@ export async function verifyPullRequestFourEyes(
         return isDependabotCommit || isMainMerge
       })
 
-      console.log(`   🤖 All commits after approval are by Dependabot or main merges: ${allCommitsAreBotOrMainMerge}`)
+      logger.info(`   🤖 All commits after approval are by Dependabot or main merges: ${allCommitsAreBotOrMainMerge}`)
 
       if (allCommitsAreBotOrMainMerge) {
         const result = {
           hasFourEyes: true,
           reason: `Approved by ${mostRecentApproval.user?.login || 'unknown'}, Dependabot PR with bot commits after approval`,
         }
-        console.log(`   ✅ Result: ${result.reason}`)
+        logger.info(`   ✅ Result: ${result.reason}`)
         return result
       }
     }
@@ -726,14 +727,14 @@ export async function verifyPullRequestFourEyes(
     // Check if ALL commits after approval are merges from main/master
     const allCommitsAreMainMerges = commitsAfterApproval.every((commit) => isMergeFromMainBranch(commit))
 
-    console.log(`   🔀 All commits after approval are main/master merges: ${allCommitsAreMainMerges}`)
+    logger.info(`   🔀 All commits after approval are main/master merges: ${allCommitsAreMainMerges}`)
 
     if (allCommitsAreMainMerges) {
       const result = {
         hasFourEyes: true,
         reason: `Approved by ${mostRecentApproval.user?.login || 'unknown'}, only main/master merges after approval`,
       }
-      console.log(`   ✅ Result: ${result.reason}`)
+      logger.info(`   ✅ Result: ${result.reason}`)
       return result
     }
 
@@ -742,10 +743,10 @@ export async function verifyPullRequestFourEyes(
       hasFourEyes: false,
       reason: 'Approved review exists but came before the last commit (non-merge commits after approval)',
     }
-    console.log(`   ❌ Result: ${result.reason}`)
+    logger.info(`   ❌ Result: ${result.reason}`)
     return result
   } catch (error) {
-    console.error('Error verifying PR four eyes:', error)
+    logger.error('Error verifying PR four eyes:', error)
     return { hasFourEyes: false, reason: 'Error checking reviews' }
   }
 }
@@ -875,7 +876,7 @@ export async function getDetailedPullRequestInfo(
         }
       }
     } catch (error) {
-      console.warn('Could not fetch check runs:', error)
+      logger.warn(`Could not fetch check runs: ${error}`)
     }
 
     // Fetch commits (with pagination for PRs with 100+ commits)
@@ -1025,7 +1026,7 @@ export async function getDetailedPullRequestInfo(
       comments,
     }
   } catch (error) {
-    console.error('Error fetching detailed PR info:', error)
+    logger.error('Error fetching detailed PR info:', error)
     return null
   }
 }
@@ -1052,7 +1053,7 @@ export async function getCommitsBetween(
   try {
     const client = getGitHubClient()
 
-    console.log(`🔍 Comparing commits ${base.substring(0, 7)}...${head.substring(0, 7)} in ${owner}/${repo}`)
+    logger.info(`🔍 Comparing commits ${base.substring(0, 7)}...${head.substring(0, 7)} in ${owner}/${repo}`)
 
     const response = await client.repos.compareCommits({
       owner,
@@ -1061,15 +1062,15 @@ export async function getCommitsBetween(
       head,
     })
 
-    console.log(`   📊 GitHub API response:`)
-    console.log(`      - Status: ${response.data.status}`)
-    console.log(`      - Ahead by: ${response.data.ahead_by} commits`)
-    console.log(`      - Behind by: ${response.data.behind_by} commits`)
-    console.log(`      - Total commits: ${response.data.total_commits}`)
+    logger.info(`   📊 GitHub API response:`)
+    logger.info(`      - Status: ${response.data.status}`)
+    logger.info(`      - Ahead by: ${response.data.ahead_by} commits`)
+    logger.info(`      - Behind by: ${response.data.behind_by} commits`)
+    logger.info(`      - Total commits: ${response.data.total_commits}`)
 
     // Handle case where commits array might be undefined or empty
     const rawCommits = response.data.commits || []
-    console.log(`      - Commits array length: ${rawCommits.length}`)
+    logger.info(`      - Commits array length: ${rawCommits.length}`)
 
     const commits = rawCommits.map((commit) => ({
       sha: commit.sha,
@@ -1082,12 +1083,12 @@ export async function getCommitsBetween(
       parent_shas: commit.parents?.map((p) => p.sha) || [],
     }))
 
-    console.log(`✅ Found ${commits.length} commit(s) between ${base.substring(0, 7)} and ${head.substring(0, 7)}`)
+    logger.info(`✅ Found ${commits.length} commit(s) between ${base.substring(0, 7)} and ${head.substring(0, 7)}`)
 
     if (commits.length > 0 && commits.length <= 10) {
-      console.log(`   📝 Commits:`)
+      logger.info(`   📝 Commits:`)
       commits.forEach((c, idx) => {
-        console.log(
+        logger.info(
           `      ${idx + 1}. ${c.sha.substring(0, 7)} by ${c.author}: ${c.message.split('\n')[0].substring(0, 50)}`,
         )
       })
@@ -1095,10 +1096,7 @@ export async function getCommitsBetween(
 
     return commits
   } catch (error) {
-    console.error(`❌ Error comparing commits ${base.substring(0, 7)}...${head.substring(0, 7)}:`, error)
-    if (error instanceof Error) {
-      console.error(`   Message: ${error.message}`)
-    }
+    logger.error(`❌ Error comparing commits ${base.substring(0, 7)}...${head.substring(0, 7)}:`, error)
     return null
   }
 }
@@ -1138,7 +1136,7 @@ export async function lookupLegacyByCommit(
   try {
     const client = getGitHubClient()
 
-    console.log(`🔍 Legacy lookup: Fetching commit ${sha} in ${owner}/${repo}`)
+    logger.info(`🔍 Legacy lookup: Fetching commit ${sha} in ${owner}/${repo}`)
 
     // Get commit details
     const commitResponse = await client.repos.getCommit({
@@ -1156,9 +1154,9 @@ export async function lookupLegacyByCommit(
     const timeDifferenceMinutes = Math.round(timeDiffMs / (1000 * 60))
     const isWithinThreshold = timeDifferenceMinutes <= 30
 
-    console.log(`   📅 Commit date: ${commitDate.toISOString()}`)
-    console.log(`   📅 Deployment date: ${deploymentTime.toISOString()}`)
-    console.log(`   ⏱️  Time difference: ${timeDifferenceMinutes} minutes (threshold: 30)`)
+    logger.info(`   📅 Commit date: ${commitDate.toISOString()}`)
+    logger.info(`   📅 Deployment date: ${deploymentTime.toISOString()}`)
+    logger.info(`   ⏱️  Time difference: ${timeDifferenceMinutes} minutes (threshold: 30)`)
 
     // Try to find associated PR
     const prInfo = await getPullRequestForCommit(owner, repo, sha, true)
@@ -1192,7 +1190,7 @@ export async function lookupLegacyByCommit(
       },
     }
   } catch (error) {
-    console.error(`Error looking up commit ${sha}:`, error)
+    logger.error(`Error looking up commit ${sha}:`, error)
     return {
       success: false,
       error: `Kunne ikke finne commit: ${error instanceof Error ? error.message : 'Ukjent feil'}`,
@@ -1212,7 +1210,7 @@ export async function lookupLegacyByPR(
   try {
     const client = getGitHubClient()
 
-    console.log(`🔍 Legacy lookup: Fetching PR #${prNumber} in ${owner}/${repo}`)
+    logger.info(`🔍 Legacy lookup: Fetching PR #${prNumber} in ${owner}/${repo}`)
 
     // Get PR details
     const prResponse = await client.pulls.get({
@@ -1237,9 +1235,9 @@ export async function lookupLegacyByPR(
     const timeDifferenceMinutes = Math.round(timeDiffMs / (1000 * 60))
     const isWithinThreshold = timeDifferenceMinutes <= 30
 
-    console.log(`   📅 PR merged at: ${prMergedAt.toISOString()}`)
-    console.log(`   📅 Deployment date: ${deploymentTime.toISOString()}`)
-    console.log(`   ⏱️  Time difference: ${timeDifferenceMinutes} minutes (threshold: 30)`)
+    logger.info(`   📅 PR merged at: ${prMergedAt.toISOString()}`)
+    logger.info(`   📅 Deployment date: ${deploymentTime.toISOString()}`)
+    logger.info(`   ⏱️  Time difference: ${timeDifferenceMinutes} minutes (threshold: 30)`)
 
     // Get reviews
     const reviews = await getPullRequestReviews(owner, repo, prNumber)
@@ -1268,7 +1266,7 @@ export async function lookupLegacyByPR(
       },
     }
   } catch (error) {
-    console.error(`Error looking up PR #${prNumber}:`, error)
+    logger.error(`Error looking up PR #${prNumber}:`, error)
     return {
       success: false,
       error: `Kunne ikke finne PR: ${error instanceof Error ? error.message : 'Ukjent feil'}`,

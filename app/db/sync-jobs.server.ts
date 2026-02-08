@@ -1,3 +1,4 @@
+import { logger } from '~/lib/logger.server'
 import { pool } from './connection.server'
 
 // =============================================================================
@@ -71,7 +72,7 @@ export async function acquireSyncLock(
   // First: Release any expired locks
   const released = await releaseExpiredLocks()
   if (released > 0) {
-    console.log(`🔓 Released ${released} expired lock(s)`)
+    logger.info(`🔓 Released ${released} expired lock(s)`)
   }
 
   // Try to create a new job with lock
@@ -82,12 +83,12 @@ export async function acquireSyncLock(
        RETURNING id`,
       [jobType, appId, POD_ID, timeoutMinutes, options ? JSON.stringify(options) : null],
     )
-    console.log(`🔒 Acquired ${jobType} lock for app ${appId} (job ${result.rows[0].id})`)
+    logger.info(`🔒 Acquired ${jobType} lock for app ${appId} (job ${result.rows[0].id})`)
     return result.rows[0].id
   } catch (e: unknown) {
     // Unique constraint violation = lock already held
     if (e instanceof Error && 'code' in e && e.code === '23505') {
-      console.log(`⏳ ${jobType} lock for app ${appId} already held by another process`)
+      logger.info(`⏳ ${jobType} lock for app ${appId} already held by another process`)
       return null
     }
     throw e
@@ -112,7 +113,7 @@ export async function releaseSyncLock(
      WHERE id = $1`,
     [jobId, status, result ? JSON.stringify(result) : null, error || null],
   )
-  console.log(`🔓 Released lock for job ${jobId} with status ${status}`)
+  logger.info(`🔓 Released lock for job ${jobId} with status ${status}`)
 }
 
 /**
@@ -270,7 +271,7 @@ export async function cancelSyncJob(jobId: number): Promise<boolean> {
     [jobId],
   )
   if (result.rowCount && result.rowCount > 0) {
-    console.log(`🛑 Cancelled sync job ${jobId}`)
+    logger.info(`🛑 Cancelled sync job ${jobId}`)
     return true
   }
   return false
@@ -310,7 +311,7 @@ export async function forceReleaseSyncJob(jobId: number): Promise<boolean> {
     [jobId],
   )
   if (result.rowCount && result.rowCount > 0) {
-    console.log(`🔓 Force-released sync job ${jobId}`)
+    logger.info(`🔓 Force-released sync job ${jobId}`)
     return true
   }
   return false

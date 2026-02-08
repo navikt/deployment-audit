@@ -21,14 +21,9 @@ import {
   saveCompareSnapshot,
   savePrSnapshotsBatch,
 } from '~/db/github-data.server'
-import {
-  getSyncJobOptions,
-  heartbeatSyncJob,
-  isSyncJobCancelled,
-  logSyncJobMessage,
-  updateSyncJobProgress,
-} from '~/db/sync-jobs.server'
+import { heartbeatSyncJob, isSyncJobCancelled, logSyncJobMessage, updateSyncJobProgress } from '~/db/sync-jobs.server'
 import { getCommitsBetween, getDetailedPullRequestInfo, getPullRequestForCommit } from '~/lib/github.server'
+import { logger } from '~/lib/logger.server'
 import {
   type CompareData,
   CURRENT_SCHEMA_VERSION,
@@ -382,17 +377,17 @@ async function fetchCommitsBetween(
   if (!options?.forceRefresh) {
     const cachedCompare = await getLatestCompareSnapshot(owner, repo, fromSha, toSha)
     if (cachedCompare) {
-      console.log(`   📦 Using cached compare data (${cachedCompare.data.commits.length} commits)`)
+      logger.info(`   📦 Using cached compare data (${cachedCompare.data.commits.length} commits)`)
       return buildCommitsBetweenFromCache(owner, repo, baseBranch, cachedCompare.data, options)
     }
   }
 
   // Fetch from GitHub API
-  console.log(`   🌐 Fetching compare from GitHub: ${fromSha.substring(0, 7)}...${toSha.substring(0, 7)}`)
+  logger.info(`   🌐 Fetching compare from GitHub: ${fromSha.substring(0, 7)}...${toSha.substring(0, 7)}`)
   const commitsRaw = await getCommitsBetween(owner, repo, fromSha, toSha)
 
   if (!commitsRaw) {
-    console.warn(`Could not fetch commits between ${fromSha} and ${toSha}`)
+    logger.warn(`Could not fetch commits between ${fromSha} and ${toSha}`)
     return []
   }
 
@@ -482,7 +477,7 @@ export async function buildCommitsBetweenFromCache(
           baseBranch: metadata.baseBranch,
         }
       } catch (error) {
-        console.warn(`Failed to fetch PR #${prNumber} for commit ${commit.sha}:`, error)
+        logger.warn(`Failed to fetch PR #${prNumber} for commit ${commit.sha}: ${error}`)
       }
     }
 
@@ -579,23 +574,10 @@ export async function fetchVerificationDataForAllDeployments(
 ): Promise<BulkFetchResult> {
   const jobId = options?.jobId
 
-  // Check if debug logging is enabled for this job
-  let debug = false
-  if (jobId) {
-    const jobOptions = await getSyncJobOptions(jobId)
-    debug = jobOptions?.debug === true
-  }
-
-  const debugLog = async (message: string, details?: Record<string, unknown>) => {
-    if (debug && jobId) {
-      await logSyncJobMessage(jobId, 'debug', message, details)
-    }
-  }
-
   // Get app settings first to know the audit start year
   const settingsStart = performance.now()
   const appSettings = await getAppSettings(monitoredAppId)
-  await debugLog('Hentet app-innstillinger', {
+  logger.debug('Hentet app-innstillinger', {
     auditStartYear: appSettings.auditStartYear,
     durationMs: Math.round(performance.now() - settingsStart),
   })
@@ -625,7 +607,7 @@ export async function fetchVerificationDataForAllDeployments(
   const deploymentsResult = await pool.query(query, params)
 
   const deployments = deploymentsResult.rows
-  await debugLog(`Fant ${deployments.length} deployments å sjekke`, {
+  logger.debug(`Fant ${deployments.length} deployments å sjekke`, {
     durationMs: Math.round(performance.now() - queryStart),
   })
   const result: BulkFetchResult = {
@@ -669,7 +651,7 @@ export async function fetchVerificationDataForAllDeployments(
 
       if (hasCurrentData) {
         result.skipped++
-        await debugLog(`Hoppet over deployment ${deployment.id} (data finnes)`, {
+        logger.debug(`Hoppet over deployment ${deployment.id} (data finnes)`, {
           commitSha: commitSha.substring(0, 7),
           repo: `${owner}/${repo}`,
           checkMs: checkDuration,
@@ -694,7 +676,7 @@ export async function fetchVerificationDataForAllDeployments(
             repo: `${owner}/${repo}`,
           })
         }
-        await debugLog(`Hentet data for deployment ${deployment.id}`, {
+        logger.debug(`Hentet data for deployment ${deployment.id}`, {
           commitSha: commitSha.substring(0, 7),
           repo: `${owner}/${repo}`,
           checkMs: checkDuration,
