@@ -14,12 +14,10 @@ import './app.css'
 import '@navikt/ds-css'
 import { Page, Theme } from '@navikt/ds-react'
 import { ThemeProvider } from './hooks/useTheme'
-import { initializeServer } from './init.server'
 import { getTheme, setThemeCookie, type ThemeValue } from './lib/theme.server'
 
-// Initialize server and get theme from cookie
+// Get theme from cookie
 export async function loader({ request }: Route.LoaderArgs) {
-  initializeServer()
   const theme = await getTheme(request)
   return { theme }
 }
