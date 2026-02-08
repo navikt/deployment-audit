@@ -706,104 +706,55 @@ export interface GitHubDataStats {
 }
 
 /**
- * Get statistics on GitHub data coverage for an app's deployments
- * Based on current schema version
+ * Get statistics on GitHub data coverage for an app's deployments.
+ * Matches the same logic as fetchVerificationDataForAllDeployments:
+ * - Only counts deployments with valid commit_sha and detected GitHub info
+ * - Checks commit snapshots with data_type='prs' (same as hasCurrentSchemaData)
  */
 export async function getGitHubDataStatsForApp(
   appId: number,
   auditStartYear?: number | null,
 ): Promise<GitHubDataStats> {
-  // Get all deployments for the app (with optional audit start year filter)
-  const deploymentsResult = await pool.query(
-    `SELECT d.id, d.github_pr_number, d.commit_sha, d.detected_github_owner, d.detected_github_repo_name
+  // Match the same filters as fetchVerificationDataForAllDeployments
+  const params: (number | string)[] = [appId]
+  let dateFilter = ''
+  if (auditStartYear) {
+    dateFilter = ` AND d.created_at >= $2`
+    params.push(`${auditStartYear}-01-01`)
+  }
+
+  const result = await pool.query(
+    `SELECT
+       COUNT(*)::int AS total,
+       COUNT(gcs.id) FILTER (WHERE gcs.schema_version >= ${CURRENT_SCHEMA_VERSION})::int AS with_current,
+       COUNT(gcs.id) FILTER (WHERE gcs.schema_version < ${CURRENT_SCHEMA_VERSION})::int AS with_outdated,
+       (COUNT(*) - COUNT(gcs.id))::int AS without_data
      FROM deployments d
+     LEFT JOIN LATERAL (
+       SELECT gcs2.id, gcs2.schema_version
+       FROM github_commit_snapshots gcs2
+       WHERE gcs2.owner = d.detected_github_owner
+         AND gcs2.repo = d.detected_github_repo_name
+         AND gcs2.sha = d.commit_sha
+         AND gcs2.data_type = 'prs'
+       ORDER BY gcs2.fetched_at DESC
+       LIMIT 1
+     ) gcs ON true
      WHERE d.monitored_app_id = $1
-       ${auditStartYear ? `AND EXTRACT(YEAR FROM d.created_at) >= ${auditStartYear}` : ''}`,
-    [appId],
+       AND d.commit_sha IS NOT NULL
+       AND d.detected_github_owner IS NOT NULL
+       AND d.detected_github_repo_name IS NOT NULL
+       AND d.commit_sha !~ '^refs/'
+       AND LENGTH(d.commit_sha) >= 7
+       ${dateFilter}`,
+    params,
   )
 
-  const deployments = deploymentsResult.rows
-  const total = deployments.length
-
-  if (total === 0) {
-    return { total: 0, withCurrentData: 0, withOutdatedData: 0, withoutData: 0 }
+  const row = result.rows[0]
+  return {
+    total: row.total,
+    withCurrentData: row.with_current,
+    withOutdatedData: row.with_outdated,
+    withoutData: row.without_data,
   }
-
-  // Check which deployments have PR snapshots with current schema
-  const prDeploymentIds = deployments
-    .filter((d: { github_pr_number: number | null }) => d.github_pr_number)
-    .map((d: { id: number }) => d.id)
-
-  // Build lookup for PR snapshots
-  const prSnapshotResult =
-    prDeploymentIds.length > 0
-      ? await pool.query(
-          `SELECT DISTINCT ON (d.id) d.id, gps.schema_version
-         FROM deployments d
-         INNER JOIN github_pr_snapshots gps 
-           ON gps.owner = d.detected_github_owner 
-           AND gps.repo = d.detected_github_repo_name 
-           AND gps.pr_number = d.github_pr_number
-           AND gps.data_type = 'reviews'
-         WHERE d.id = ANY($1)
-         ORDER BY d.id, gps.fetched_at DESC`,
-          [prDeploymentIds],
-        )
-      : { rows: [] }
-
-  // Build lookup for commit snapshots (for non-PR deployments)
-  const nonPrDeployments = deployments.filter(
-    (d: { github_pr_number: number | null; commit_sha: string | null }) => !d.github_pr_number && d.commit_sha,
-  )
-  const commitLookup =
-    nonPrDeployments.length > 0
-      ? await pool.query(
-          `SELECT DISTINCT ON (d.id) d.id, gcs.schema_version
-         FROM deployments d
-         INNER JOIN github_commit_snapshots gcs 
-           ON gcs.owner = d.detected_github_owner 
-           AND gcs.repo = d.detected_github_repo_name 
-           AND gcs.sha = d.commit_sha
-           AND gcs.data_type = 'prs_for_commit'
-         WHERE d.id = ANY($1)
-         ORDER BY d.id, gcs.fetched_at DESC`,
-          [nonPrDeployments.map((d: { id: number }) => d.id)],
-        )
-      : { rows: [] }
-
-  // Build maps
-  const prSchemaMap = new Map<number, number>()
-  for (const row of prSnapshotResult.rows) {
-    prSchemaMap.set(row.id, row.schema_version)
-  }
-
-  const commitSchemaMap = new Map<number, number>()
-  for (const row of commitLookup.rows) {
-    commitSchemaMap.set(row.id, row.schema_version)
-  }
-
-  // Count categories
-  let withCurrentData = 0
-  let withOutdatedData = 0
-  let withoutData = 0
-
-  for (const d of deployments) {
-    let schemaVersion: number | undefined
-
-    if (d.github_pr_number) {
-      schemaVersion = prSchemaMap.get(d.id)
-    } else if (d.commit_sha) {
-      schemaVersion = commitSchemaMap.get(d.id)
-    }
-
-    if (schemaVersion === undefined) {
-      withoutData++
-    } else if (schemaVersion >= CURRENT_SCHEMA_VERSION) {
-      withCurrentData++
-    } else {
-      withOutdatedData++
-    }
-  }
-
-  return { total, withCurrentData, withOutdatedData, withoutData }
 }
