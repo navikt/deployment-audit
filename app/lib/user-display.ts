@@ -2,6 +2,8 @@
  * User display utilities for consistent username-to-display-name mapping
  */
 
+import { getBotDisplayName } from './github-bots'
+
 export type UserMappingRecord = {
   display_name: string | null
   nav_ident?: string | null
@@ -12,16 +14,22 @@ export type UserMappings = Record<string, UserMappingRecord>
 
 /**
  * Get display name for a GitHub username, falling back to the username if no mapping exists.
+ * Also handles GitHub bot accounts.
  *
  * @param githubUsername - The GitHub username to look up
  * @param userMappings - Record of username -> mapping data
- * @returns Display name, nav_email, or the original username as fallback
+ * @returns Display name, bot name, nav_email, or the original username as fallback
  */
 export function getUserDisplayName(
   githubUsername: string | undefined | null,
   userMappings: UserMappings,
 ): string | null {
   if (!githubUsername) return null
+
+  // Check if it's a bot first
+  const botName = getBotDisplayName(githubUsername)
+  if (botName) return botName
+
   const mapping = userMappings[githubUsername]
   return mapping?.display_name || mapping?.nav_email || githubUsername
 }

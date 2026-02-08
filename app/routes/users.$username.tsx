@@ -10,6 +10,7 @@ import {
   HGrid,
   HStack,
   Modal,
+  Tag,
   TextField,
   VStack,
 } from '@navikt/ds-react'
@@ -25,6 +26,7 @@ import {
 } from 'react-router'
 import { getDeploymentCountByDeployer, getDeploymentsByDeployer } from '~/db/deployments.server'
 import { getUserMapping, upsertUserMapping } from '~/db/user-mappings.server'
+import { getBotDescription, getBotDisplayName, isGitHubBot } from '~/lib/github-bots'
 import styles from '~/styles/common.module.css'
 
 export function meta({ data }: { data: { username: string } }) {
@@ -37,8 +39,12 @@ export async function loader({ params }: LoaderFunctionArgs) {
     throw new Response('Username required', { status: 400 })
   }
 
+  const isBot = isGitHubBot(username)
+  const botDisplayName = getBotDisplayName(username)
+  const botDescription = getBotDescription(username)
+
   const [mapping, deploymentCount, recentDeployments] = await Promise.all([
-    getUserMapping(username),
+    isBot ? Promise.resolve(null) : getUserMapping(username),
     getDeploymentCountByDeployer(username),
     getDeploymentsByDeployer(username, 5),
   ])
@@ -48,6 +54,9 @@ export async function loader({ params }: LoaderFunctionArgs) {
     mapping,
     deploymentCount,
     recentDeployments,
+    isBot,
+    botDisplayName,
+    botDescription,
   }
 }
 
@@ -64,6 +73,10 @@ export async function action({ request }: ActionFunctionArgs) {
 
     if (!githubUsername) {
       return { error: 'GitHub brukernavn er påkrevd' }
+    }
+
+    if (isGitHubBot(githubUsername)) {
+      return { error: 'Kan ikke opprette mapping for bot-brukere' }
     }
 
     // Validate email format
@@ -94,7 +107,8 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function UserPage() {
-  const { username, mapping, deploymentCount, recentDeployments } = useLoaderData<typeof loader>()
+  const { username, mapping, deploymentCount, recentDeployments, isBot, botDisplayName, botDescription } =
+    useLoaderData<typeof loader>()
   const actionData = useActionData<typeof action>()
   const navigation = useNavigation()
   const isSubmitting = navigation.state === 'submitting'
@@ -118,13 +132,24 @@ export default function UserPage() {
     })
   }
 
+  // For bots, extract the base name for GitHub link (e.g., "dependabot" from "dependabot[bot]")
+  const githubLinkUsername = isBot ? username.replace('[bot]', '') : username
+
   return (
     <VStack gap="space-32">
       {/* Header */}
-      <div>
-        <Heading size="large">{username}</Heading>
-        {mapping?.display_name && <BodyShort textColor="subtle">{mapping.display_name}</BodyShort>}
-      </div>
+      <VStack gap="space-8">
+        <HStack gap="space-12" align="center">
+          <Heading size="large">{botDisplayName || username}</Heading>
+          {isBot && (
+            <Tag variant="neutral" size="small">
+              Bot
+            </Tag>
+          )}
+        </HStack>
+        {isBot && botDescription && <BodyShort textColor="subtle">{botDescription}</BodyShort>}
+        {!isBot && mapping?.display_name && <BodyShort textColor="subtle">{mapping.display_name}</BodyShort>}
+      </VStack>
 
       {/* Stats and links */}
       <HGrid gap="space-16" columns={{ xs: 2, md: 4 }}>
@@ -138,8 +163,8 @@ export default function UserPage() {
         <Box padding="space-16" borderRadius="8" background="sunken">
           <VStack gap="space-4">
             <Detail textColor="subtle">GitHub</Detail>
-            <AkselLink href={`https://github.com/${username}`} target="_blank">
-              {username} <ExternalLinkIcon aria-hidden />
+            <AkselLink href={`https://github.com/${githubLinkUsername}`} target="_blank">
+              {githubLinkUsername} <ExternalLinkIcon aria-hidden />
             </AkselLink>
           </VStack>
         </Box>
@@ -167,8 +192,8 @@ export default function UserPage() {
         )}
       </HGrid>
 
-      {/* No mapping warning */}
-      {!mapping && (
+      {/* No mapping warning - only for non-bots */}
+      {!mapping && !isBot && (
         <Alert variant="warning">
           <HStack gap="space-16" align="center" justify="space-between" wrap>
             <BodyShort>Ingen brukermapping funnet for denne brukeren.</BodyShort>
@@ -253,35 +278,37 @@ export default function UserPage() {
         )}
       </VStack>
 
-      {/* Create mapping modal */}
-      <Modal ref={modalRef} header={{ heading: 'Opprett brukermapping' }}>
-        <Modal.Body>
-          <Form method="post" id="create-mapping-form">
-            <input type="hidden" name="intent" value="create-mapping" />
-            <input type="hidden" name="github_username" value={username} />
-            <VStack gap="space-16">
-              <TextField label="GitHub brukernavn" value={username} disabled />
-              <TextField label="Navn" name="display_name" />
-              <TextField label="Nav e-post" name="nav_email" error={actionData?.fieldErrors?.nav_email} />
-              <TextField
-                label="Nav-ident"
-                name="nav_ident"
-                description="Format: én bokstav etterfulgt av 6 siffer (f.eks. A123456)"
-                error={actionData?.fieldErrors?.nav_ident}
-              />
-              <TextField label="Slack member ID" name="slack_member_id" />
-            </VStack>
-          </Form>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button type="submit" form="create-mapping-form" loading={isSubmitting}>
-            Lagre
-          </Button>
-          <Button variant="secondary" onClick={() => modalRef.current?.close()}>
-            Avbryt
-          </Button>
-        </Modal.Footer>
-      </Modal>
+      {/* Create mapping modal - only for non-bots */}
+      {!isBot && (
+        <Modal ref={modalRef} header={{ heading: 'Opprett brukermapping' }}>
+          <Modal.Body>
+            <Form method="post" id="create-mapping-form">
+              <input type="hidden" name="intent" value="create-mapping" />
+              <input type="hidden" name="github_username" value={username} />
+              <VStack gap="space-16">
+                <TextField label="GitHub brukernavn" value={username} disabled />
+                <TextField label="Navn" name="display_name" />
+                <TextField label="Nav e-post" name="nav_email" error={actionData?.fieldErrors?.nav_email} />
+                <TextField
+                  label="Nav-ident"
+                  name="nav_ident"
+                  description="Format: én bokstav etterfulgt av 6 siffer (f.eks. A123456)"
+                  error={actionData?.fieldErrors?.nav_ident}
+                />
+                <TextField label="Slack member ID" name="slack_member_id" />
+              </VStack>
+            </Form>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button type="submit" form="create-mapping-form" loading={isSubmitting}>
+              Lagre
+            </Button>
+            <Button variant="secondary" onClick={() => modalRef.current?.close()}>
+              Avbryt
+            </Button>
+          </Modal.Footer>
+        </Modal>
+      )}
     </VStack>
   )
 }

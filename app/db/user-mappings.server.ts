@@ -1,3 +1,4 @@
+import { isGitHubBot } from '~/lib/github-bots'
 import { pool } from './connection.server'
 
 export interface UserMapping {
@@ -167,7 +168,8 @@ export async function getAllUserMappings(): Promise<UserMapping[]> {
 }
 
 /**
- * Get GitHub usernames from deployments that don't have user mappings
+ * Get GitHub usernames from deployments that don't have user mappings.
+ * Excludes known bot accounts.
  */
 export async function getUnmappedUsers(): Promise<{ github_username: string; deployment_count: number }[]> {
   const result = await pool.query(`
@@ -180,10 +182,14 @@ export async function getUnmappedUsers(): Promise<{ github_username: string; dep
     GROUP BY d.deployer_username
     ORDER BY github_username
   `)
-  return result.rows.map((r) => ({
-    github_username: r.github_username,
-    deployment_count: parseInt(r.deployment_count, 10),
-  }))
+
+  // Filter out bot accounts
+  return result.rows
+    .filter((r) => !isGitHubBot(r.github_username))
+    .map((r) => ({
+      github_username: r.github_username,
+      deployment_count: parseInt(r.deployment_count, 10),
+    }))
 }
 
 /**

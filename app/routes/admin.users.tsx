@@ -24,6 +24,7 @@ import {
   upsertUserMapping,
 } from '~/db/user-mappings.server'
 import { requireAdmin } from '~/lib/auth.server'
+import { isGitHubBot } from '~/lib/github-bots'
 import styles from '~/styles/common.module.css'
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -54,6 +55,8 @@ export async function action({ request }: ActionFunctionArgs) {
 
     if (!githubUsername) {
       fieldErrors.github_username = 'GitHub brukernavn er påkrevd'
+    } else if (isGitHubBot(githubUsername)) {
+      fieldErrors.github_username = 'Kan ikke opprette mapping for bot-brukere'
     }
 
     // Validate email format
