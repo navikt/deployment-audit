@@ -37,7 +37,7 @@ export async function action({ request }: Route.ActionArgs) {
   )
 }
 
-export const links: Route.LinksFunction = () => []
+export const links: Route.LinksFunction = () => [{ rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }]
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
