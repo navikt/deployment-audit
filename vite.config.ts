@@ -4,6 +4,9 @@ import { defineConfig } from 'vite';
 import tsconfigPaths from 'vite-tsconfig-paths';
 
 function getGitSha(): string {
+  if (process.env.GITHUB_SHA) {
+    return process.env.GITHUB_SHA.substring(0, 7);
+  }
   try {
     return execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
   } catch {
