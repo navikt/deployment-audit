@@ -361,3 +361,25 @@ export async function getSyncJobLogs(
   )
   return result.rows
 }
+
+/**
+ * Cancel all running sync jobs owned by a specific pod.
+ * Used during graceful shutdown to mark jobs as cancelled before the pod exits.
+ */
+export async function cancelRunningJobsForPod(podId: string): Promise<number> {
+  const result = await pool.query(
+    `UPDATE sync_jobs
+     SET status = 'cancelled', completed_at = NOW(), error = 'Pod shutdown (SIGTERM)'
+     WHERE status = 'running' AND locked_by = $1
+     RETURNING id`,
+    [podId],
+  )
+  const count = result.rowCount || 0
+
+  // Log a message for each cancelled job
+  for (const row of result.rows) {
+    await logSyncJobMessage(row.id, 'warn', `Jobb avbrutt pga. pod shutdown (${podId})`)
+  }
+
+  return count
+}

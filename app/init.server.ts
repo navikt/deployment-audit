@@ -3,6 +3,7 @@
  * This is imported from root.tsx and runs once when the server starts
  */
 
+import { registerShutdownHandlers } from './lib/shutdown.server'
 import { isSlackConfigured, startSlackConnection } from './lib/slack.server'
 import { startPeriodicSync } from './lib/sync.server'
 
@@ -11,6 +12,9 @@ let initialized = false
 export function initializeServer(): void {
   if (initialized) return
   initialized = true
+
+  // Register graceful shutdown handlers
+  registerShutdownHandlers()
 
   // Only start periodic sync in production or when explicitly enabled
   const enablePeriodicSync = process.env.ENABLE_PERIODIC_SYNC === 'true' || process.env.NODE_ENV === 'production'
