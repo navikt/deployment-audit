@@ -1,6 +1,6 @@
 import { ArrowLeftIcon } from '@navikt/aksel-icons'
-import { Alert, BodyShort, Box, Button, Detail, Heading, HStack, Loader, Tag, VStack } from '@navikt/ds-react'
-import { useEffect } from 'react'
+import { Alert, BodyShort, Box, Button, Detail, Heading, HStack, Loader, Switch, Tag, VStack } from '@navikt/ds-react'
+import { useEffect, useState } from 'react'
 import { Link, useRevalidator } from 'react-router'
 import { getMonitoredApplicationByIdentity } from '~/db/monitored-applications.server'
 import { getSyncJobById, getSyncJobLogs, SYNC_JOB_STATUS_LABELS, SYNC_JOB_TYPE_LABELS } from '~/db/sync-jobs.server'
@@ -33,10 +33,11 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     logs,
     jobTypeLabel: SYNC_JOB_TYPE_LABELS[job.job_type] || job.job_type,
     jobStatusLabel: SYNC_JOB_STATUS_LABELS[job.status] || job.status,
+    hasDebugLogs: logs.some((l) => l.level === 'debug'),
   }
 }
 
-function LogLevelTag({ level }: { level: 'info' | 'warn' | 'error' }) {
+function LogLevelTag({ level }: { level: 'info' | 'warn' | 'error' | 'debug' }) {
   switch (level) {
     case 'error':
       return (
@@ -48,6 +49,12 @@ function LogLevelTag({ level }: { level: 'info' | 'warn' | 'error' }) {
       return (
         <Tag variant="warning" size="xsmall">
           ADVARSEL
+        </Tag>
+      )
+    case 'debug':
+      return (
+        <Tag variant="neutral" size="xsmall">
+          DEBUG
         </Tag>
       )
     default:
@@ -75,12 +82,14 @@ function statusColor(status: string): 'success' | 'error' | 'warning' | 'info' |
 }
 
 export default function SyncJobDetail({ loaderData }: Route.ComponentProps) {
-  const { app, job, logs, jobTypeLabel, jobStatusLabel } = loaderData
+  const { app, job, logs, jobTypeLabel, jobStatusLabel, hasDebugLogs } = loaderData
   const revalidator = useRevalidator()
+  const [showDebug, setShowDebug] = useState(true)
 
   const isRunning = job.status === 'running'
   const appUrl = `/team/${app.team_slug}/env/${app.environment_name}/app/${app.app_name}`
   const progress = job.result as Record<string, number> | null
+  const filteredLogs = showDebug ? logs : logs.filter((l) => l.level !== 'debug')
 
   // Auto-poll for running jobs
   useEffect(() => {
@@ -175,28 +184,41 @@ export default function SyncJobDetail({ loaderData }: Route.ComponentProps) {
       <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
         <VStack gap="space-16">
           <HStack gap="space-12" align="center" justify="space-between">
-            <Heading size="small">Logg ({logs.length} meldinger)</Heading>
-            {isRunning && (
-              <HStack gap="space-8" align="center">
-                <Loader size="xsmall" />
-                <Detail textColor="subtle">Oppdateres automatisk</Detail>
-              </HStack>
-            )}
+            <Heading size="small">Logg ({filteredLogs.length} meldinger)</Heading>
+            <HStack gap="space-12" align="center">
+              {hasDebugLogs && (
+                <Switch size="small" checked={showDebug} onChange={() => setShowDebug(!showDebug)}>
+                  Vis debug
+                </Switch>
+              )}
+              {isRunning && (
+                <HStack gap="space-8" align="center">
+                  <Loader size="xsmall" />
+                  <Detail textColor="subtle">Oppdateres automatisk</Detail>
+                </HStack>
+              )}
+            </HStack>
           </HStack>
 
-          {logs.length === 0 ? (
+          {filteredLogs.length === 0 ? (
             <BodyShort textColor="subtle" size="small">
               Ingen loggmeldinger ennå.
             </BodyShort>
           ) : (
             <VStack gap="space-4">
-              {logs.map((log) => (
+              {filteredLogs.map((log) => (
                 <Box
                   key={log.id}
                   padding="space-8"
                   borderRadius="4"
                   background={
-                    log.level === 'error' ? 'danger-softA' : log.level === 'warn' ? 'warning-softA' : 'neutral-softA'
+                    log.level === 'error'
+                      ? 'danger-softA'
+                      : log.level === 'warn'
+                        ? 'warning-softA'
+                        : log.level === 'debug'
+                          ? 'neutral-soft'
+                          : 'neutral-softA'
                   }
                 >
                   <HStack gap="space-8" align="start" wrap={false}>

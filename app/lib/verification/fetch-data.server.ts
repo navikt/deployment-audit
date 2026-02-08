@@ -21,7 +21,13 @@ import {
   saveCompareSnapshot,
   savePrSnapshotsBatch,
 } from '~/db/github-data.server'
-import { heartbeatSyncJob, isSyncJobCancelled, logSyncJobMessage, updateSyncJobProgress } from '~/db/sync-jobs.server'
+import {
+  getSyncJobOptions,
+  heartbeatSyncJob,
+  isSyncJobCancelled,
+  logSyncJobMessage,
+  updateSyncJobProgress,
+} from '~/db/sync-jobs.server'
 import { getCommitsBetween, getDetailedPullRequestInfo, getPullRequestForCommit } from '~/lib/github.server'
 import {
   type CompareData,
@@ -573,8 +579,26 @@ export async function fetchVerificationDataForAllDeployments(
 ): Promise<BulkFetchResult> {
   const jobId = options?.jobId
 
+  // Check if debug logging is enabled for this job
+  let debug = false
+  if (jobId) {
+    const jobOptions = await getSyncJobOptions(jobId)
+    debug = jobOptions?.debug === true
+  }
+
+  const debugLog = async (message: string, details?: Record<string, unknown>) => {
+    if (debug && jobId) {
+      await logSyncJobMessage(jobId, 'debug', message, details)
+    }
+  }
+
   // Get app settings first to know the audit start year
+  const settingsStart = performance.now()
   const appSettings = await getAppSettings(monitoredAppId)
+  await debugLog('Hentet app-innstillinger', {
+    auditStartYear: appSettings.auditStartYear,
+    durationMs: Math.round(performance.now() - settingsStart),
+  })
 
   // Build query with audit_start_year filter if set
   let query = `SELECT d.id, d.commit_sha, d.detected_github_owner, d.detected_github_repo_name,
@@ -597,9 +621,13 @@ export async function fetchVerificationDataForAllDeployments(
 
   query += ` ORDER BY d.created_at DESC`
 
+  const queryStart = performance.now()
   const deploymentsResult = await pool.query(query, params)
 
   const deployments = deploymentsResult.rows
+  await debugLog(`Fant ${deployments.length} deployments å sjekke`, {
+    durationMs: Math.round(performance.now() - queryStart),
+  })
   const result: BulkFetchResult = {
     total: deployments.length,
     processed: 0,
@@ -628,6 +656,7 @@ export async function fetchVerificationDataForAllDeployments(
       const baseBranch = deployment.default_branch || 'main'
 
       // Check if we already have current schema data for this deployment
+      const checkStart = performance.now()
       const hasCurrentData = await hasCurrentSchemaData(
         owner,
         repo,
@@ -636,11 +665,18 @@ export async function fetchVerificationDataForAllDeployments(
         deployment.environment_name,
         appSettings.auditStartYear,
       )
+      const checkDuration = Math.round(performance.now() - checkStart)
 
       if (hasCurrentData) {
         result.skipped++
+        await debugLog(`Hoppet over deployment ${deployment.id} (data finnes)`, {
+          commitSha: commitSha.substring(0, 7),
+          repo: `${owner}/${repo}`,
+          checkMs: checkDuration,
+        })
       } else {
         // Fetch data (this will store to database)
+        const fetchStart = performance.now()
         await fetchVerificationData(
           deployment.id,
           commitSha,
@@ -650,6 +686,7 @@ export async function fetchVerificationDataForAllDeployments(
           monitoredAppId,
           { forceRefresh: false }, // Only fetch what's missing
         )
+        const fetchDuration = Math.round(performance.now() - fetchStart)
         result.fetched++
         if (jobId) {
           await logSyncJobMessage(jobId, 'info', `Hentet data for deployment ${deployment.id}`, {
@@ -657,6 +694,12 @@ export async function fetchVerificationDataForAllDeployments(
             repo: `${owner}/${repo}`,
           })
         }
+        await debugLog(`Hentet data for deployment ${deployment.id}`, {
+          commitSha: commitSha.substring(0, 7),
+          repo: `${owner}/${repo}`,
+          checkMs: checkDuration,
+          fetchMs: fetchDuration,
+        })
       }
 
       result.processed++

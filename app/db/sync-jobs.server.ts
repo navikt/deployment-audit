@@ -36,6 +36,7 @@ export interface SyncJob {
   lock_expires_at: string | null
   result: Record<string, unknown> | null
   error: string | null
+  options: Record<string, unknown> | null
   created_at: string
 }
 
@@ -65,6 +66,7 @@ export async function acquireSyncLock(
   jobType: SyncJobType,
   appId: number,
   timeoutMinutes: number = 10,
+  options?: Record<string, unknown>,
 ): Promise<number | null> {
   // First: Release any expired locks
   const released = await releaseExpiredLocks()
@@ -75,10 +77,10 @@ export async function acquireSyncLock(
   // Try to create a new job with lock
   try {
     const result = await pool.query(
-      `INSERT INTO sync_jobs (job_type, monitored_app_id, status, started_at, locked_by, lock_expires_at)
-       VALUES ($1, $2, 'running', NOW(), $3, NOW() + INTERVAL '1 minute' * $4)
+      `INSERT INTO sync_jobs (job_type, monitored_app_id, status, started_at, locked_by, lock_expires_at, options)
+       VALUES ($1, $2, 'running', NOW(), $3, NOW() + INTERVAL '1 minute' * $4, $5)
        RETURNING id`,
-      [jobType, appId, POD_ID, timeoutMinutes],
+      [jobType, appId, POD_ID, timeoutMinutes, options ? JSON.stringify(options) : null],
     )
     console.log(`🔒 Acquired ${jobType} lock for app ${appId} (job ${result.rows[0].id})`)
     return result.rows[0].id
@@ -321,7 +323,7 @@ export async function forceReleaseSyncJob(jobId: number): Promise<boolean> {
 export interface SyncJobLog {
   id: number
   job_id: number
-  level: 'info' | 'warn' | 'error'
+  level: 'info' | 'warn' | 'error' | 'debug'
   message: string
   details: Record<string, unknown> | null
   created_at: string
@@ -332,7 +334,7 @@ export interface SyncJobLog {
  */
 export async function logSyncJobMessage(
   jobId: number,
-  level: 'info' | 'warn' | 'error',
+  level: 'info' | 'warn' | 'error' | 'debug',
   message: string,
   details?: Record<string, unknown>,
 ): Promise<void> {
@@ -342,6 +344,14 @@ export async function logSyncJobMessage(
     message,
     details ? JSON.stringify(details) : null,
   ])
+}
+
+/**
+ * Get options for a sync job (used to check debug flag etc.)
+ */
+export async function getSyncJobOptions(jobId: number): Promise<Record<string, unknown> | null> {
+  const result = await pool.query(`SELECT options FROM sync_jobs WHERE id = $1`, [jobId])
+  return result.rows[0]?.options || null
 }
 
 /**

@@ -261,8 +261,9 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   if (action === 'fetch_verification_data') {
+    const debug = formData.get('debug') === 'on'
     // Try to acquire lock for this job
-    const jobId = await acquireSyncLock('fetch_verification_data', appId, 5) // 5 min timeout, extended by heartbeat
+    const jobId = await acquireSyncLock('fetch_verification_data', appId, 5, debug ? { debug: true } : undefined) // 5 min timeout, extended by heartbeat
     if (!jobId) {
       return { error: 'En datahenting kjører allerede for denne appen' }
     }
@@ -879,15 +880,22 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
             <Form method="post">
               <input type="hidden" name="action" value="fetch_verification_data" />
               <input type="hidden" name="app_id" value={app.id} />
-              <Button
-                type="submit"
-                size="small"
-                variant="secondary"
-                loading={fetchJobStatus?.status === 'running'}
-                disabled={fetchJobStatus?.status === 'running'}
-              >
-                {fetchJobStatus?.status === 'running' ? 'Henter data...' : 'Hent data for alle deployments'}
-              </Button>
+              <HStack gap="space-12" align="center">
+                <Button
+                  type="submit"
+                  size="small"
+                  variant="secondary"
+                  loading={fetchJobStatus?.status === 'running'}
+                  disabled={fetchJobStatus?.status === 'running'}
+                >
+                  {fetchJobStatus?.status === 'running' ? 'Henter data...' : 'Hent data for alle deployments'}
+                </Button>
+                {fetchJobStatus?.status !== 'running' && (
+                  <Switch size="small" name="debug">
+                    Debug-logging
+                  </Switch>
+                )}
+              </HStack>
             </Form>
             {fetchJobStatus?.status === 'running' && (
               <Form method="post">
