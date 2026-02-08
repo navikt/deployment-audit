@@ -402,7 +402,7 @@ export async function reverifyDeployment(deploymentId: number): Promise<{
   const changed = statusChanged || fourEyesChanged
 
   if (changed) {
-    await storeVerificationResult(dep.id, newResult, { prSnapshotIds: [], commitSnapshotIds: [] })
+    await storeVerificationResult(dep.id, newResult, { prSnapshotIds: [], commitSnapshotIds: [] }, 'reverification')
   }
 
   return {

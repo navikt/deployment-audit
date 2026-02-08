@@ -477,12 +477,16 @@ export async function verifyDeploymentsFourEyes(filters?: DeploymentFilters & { 
         console.log(
           `⚠️  Invalid commit SHA (ref instead of SHA): ${deployment.commit_sha} - marking as legacy for manual lookup`,
         )
-        await updateDeploymentFourEyes(deployment.id, {
-          hasFourEyes: false,
-          fourEyesStatus: 'legacy',
-          githubPrNumber: null,
-          githubPrUrl: null,
-        })
+        await updateDeploymentFourEyes(
+          deployment.id,
+          {
+            hasFourEyes: false,
+            fourEyesStatus: 'legacy',
+            githubPrNumber: null,
+            githubPrUrl: null,
+          },
+          { changeSource: 'sync' },
+        )
         skipped++
         continue
       }
@@ -587,14 +591,18 @@ export async function verifyDeploymentFourEyes(
       console.log(
         `📍 [Deployment ${deploymentId}] First deployment for ${repository}/${environmentName} - marking as pending_baseline`,
       )
-      await updateDeploymentFourEyes(deploymentId, {
-        hasFourEyes: false,
-        fourEyesStatus: 'pending_baseline',
-        githubPrNumber: deployedPrNumber,
-        githubPrUrl: deployedPrUrl,
-        githubPrData: deployedPrData,
-        title: deployedPrData?.title || null,
-      })
+      await updateDeploymentFourEyes(
+        deploymentId,
+        {
+          hasFourEyes: false,
+          fourEyesStatus: 'pending_baseline',
+          githubPrNumber: deployedPrNumber,
+          githubPrUrl: deployedPrUrl,
+          githubPrData: deployedPrData,
+          title: deployedPrData?.title || null,
+        },
+        { changeSource: 'sync' },
+      )
       return true
     }
 
@@ -609,26 +617,34 @@ export async function verifyDeploymentFourEyes(
     const previousCommitSha = previousDeployment.commit_sha
     if (!previousCommitSha) {
       console.warn(`⚠️  [Deployment ${deploymentId}] Previous deployment has no commit SHA`)
-      await updateDeploymentFourEyes(deploymentId, {
-        hasFourEyes: false,
-        fourEyesStatus: 'error',
-        githubPrNumber: null,
-        githubPrUrl: null,
-      })
+      await updateDeploymentFourEyes(
+        deploymentId,
+        {
+          hasFourEyes: false,
+          fourEyesStatus: 'error',
+          githubPrNumber: null,
+          githubPrUrl: null,
+        },
+        { changeSource: 'sync' },
+      )
       return false
     }
     const commitsBetween = await getCommitsBetween(owner, repo, previousCommitSha, commitSha)
 
     if (!commitsBetween) {
       console.warn(`⚠️  [Deployment ${deploymentId}] Could not fetch commits between deployments`)
-      await updateDeploymentFourEyes(deploymentId, {
-        hasFourEyes: false,
-        fourEyesStatus: 'error',
-        githubPrNumber: deployedPrNumber,
-        githubPrUrl: deployedPrUrl,
-        githubPrData: deployedPrData,
-        title: deployedPrData?.title || null,
-      })
+      await updateDeploymentFourEyes(
+        deploymentId,
+        {
+          hasFourEyes: false,
+          fourEyesStatus: 'error',
+          githubPrNumber: deployedPrNumber,
+          githubPrUrl: deployedPrUrl,
+          githubPrData: deployedPrData,
+          title: deployedPrData?.title || null,
+        },
+        { changeSource: 'sync' },
+      )
       return false
     }
 
@@ -655,14 +671,18 @@ export async function verifyDeploymentFourEyes(
 
     if (commitsBetween.length === 0) {
       console.log(`✅ [Deployment ${deploymentId}] No new commits - same as previous deployment`)
-      await updateDeploymentFourEyes(deploymentId, {
-        hasFourEyes: true,
-        fourEyesStatus: 'no_changes',
-        githubPrNumber: deployedPrNumber,
-        githubPrUrl: deployedPrUrl,
-        githubPrData: deployedPrData,
-        title: deployedPrData?.title || null,
-      })
+      await updateDeploymentFourEyes(
+        deploymentId,
+        {
+          hasFourEyes: true,
+          fourEyesStatus: 'no_changes',
+          githubPrNumber: deployedPrNumber,
+          githubPrUrl: deployedPrUrl,
+          githubPrData: deployedPrData,
+          title: deployedPrData?.title || null,
+        },
+        { changeSource: 'sync' },
+      )
       return true
     }
 
@@ -865,14 +885,18 @@ export async function verifyDeploymentFourEyes(
 
     if (hasStandardApproval) {
       console.log(`✅ [Deployment ${deploymentId}] All ${commitsBetween.length} commit(s) verified`)
-      await updateDeploymentFourEyes(deploymentId, {
-        hasFourEyes: true,
-        fourEyesStatus: 'approved',
-        githubPrNumber: deployedPrNumber,
-        githubPrUrl: deployedPrUrl,
-        githubPrData: deployedPrData,
-        title: deployedPrData?.title || null,
-      })
+      await updateDeploymentFourEyes(
+        deploymentId,
+        {
+          hasFourEyes: true,
+          fourEyesStatus: 'approved',
+          githubPrNumber: deployedPrNumber,
+          githubPrUrl: deployedPrUrl,
+          githubPrData: deployedPrData,
+          title: deployedPrData?.title || null,
+        },
+        { changeSource: 'sync' },
+      )
       return true
     }
 
@@ -899,17 +923,21 @@ export async function verifyDeploymentFourEyes(
 
       if (baseMergeResult.approved) {
         console.log(`✅ [Deployment ${deploymentId}] Approved via base branch merge: ${baseMergeResult.reason}`)
-        await updateDeploymentFourEyes(deploymentId, {
-          hasFourEyes: true,
-          fourEyesStatus: 'approved',
-          githubPrNumber: deployedPrNumber,
-          githubPrUrl: deployedPrUrl,
-          githubPrData: {
-            ...deployedPrData,
-            base_merge_approval_reason: baseMergeResult.reason,
+        await updateDeploymentFourEyes(
+          deploymentId,
+          {
+            hasFourEyes: true,
+            fourEyesStatus: 'approved',
+            githubPrNumber: deployedPrNumber,
+            githubPrUrl: deployedPrUrl,
+            githubPrData: {
+              ...deployedPrData,
+              base_merge_approval_reason: baseMergeResult.reason,
+            },
+            title: deployedPrData?.title || null,
           },
-          title: deployedPrData?.title || null,
-        })
+          { changeSource: 'sync' },
+        )
         return true
       }
     }
@@ -944,17 +972,21 @@ export async function verifyDeploymentFourEyes(
 
         if (implicitCheck.qualifies) {
           console.log(`✅ [Deployment ${deploymentId}] Implicitly approved: ${implicitCheck.reason}`)
-          await updateDeploymentFourEyes(deploymentId, {
-            hasFourEyes: true,
-            fourEyesStatus: 'implicitly_approved',
-            githubPrNumber: deployedPrNumber,
-            githubPrUrl: deployedPrUrl,
-            githubPrData: {
-              ...deployedPrData,
-              implicit_approval_reason: implicitCheck.reason,
+          await updateDeploymentFourEyes(
+            deploymentId,
+            {
+              hasFourEyes: true,
+              fourEyesStatus: 'implicitly_approved',
+              githubPrNumber: deployedPrNumber,
+              githubPrUrl: deployedPrUrl,
+              githubPrData: {
+                ...deployedPrData,
+                implicit_approval_reason: implicitCheck.reason,
+              },
+              title: deployedPrData?.title || null,
             },
-            title: deployedPrData?.title || null,
-          })
+            { changeSource: 'sync' },
+          )
           return true
         }
       }
@@ -967,15 +999,19 @@ export async function verifyDeploymentFourEyes(
       console.log(`        Reason: ${c.reason}, PR: ${c.pr_number || 'none'}`)
     })
 
-    await updateDeploymentFourEyes(deploymentId, {
-      hasFourEyes: false,
-      fourEyesStatus: 'unverified_commits',
-      githubPrNumber: deployedPrNumber,
-      githubPrUrl: deployedPrUrl,
-      githubPrData: deployedPrData,
-      unverifiedCommits,
-      title: deployedPrData?.title || null,
-    })
+    await updateDeploymentFourEyes(
+      deploymentId,
+      {
+        hasFourEyes: false,
+        fourEyesStatus: 'unverified_commits',
+        githubPrNumber: deployedPrNumber,
+        githubPrUrl: deployedPrUrl,
+        githubPrData: deployedPrData,
+        unverifiedCommits,
+        title: deployedPrData?.title || null,
+      },
+      { changeSource: 'sync' },
+    )
 
     return true
   } catch (error) {
@@ -988,12 +1024,16 @@ export async function verifyDeploymentFourEyes(
     }
 
     // On other errors, mark as error status
-    await updateDeploymentFourEyes(deploymentId, {
-      hasFourEyes: false,
-      fourEyesStatus: 'error',
-      githubPrNumber: null,
-      githubPrUrl: null,
-    })
+    await updateDeploymentFourEyes(
+      deploymentId,
+      {
+        hasFourEyes: false,
+        fourEyesStatus: 'error',
+        githubPrNumber: null,
+        githubPrUrl: null,
+      },
+      { changeSource: 'sync' },
+    )
 
     return false
   }

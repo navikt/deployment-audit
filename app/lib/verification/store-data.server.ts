@@ -7,6 +7,7 @@
  */
 
 import { pool } from '~/db/connection.server'
+import { logStatusTransition } from '~/db/deployments.server'
 import { saveVerificationRun } from '~/db/github-data.server'
 import type { VerificationResult } from './types'
 
@@ -24,6 +25,7 @@ export async function storeVerificationResult(
     prSnapshotIds: number[]
     commitSnapshotIds: number[]
   },
+  changeSource?: string,
 ): Promise<{ verificationRunId: number }> {
   // Save the verification run for history/audit
   const verificationRunId = await saveVerificationRun(
@@ -37,7 +39,7 @@ export async function storeVerificationResult(
   )
 
   // Update the deployment record with the verification result
-  await updateDeploymentVerification(deploymentId, result)
+  await updateDeploymentVerification(deploymentId, result, changeSource)
 
   return { verificationRunId }
 }
@@ -45,7 +47,11 @@ export async function storeVerificationResult(
 /**
  * Update the deployment table with verification results
  */
-async function updateDeploymentVerification(deploymentId: number, result: VerificationResult): Promise<void> {
+async function updateDeploymentVerification(
+  deploymentId: number,
+  result: VerificationResult,
+  changeSource?: string,
+): Promise<void> {
   // Determine the four_eyes value for the deployment
   let fourEyesValue: boolean | null = null
   let fourEyesStatusComment: string | null = null
@@ -83,6 +89,11 @@ async function updateDeploymentVerification(deploymentId: number, result: Verifi
       break
   }
 
+  // Get current status before update for history logging
+  const current = await pool.query(`SELECT four_eyes_status, has_four_eyes FROM deployments WHERE id = $1`, [
+    deploymentId,
+  ])
+
   // Get PR info for the deployment if available
   let githubPrData = null
   if (result.deployedPr) {
@@ -107,6 +118,21 @@ async function updateDeploymentVerification(deploymentId: number, result: Verifi
        AND manual_override IS NULL`,
     [fourEyesValue, fourEyesStatusComment, result.deployedPr?.number || null, githubPrData, deploymentId],
   )
+
+  // Log status transition if status changed
+  if (current.rows.length > 0 && fourEyesValue !== null) {
+    const prev = current.rows[0]
+    const newStatus = result.status
+    if (prev.four_eyes_status !== newStatus || prev.has_four_eyes !== (fourEyesValue === true)) {
+      await logStatusTransition(deploymentId, {
+        fromStatus: prev.four_eyes_status,
+        toStatus: newStatus,
+        fromHasFourEyes: prev.has_four_eyes,
+        toHasFourEyes: fourEyesValue === true,
+        changeSource: changeSource || 'verification',
+      })
+    }
+  }
 
   // Store unverified commits if any
   if (result.unverifiedCommits.length > 0) {

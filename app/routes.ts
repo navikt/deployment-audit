@@ -27,6 +27,10 @@ export default [
       'team/:team/env/:env/app/:app/admin/verification-diff/:deploymentId',
       'routes/team.$team.env.$env.app.$app.admin.verification-diff.$deploymentId.tsx',
     ),
+    route(
+      'team/:team/env/:env/app/:app/admin/status-history',
+      'routes/team.$team.env.$env.app.$app.admin.status-history.tsx',
+    ),
     route('team/:team/env/:env/app/:app/deployments', 'routes/team.$team.env.$env.app.$app.deployments.tsx'),
     route(
       'team/:team/env/:env/app/:app/deployments/:deploymentId',

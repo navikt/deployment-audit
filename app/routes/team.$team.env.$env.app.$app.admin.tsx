@@ -919,6 +919,12 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
           >
             Se verifiseringsavvik →
           </AkselLink>
+          <AkselLink
+            as={Link}
+            to={`/team/${app.team_slug}/env/${app.environment_name}/app/${app.app_name}/admin/status-history`}
+          >
+            Se statusoverganger →
+          </AkselLink>
         </VStack>
       </Box>
 

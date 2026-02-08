@@ -43,6 +43,7 @@ import {
   getDeploymentById,
   getNextDeployment,
   getPreviousDeploymentForNav,
+  getStatusHistory,
   updateDeploymentFourEyes,
   updateDeploymentLegacyData,
 } from '~/db/deployments.server'
@@ -102,6 +103,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const comments = await getCommentsByDeploymentId(deploymentId)
   const manualApproval = await getManualApproval(deploymentId)
   const legacyInfo = await getLegacyInfo(deploymentId)
+  const statusHistory = await getStatusHistory(deploymentId)
 
   // Get previous and next deployments for navigation (respecting filters)
   const previousDeployment = await getPreviousDeploymentForNav(deploymentId, deployment.monitored_app_id, navFilters)
@@ -198,6 +200,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     comments,
     manualApproval,
     legacyInfo,
+    statusHistory,
     previousDeployment,
     nextDeployment,
     userMappings: serializeUserMappings(userMappings),
@@ -310,12 +313,16 @@ export async function action({ request, params }: Route.ActionArgs) {
       })
 
       // Update deployment to mark as manually approved
-      await updateDeploymentFourEyes(deploymentId, {
-        hasFourEyes: true,
-        fourEyesStatus: 'manually_approved',
-        githubPrNumber: null,
-        githubPrUrl: null,
-      })
+      await updateDeploymentFourEyes(
+        deploymentId,
+        {
+          hasFourEyes: true,
+          fourEyesStatus: 'manually_approved',
+          githubPrNumber: null,
+          githubPrUrl: null,
+        },
+        { changeSource: 'manual_approval', changedBy: identity.navIdent },
+      )
 
       return { success: 'Deployment manuelt godkjent' }
     } catch (_error) {
@@ -452,15 +459,19 @@ export async function action({ request, params }: Route.ActionArgs) {
       }
 
       // Set status to legacy_pending but PRESERVE the github_pr_data from verification
-      await updateDeploymentFourEyes(deploymentId, {
-        hasFourEyes: false,
-        fourEyesStatus: 'legacy_pending',
-        githubPrNumber: updatedDeployment?.github_pr_number || (prNumber ? parseInt(prNumber, 10) : null),
-        githubPrUrl: updatedDeployment?.github_pr_url || prUrl || null,
-        // Keep the PR data from verifyDeploymentFourEyes - don't overwrite it
-        githubPrData: updatedDeployment?.github_pr_data || undefined,
-        title: updatedDeployment?.title || prTitle || commitMessage || null,
-      })
+      await updateDeploymentFourEyes(
+        deploymentId,
+        {
+          hasFourEyes: false,
+          fourEyesStatus: 'legacy_pending',
+          githubPrNumber: updatedDeployment?.github_pr_number || (prNumber ? parseInt(prNumber, 10) : null),
+          githubPrUrl: updatedDeployment?.github_pr_url || prUrl || null,
+          // Keep the PR data from verifyDeploymentFourEyes - don't overwrite it
+          githubPrData: updatedDeployment?.github_pr_data || undefined,
+          title: updatedDeployment?.title || prTitle || commitMessage || null,
+        },
+        { changeSource: 'legacy', changedBy: navIdent },
+      )
 
       return { success: 'GitHub-data lagret - venter på godkjenning fra annen person' }
     } catch (error) {
@@ -502,12 +513,16 @@ export async function action({ request, params }: Route.ActionArgs) {
       })
 
       // Update deployment with provided info
-      await updateDeploymentFourEyes(deploymentId, {
-        hasFourEyes: false,
-        fourEyesStatus: 'pending_approval',
-        githubPrNumber: prNumber ? parseInt(prNumber, 10) : null,
-        githubPrUrl: null,
-      })
+      await updateDeploymentFourEyes(
+        deploymentId,
+        {
+          hasFourEyes: false,
+          fourEyesStatus: 'pending_approval',
+          githubPrNumber: prNumber ? parseInt(prNumber, 10) : null,
+          githubPrUrl: null,
+        },
+        { changeSource: 'legacy', changedBy: navIdent },
+      )
 
       return { success: 'Legacy info registrert - venter på godkjenning fra annen person' }
     } catch (_error) {
@@ -545,14 +560,18 @@ export async function action({ request, params }: Route.ActionArgs) {
       })
 
       // Preserve existing GitHub data when approving
-      await updateDeploymentFourEyes(deploymentId, {
-        hasFourEyes: true,
-        fourEyesStatus: 'manually_approved',
-        githubPrNumber: currentDeployment?.github_pr_number || null,
-        githubPrUrl: currentDeployment?.github_pr_url || null,
-        githubPrData: currentDeployment?.github_pr_data || undefined,
-        title: currentDeployment?.title || null,
-      })
+      await updateDeploymentFourEyes(
+        deploymentId,
+        {
+          hasFourEyes: true,
+          fourEyesStatus: 'manually_approved',
+          githubPrNumber: currentDeployment?.github_pr_number || null,
+          githubPrUrl: currentDeployment?.github_pr_url || null,
+          githubPrData: currentDeployment?.github_pr_data || undefined,
+          title: currentDeployment?.title || null,
+        },
+        { changeSource: 'legacy', changedBy: navIdent },
+      )
 
       return { success: 'Legacy deployment godkjent' }
     } catch (_error) {
@@ -580,12 +599,16 @@ export async function action({ request, params }: Route.ActionArgs) {
       })
 
       // Reset status back to legacy
-      await updateDeploymentFourEyes(deploymentId, {
-        hasFourEyes: false,
-        fourEyesStatus: 'legacy',
-        githubPrNumber: null,
-        githubPrUrl: null,
-      })
+      await updateDeploymentFourEyes(
+        deploymentId,
+        {
+          hasFourEyes: false,
+          fourEyesStatus: 'legacy',
+          githubPrNumber: null,
+          githubPrUrl: null,
+        },
+        { changeSource: 'legacy', changedBy: navIdent },
+      )
 
       return { success: 'Legacy-verifisering avvist - kan registreres på nytt' }
     } catch (_error) {
@@ -650,12 +673,16 @@ export async function action({ request, params }: Route.ActionArgs) {
 
   if (intent === 'approve_baseline') {
     try {
-      await updateDeploymentFourEyes(deploymentId, {
-        hasFourEyes: true,
-        fourEyesStatus: 'baseline',
-        githubPrNumber: null,
-        githubPrUrl: null,
-      })
+      await updateDeploymentFourEyes(
+        deploymentId,
+        {
+          hasFourEyes: true,
+          fourEyesStatus: 'baseline',
+          githubPrNumber: null,
+          githubPrUrl: null,
+        },
+        { changeSource: 'baseline_approval' },
+      )
       return { success: 'Deployment godkjent som baseline' }
     } catch (_error) {
       return { error: 'Kunne ikke godkjenne baseline' }
@@ -823,12 +850,26 @@ function getFourEyesStatus(deployment: any): {
   }
 }
 
+function formatChangeSource(source: string): string {
+  const labels: Record<string, string> = {
+    verification: 'Verifisering',
+    manual_approval: 'Manuell godkjenning',
+    reverification: 'Reverifisering',
+    sync: 'Synkronisering',
+    legacy: 'Legacy',
+    baseline_approval: 'Baseline godkjent',
+    unknown: 'Ukjent',
+  }
+  return labels[source] || source
+}
+
 export default function DeploymentDetail({ loaderData, actionData }: Route.ComponentProps) {
   const {
     deployment,
     comments,
     manualApproval,
     legacyInfo,
+    statusHistory,
     previousDeployment,
     nextDeployment,
     userMappings,
@@ -2067,6 +2108,45 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
             </BodyShort>
           )}
         </Alert>
+      )}
+      {/* Status history section */}
+      {statusHistory.length > 0 && (
+        <VStack gap="space-16">
+          <Heading size="medium">Statushistorikk</Heading>
+          <VStack gap="space-8">
+            {statusHistory.map((transition) => (
+              <Box key={transition.id} padding="space-12" borderRadius="4" borderColor="neutral-subtle" borderWidth="1">
+                <HStack gap="space-8" align="center" wrap>
+                  <Tag variant="neutral" size="small">
+                    {formatChangeSource(transition.change_source)}
+                  </Tag>
+                  <BodyShort size="small">
+                    {transition.from_status ? (
+                      <>
+                        <Tag variant={transition.from_has_four_eyes ? 'success' : 'warning'} size="xsmall">
+                          {transition.from_status}
+                        </Tag>
+                        {' → '}
+                      </>
+                    ) : (
+                      'Satt til '
+                    )}
+                    <Tag variant={transition.to_has_four_eyes ? 'success' : 'warning'} size="xsmall">
+                      {transition.to_status}
+                    </Tag>
+                  </BodyShort>
+                  {transition.changed_by && <Detail textColor="subtle">av {transition.changed_by}</Detail>}
+                  <Detail textColor="subtle">
+                    {new Date(transition.created_at).toLocaleString('no-NO', {
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                    })}
+                  </Detail>
+                </HStack>
+              </Box>
+            ))}
+          </VStack>
+        </VStack>
       )}
       {/* Comments section */}
       <VStack gap="space-16">
