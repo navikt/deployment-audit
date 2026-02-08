@@ -22,6 +22,23 @@ export async function getAllMonitoredApplications(): Promise<MonitoredApplicatio
   return result.rows
 }
 
+/**
+ * Get unresolved alert counts for all apps in a single query
+ */
+export async function getAllAlertCounts(): Promise<Map<number, number>> {
+  const result = await pool.query(`
+    SELECT monitored_app_id, COUNT(*)::integer as count
+    FROM repository_alerts
+    WHERE resolved_at IS NULL
+    GROUP BY monitored_app_id
+  `)
+  const map = new Map<number, number>()
+  for (const row of result.rows) {
+    map.set(row.monitored_app_id, row.count)
+  }
+  return map
+}
+
 export async function getApplicationsByTeam(teamSlug: string): Promise<MonitoredApplication[]> {
   const result = await pool.query(
     'SELECT * FROM monitored_applications WHERE team_slug = $1 AND is_active = true ORDER BY environment_name, app_name',

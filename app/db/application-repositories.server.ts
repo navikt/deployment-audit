@@ -206,3 +206,20 @@ export async function setRepositoryAsActive(repoId: number): Promise<Application
 
   return result.rows[0]
 }
+
+/**
+ * Get all active repositories as a Map of appId -> "owner/repo" string
+ */
+export async function getAllActiveRepositories(): Promise<Map<number, string>> {
+  const result = await pool.query(
+    `SELECT monitored_app_id, github_owner, github_repo_name
+     FROM application_repositories 
+     WHERE status = 'active'`,
+  )
+
+  const map = new Map<number, string>()
+  for (const row of result.rows) {
+    map.set(row.monitored_app_id, `${row.github_owner}/${row.github_repo_name}`)
+  }
+  return map
+}

@@ -1,10 +1,9 @@
 import { Alert, Button, Heading, HStack, VStack } from '@navikt/ds-react'
 import { Link, useRouteLoaderData } from 'react-router'
 import { AppCard, type AppCardData } from '~/components/AppCard'
-import { getRepositoriesByAppId } from '~/db/application-repositories.server'
-import { getAlertCountsByApp } from '../db/alerts.server'
-import { getAppDeploymentStats } from '../db/deployments.server'
-import { getAllMonitoredApplications } from '../db/monitored-applications.server'
+import { getAllActiveRepositories } from '~/db/application-repositories.server'
+import { getAppDeploymentStatsBatch } from '../db/deployments.server'
+import { getAllAlertCounts, getAllMonitoredApplications } from '../db/monitored-applications.server'
 import type { Route } from './+types/home'
 import type { loader as layoutLoader } from './layout'
 
@@ -17,30 +16,41 @@ export function meta(_args: Route.MetaArgs) {
 
 export async function loader(_args: Route.LoaderArgs) {
   try {
-    const [apps, alertCountsByApp] = await Promise.all([getAllMonitoredApplications(), getAlertCountsByApp()])
+    // Fetch all data in parallel (3 queries instead of 2N+1)
+    const [apps, alertCounts, activeReposByApp] = await Promise.all([
+      getAllMonitoredApplications(),
+      getAllAlertCounts(),
+      getAllActiveRepositories(),
+    ])
 
-    // Fetch active repository and deployment stats for each app
-    const appsWithData = await Promise.all(
-      apps.map(async (app) => {
-        const repos = await getRepositoriesByAppId(app.id)
-        const activeRepo = repos.find((r) => r.status === 'active')
-        const appStats = await getAppDeploymentStats(app.id, undefined, undefined, app.audit_start_year)
-        return {
-          ...app,
-          active_repo: activeRepo ? `${activeRepo.github_owner}/${activeRepo.github_repo_name}` : null,
-          stats: appStats,
-          alertCount: alertCountsByApp.get(app.id) || 0,
-        }
-      }),
+    if (apps.length === 0) {
+      return { apps: [] }
+    }
+
+    // Get stats (depends on apps data for audit_start_year)
+    const statsByApp = await getAppDeploymentStatsBatch(
+      apps.map((a) => ({ id: a.id, audit_start_year: a.audit_start_year })),
     )
 
-    return {
-      apps: appsWithData,
-    }
+    // Combine data
+    const appsWithData = apps.map((app) => ({
+      ...app,
+      active_repo: activeReposByApp.get(app.id) || null,
+      stats: statsByApp.get(app.id) || {
+        total: 0,
+        with_four_eyes: 0,
+        without_four_eyes: 0,
+        pending_verification: 0,
+        last_deployment: null,
+        last_deployment_id: null,
+        four_eyes_percentage: 0,
+      },
+      alertCount: alertCounts.get(app.id) || 0,
+    }))
+
+    return { apps: appsWithData }
   } catch (_error) {
-    return {
-      apps: [],
-    }
+    return { apps: [] }
   }
 }
 
