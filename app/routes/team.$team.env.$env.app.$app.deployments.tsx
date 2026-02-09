@@ -134,6 +134,7 @@ export default function AppDeployments() {
                 <option value="baseline">Baseline</option>
                 <option value="pending_baseline">Baseline (venter)</option>
                 <option value="error">Feil</option>
+                <option value="unknown">Ukjent</option>
               </Select>
 
               <Select

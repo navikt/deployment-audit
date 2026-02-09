@@ -28,6 +28,7 @@ export const FOUR_EYES_STATUSES = [
   'legacy_pending', // Legacy awaiting review
   'repository_mismatch', // Repository doesn't match monitored app
   'error', // Error during verification
+  'unknown', // Not yet verified (DB default)
 ] as const
 
 export type FourEyesStatus = (typeof FOUR_EYES_STATUSES)[number]
@@ -58,7 +59,7 @@ export const NOT_APPROVED_STATUSES: FourEyesStatus[] = [
 /**
  * Statuses that indicate deployment is pending verification
  */
-export const PENDING_STATUSES: FourEyesStatus[] = ['pending', 'pending_baseline', 'pending_approval']
+export const PENDING_STATUSES: FourEyesStatus[] = ['pending', 'pending_baseline', 'pending_approval', 'unknown']
 
 /**
  * Statuses that indicate legacy deployments
@@ -84,6 +85,7 @@ export const FOUR_EYES_STATUS_LABELS: Record<FourEyesStatus, string> = {
   legacy_pending: 'Legacy (venter)',
   repository_mismatch: 'Repository mismatch',
   error: 'Feil',
+  unknown: 'Ukjent',
 }
 
 // =============================================================================
