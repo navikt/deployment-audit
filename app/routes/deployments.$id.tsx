@@ -253,10 +253,6 @@ export async function action({ request, params }: Route.ActionArgs) {
       return { error: 'Kunne ikke identifisere bruker. Vennligst logg inn på nytt.' }
     }
 
-    if (!slackLink || slackLink.trim() === '') {
-      return { error: 'Slack-lenke er påkrevd for manuell godkjenning' }
-    }
-
     // Validate four-eyes principle: user cannot approve their own work
     const deployment = await getDeploymentById(deploymentId)
     if (!deployment) {
@@ -308,7 +304,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       await createComment({
         deployment_id: deploymentId,
         comment_text: reason || 'Manuelt godkjent etter gjennomgang',
-        slack_link: slackLink.trim(),
+        slack_link: slackLink?.trim() || undefined,
         comment_type: 'manual_approval',
         approved_by: identity.navIdent,
       })
@@ -1794,7 +1790,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
             </Heading>
             <BodyShort>
               Dette deploymentet har status "{status.text}" og krever manuell godkjenning for å oppfylle
-              fire-øyne-prinsippet. Legg ved Slack-lenke som dokumenterer at koden er blitt reviewet.
+              fire-øyne-prinsippet.
               {previousDeployment?.commit_sha && deployment.commit_sha && (
                 <>
                   {' '}
@@ -1828,13 +1824,12 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                 <input type="hidden" name="intent" value="manual_approval" />
                 <VStack gap="space-16">
                   <TextField
-                    label="Slack-lenke"
+                    label="Slack-lenke (valgfritt)"
                     name="slack_link"
                     value={approvalSlackLink}
                     onChange={(e) => setApprovalSlackLink(e.target.value)}
                     description="Lenke til Slack-tråd hvor kode-review er dokumentert"
                     size="small"
-                    required
                   />
                   <Textarea
                     label="Begrunnelse (valgfritt)"
