@@ -4,6 +4,7 @@ import { Form, useNavigation } from 'react-router'
 import { upsertApplicationRepository } from '../db/application-repositories.server'
 import { createMonitoredApplication, getAllMonitoredApplications } from '../db/monitored-applications.server'
 import { requireAdmin } from '../lib/auth.server'
+import { logger } from '../lib/logger.server'
 import { fetchAllTeamsAndApplications, getApplicationInfo } from '../lib/nais.server'
 import type { Route } from './+types/apps.add'
 
@@ -33,7 +34,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     )
     return { allApps, monitoredKeys: Array.from(monitoredKeys), error: null }
   } catch (error) {
-    console.error('Loader error:', error)
+    logger.error('Loader error:', error)
     return {
       allApps: [],
       monitoredKeys: [],
@@ -86,7 +87,7 @@ export async function action({ request }: Route.ActionArgs) {
         success: `La til ${appName} (${environmentName}) for overvåking`,
       }
     } catch (error) {
-      console.error('Add error:', error)
+      logger.error('Add error:', error)
       return {
         error: error instanceof Error ? error.message : 'Kunne ikke legge til applikasjon',
         success: null,

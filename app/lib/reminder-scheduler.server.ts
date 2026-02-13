@@ -7,6 +7,7 @@
 
 import { claimReminderSend, getAppsWithRemindersEnabled, getUnapprovedDeployments } from '~/db/deployments.server'
 import { getUserMapping } from '~/db/user-mappings.server'
+import { logger } from '~/lib/logger.server'
 import { getWeekdayKey, isBusinessDay } from './norwegian-holidays'
 import { sendReminder } from './slack.server'
 import type { ReminderDeployment } from './slack-blocks'
@@ -21,7 +22,7 @@ let schedulerInterval: ReturnType<typeof setInterval> | null = null
  */
 export function startReminderScheduler(): void {
   if (schedulerInterval) return
-  console.log('⏰ Starting reminder scheduler (1 min interval)')
+  logger.info('⏰ Starting reminder scheduler (1 min interval)')
   schedulerInterval = setInterval(checkAndSendReminders, SCHEDULER_INTERVAL_MS)
 }
 
@@ -32,7 +33,7 @@ export function stopReminderScheduler(): void {
   if (schedulerInterval) {
     clearInterval(schedulerInterval)
     schedulerInterval = null
-    console.log('⏰ Reminder scheduler stopped')
+    logger.info('⏰ Reminder scheduler stopped')
   }
 }
 
@@ -57,7 +58,7 @@ export async function checkAndSendReminders(): Promise<void> {
       await sendReminderForApp(app.id, app.team_slug, app.environment_name, app.app_name, app.slack_channel_id)
     }
   } catch (error) {
-    console.error('Reminder scheduler error:', error)
+    logger.error('Reminder scheduler error:', error)
   }
 }
 
@@ -115,7 +116,7 @@ export async function sendReminderForApp(
   )
 
   if (messageTs) {
-    console.log(`🔔 Reminder sent for ${appName} (${environmentName}): ${deployments.length} deployments`)
+    logger.info(`🔔 Reminder sent for ${appName} (${environmentName}): ${deployments.length} deployments`)
     return true
   }
 

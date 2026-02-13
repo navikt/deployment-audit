@@ -7,6 +7,7 @@
  */
 
 import { isJwtValidationConfigured, validateToken } from './jwt-validation.server'
+import { logger } from './logger.server'
 
 // Entra ID group IDs
 const GROUP_ADMIN = '1e97cbc6-0687-4d23-aebd-c611035279c1' // pensjon-revisjon
@@ -71,12 +72,12 @@ export async function getUserIdentity(request: Request): Promise<UserIdentity | 
           }
         }
         // User has valid token but not in authorized groups
-        console.warn(`User ${result.payload.navIdent} not in authorized groups`)
+        logger.warn(`User ${result.payload.navIdent} not in authorized groups`)
         return null
       }
 
       // Token validation failed
-      console.warn(`JWT validation failed: ${result.error.code} - ${result.error.message}`)
+      logger.warn(`JWT validation failed: ${result.error.code} - ${result.error.message}`)
       return null
     }
   }
@@ -90,7 +91,7 @@ export async function getUserIdentity(request: Request): Promise<UserIdentity | 
     const devRole = process.env.DEV_USER_ROLE as UserRole | undefined
 
     if (devIdent && devRole && (devRole === 'admin' || devRole === 'user')) {
-      console.warn(`⚠️ DEV MODE: Using mock identity - NAV-ident: ${devIdent}, role: ${devRole}`)
+      logger.warn(`⚠️ DEV MODE: Using mock identity - NAV-ident: ${devIdent}, role: ${devRole}`)
       return {
         navIdent: devIdent,
         name: 'Development User',

@@ -51,6 +51,7 @@ import { getAuditReportsForApp } from '~/db/audit-reports.server'
 import { getAppDeploymentStats } from '~/db/deployments.server'
 import { getMonitoredApplicationByIdentity, updateMonitoredApplication } from '~/db/monitored-applications.server'
 import { getUserIdentity } from '~/lib/auth.server'
+import { logger } from '~/lib/logger.server'
 import { getDateRangeForPeriod, TIME_PERIOD_OPTIONS, type TimePeriod } from '~/lib/time-periods'
 import type { loader as layoutLoader } from './layout'
 
@@ -185,7 +186,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
     return { error: 'Ukjent handling' }
   } catch (error) {
-    console.error('Action error:', error)
+    logger.error('Action error:', error)
     return { error: error instanceof Error ? error.message : 'En feil oppstod' }
   }
 }

@@ -27,6 +27,7 @@ import {
   updateSlackNotification,
 } from '~/db/slack-notifications.server'
 import { getUserMappingBySlackId } from '~/db/user-mappings.server'
+import { logger } from '~/lib/logger.server'
 import {
   buildDeploymentBlocks,
   buildDeviationBlocks,
@@ -65,12 +66,12 @@ export function isSlackConfigured(): boolean {
  */
 export function getSlackApp(): App | null {
   if (!isSlackConfigured()) {
-    console.log('[Slack] Not configured (missing SLACK_BOT_TOKEN or SLACK_APP_TOKEN)')
+    logger.info('[Slack] Not configured (missing SLACK_BOT_TOKEN or SLACK_APP_TOKEN)')
     return null
   }
 
   if (!slackApp) {
-    console.log('[Slack] Initializing Slack app...')
+    logger.info('[Slack] Initializing Slack app...')
     slackApp = new App({
       token: process.env.SLACK_BOT_TOKEN,
       appToken: process.env.SLACK_APP_TOKEN,
@@ -80,7 +81,7 @@ export function getSlackApp(): App | null {
 
     // Register action handlers
     registerActionHandlers(slackApp)
-    console.log('[Slack] Action handlers registered')
+    logger.info('[Slack] Action handlers registered')
 
     // Register event handlers
     registerEventHandlers(slackApp)
@@ -98,16 +99,16 @@ export async function startSlackConnection(): Promise<void> {
 
   const app = getSlackApp()
   if (!app) {
-    console.log('Slack not configured, skipping connection')
+    logger.info('Slack not configured, skipping connection')
     return
   }
 
   try {
     await app.start()
     isConnected = true
-    console.log('✅ Slack Socket Mode connection established')
+    logger.info('✅ Slack Socket Mode connection established')
   } catch (error) {
-    console.error('❌ Failed to start Slack connection:', error)
+    logger.error('❌ Failed to start Slack connection:', error)
   }
 }
 
@@ -120,9 +121,9 @@ export async function stopSlackConnection(): Promise<void> {
   try {
     await slackApp.stop()
     isConnected = false
-    console.log('Slack connection stopped')
+    logger.info('Slack connection stopped')
   } catch (error) {
-    console.error('Failed to stop Slack connection:', error)
+    logger.error('Failed to stop Slack connection:', error)
   }
 }
 
@@ -137,13 +138,13 @@ export async function sendDeploymentNotification(
 ): Promise<string | null> {
   const app = getSlackApp()
   if (!app) {
-    console.log('Slack not configured, skipping notification')
+    logger.info('Slack not configured, skipping notification')
     return null
   }
 
   const channel = channelId || process.env.SLACK_CHANNEL_ID
   if (!channel) {
-    console.error('No Slack channel configured')
+    logger.error('No Slack channel configured')
     return null
   }
 
@@ -172,7 +173,7 @@ export async function sendDeploymentNotification(
 
     return messageTs || null
   } catch (error) {
-    console.error('Failed to send Slack notification:', error)
+    logger.error('Failed to send Slack notification:', error)
     return null
   }
 }
@@ -186,12 +187,12 @@ export async function sendDeviationNotification(
 ): Promise<string | null> {
   const app = getSlackApp()
   if (!app) {
-    console.log('Slack not configured, skipping deviation notification')
+    logger.info('Slack not configured, skipping deviation notification')
     return null
   }
 
   if (!channelId) {
-    console.log('No deviation Slack channel configured, skipping notification')
+    logger.info('No deviation Slack channel configured, skipping notification')
     return null
   }
 
@@ -206,7 +207,7 @@ export async function sendDeviationNotification(
     })
     return result.ts || null
   } catch (error) {
-    console.error('Failed to send deviation Slack notification:', error)
+    logger.error('Failed to send deviation Slack notification:', error)
     return null
   }
 }
@@ -217,12 +218,12 @@ export async function sendDeviationNotification(
 export async function sendReminder(notification: ReminderNotification, channelId: string): Promise<string | null> {
   const app = getSlackApp()
   if (!app) {
-    console.log('Slack not configured, skipping reminder')
+    logger.info('Slack not configured, skipping reminder')
     return null
   }
 
   if (!channelId) {
-    console.log('No Slack channel configured for reminder, skipping')
+    logger.info('No Slack channel configured for reminder, skipping')
     return null
   }
 
@@ -238,7 +239,7 @@ export async function sendReminder(notification: ReminderNotification, channelId
     })
     return result.ts || null
   } catch (error) {
-    console.error('Failed to send reminder Slack notification:', error)
+    logger.error('Failed to send reminder Slack notification:', error)
     return null
   }
 }
@@ -281,7 +282,7 @@ export async function updateDeploymentNotification(
 
     return true
   } catch (error) {
-    console.error('Failed to update Slack notification:', error)
+    logger.error('Failed to update Slack notification:', error)
     return false
   }
 }
@@ -303,7 +304,7 @@ function registerActionHandlers(app: App): void {
       // Get user info
       const userId = body.user.id
 
-      console.log(`Slack: User ${userId} approved deployment ${deploymentId}`)
+      logger.info(`Slack: User ${userId} approved deployment ${deploymentId}`)
 
       // Log the interaction
       if (body.channel?.id && body.message?.ts) {
@@ -336,7 +337,7 @@ function registerActionHandlers(app: App): void {
         })
       }
     } catch (error) {
-      console.error('Error handling approve action:', error)
+      logger.error('Error handling approve action:', error)
     }
   })
 
@@ -361,7 +362,7 @@ function registerActionHandlers(app: App): void {
         }
       }
     } catch (error) {
-      console.error('Error logging view_details interaction:', error)
+      logger.error('Error logging view_details interaction:', error)
     }
   })
 }
@@ -457,7 +458,7 @@ export async function notifyDeploymentIfNeeded(
     return false
   }
 
-  console.log(`Slack notification sent for deployment ${deployment.id} to channel ${channelId}`)
+  logger.info(`Slack notification sent for deployment ${deployment.id} to channel ${channelId}`)
   return true
 }
 
@@ -486,26 +487,26 @@ function mapFourEyesStatus(status: string): DeploymentNotification['status'] {
 function registerEventHandlers(app: App): void {
   // Handle Home Tab opened
   app.event('app_home_opened', async ({ event, client }) => {
-    console.log('[Slack Home Tab] Event received:', { user: event.user, tab: event.tab })
+    logger.info('[Slack Home Tab] Event received:', { user: event.user, tab: event.tab })
 
     try {
       const userId = event.user
 
       // Try to find matching GitHub username from user mappings using Slack member ID
-      console.log('[Slack Home Tab] Looking up user mapping for Slack ID:', userId)
+      logger.info('[Slack Home Tab] Looking up user mapping for Slack ID:', { userId })
       const userMapping = await getUserMappingBySlackId(userId)
       const githubUsername = userMapping?.github_username
-      console.log('[Slack Home Tab] User mapping result:', { githubUsername, hasMapping: !!userMapping })
+      logger.info('[Slack Home Tab] User mapping result:', { githubUsername, hasMapping: !!userMapping })
 
       // Fetch data for Home Tab
-      console.log('[Slack Home Tab] Fetching data...')
+      logger.info('[Slack Home Tab] Fetching data...')
 
       const [stats, appsWithIssues] = await Promise.all([getHomeTabSummaryStats(), getAppsWithIssues()])
 
       // Fetch sample issue deployments per app
       const issueDeployments = await getIssueDeploymentsPerApp(appsWithIssues, 3)
 
-      console.log('[Slack Home Tab] Data fetched:', {
+      logger.info('[Slack Home Tab] Data fetched:', {
         stats,
         appsWithIssuesCount: appsWithIssues.length,
       })
@@ -519,9 +520,9 @@ function registerEventHandlers(app: App): void {
         appsWithIssues,
         issueDeployments,
       })
-      console.log('[Slack Home Tab] Built blocks, count:', blocks.length)
+      logger.info('[Slack Home Tab] Built blocks, count:', { count: blocks.length })
 
-      console.log('[Slack Home Tab] Publishing view...')
+      logger.info('[Slack Home Tab] Publishing view...')
       await client.views.publish({
         user_id: userId,
         view: {
@@ -529,11 +530,11 @@ function registerEventHandlers(app: App): void {
           blocks,
         },
       })
-      console.log('[Slack Home Tab] View published successfully')
+      logger.info('[Slack Home Tab] View published successfully')
     } catch (error) {
-      console.error('[Slack Home Tab] Error updating Home Tab:', error)
+      logger.error('[Slack Home Tab] Error updating Home Tab:', error)
     }
   })
 
-  console.log('[Slack] Event handlers registered (app_home_opened)')
+  logger.info('[Slack] Event handlers registered (app_home_opened)')
 }

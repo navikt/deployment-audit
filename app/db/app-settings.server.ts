@@ -1,3 +1,4 @@
+import { logger } from '~/lib/logger.server'
 import { assertNever, IMPLICIT_APPROVAL_MODES, type ImplicitApprovalMode } from '~/lib/verification/types'
 import { pool } from './connection.server'
 
@@ -120,7 +121,7 @@ export async function updateAppSetting<T extends Record<string, unknown>>(params
     ],
   )
 
-  console.log(
+  logger.info(
     `📝 Setting '${settingKey}' updated for app ${monitoredAppId} by ${changedByNavIdent}: ${JSON.stringify(oldValue)} → ${JSON.stringify(newValue)}`,
   )
 

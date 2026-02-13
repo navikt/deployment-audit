@@ -8,6 +8,7 @@
 import { Alert, BodyShort, Box, Button, Heading, HStack, Switch, Tag, VStack } from '@navikt/ds-react'
 import { Link, useSearchParams } from 'react-router'
 import { getDeploymentById } from '~/db/deployments.server'
+import { logger } from '~/lib/logger.server'
 import { type DebugVerificationResult, isVerificationDebugMode, runDebugVerification } from '~/lib/verification'
 import type { Route } from './+types/team.$team.env.$env.app.$app.admin.verification-diff.$deploymentId'
 
@@ -67,7 +68,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       params,
     }
   } catch (error) {
-    console.error('Debug verification failed:', error)
+    logger.error('Debug verification failed:', error)
     return {
       deployment,
       debugResult: null,

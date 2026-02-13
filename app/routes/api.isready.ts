@@ -1,4 +1,5 @@
 import { query } from '~/db/connection.server'
+import { logger } from '~/lib/logger.server'
 
 export async function loader() {
   try {
@@ -9,7 +10,7 @@ export async function loader() {
       headers: { 'Content-Type': 'text/plain' },
     })
   } catch (error) {
-    console.error('Readiness check failed:', error)
+    logger.error('Readiness check failed:', error)
     return new Response('Database connection failed', {
       status: 503,
       headers: { 'Content-Type': 'text/plain' },

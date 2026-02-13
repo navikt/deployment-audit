@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { Form, useNavigation } from 'react-router'
 import { getVerificationStats } from '../db/deployments.server'
 import { getAllMonitoredApplications } from '../db/monitored-applications.server'
+import { logger } from '../lib/logger.server'
 import { verifyDeploymentsWithLock } from '../lib/sync.server'
 import type { Route } from './+types/deployments.verify'
 
@@ -30,7 +31,7 @@ export async function action({ request }: Route.ActionArgs) {
   const appIdParam = formData.get('app_id')
 
   try {
-    console.log(`🔍 Starting batch verification (limit: ${limit})`)
+    logger.info(`🔍 Starting batch verification (limit: ${limit})`)
 
     // If specific app, use locking for that app
     if (appIdParam) {
@@ -82,7 +83,7 @@ export async function action({ request }: Route.ActionArgs) {
       result: { verified: totalVerified, failed: totalFailed, skipped: totalSkipped },
     }
   } catch (error) {
-    console.error('Batch verification error:', error)
+    logger.error('Batch verification error:', error)
 
     if (error instanceof Error && error.message.includes('rate limit')) {
       return {

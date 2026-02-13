@@ -53,6 +53,7 @@ import { getMonitoredApplicationById } from '~/db/monitored-applications.server'
 import { getUserMappings } from '~/db/user-mappings.server'
 import { getNavIdent, getUserIdentity } from '~/lib/auth.server'
 import { lookupLegacyByCommit, lookupLegacyByPR } from '~/lib/github.server'
+import { logger } from '~/lib/logger.server'
 import { notifyDeploymentIfNeeded, sendDeviationNotification } from '~/lib/slack.server'
 import { verifyDeploymentFourEyes } from '~/lib/sync.server'
 import { getDateRangeForPeriod, type TimePeriod } from '~/lib/time-periods'
@@ -433,7 +434,7 @@ export async function action({ request, params }: Route.ActionArgs) {
         },
       }
     } catch (error) {
-      console.error('Legacy lookup error:', error)
+      logger.error('Legacy lookup error:', error)
       return { error: `Feil ved oppslag: ${error instanceof Error ? error.message : 'Ukjent feil'}` }
     }
   }
@@ -495,7 +496,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       // Run full GitHub verification to fetch all PR data (comments, reviews, etc.)
       let updatedDeployment = await getDeploymentById(deploymentId)
       if (updatedDeployment && commitSha) {
-        console.log(`🔄 Running full GitHub verification for legacy deployment ${deploymentId}`)
+        logger.info(`🔄 Running full GitHub verification for legacy deployment ${deploymentId}`)
         const repository = `${updatedDeployment.detected_github_owner}/${updatedDeployment.detected_github_repo_name}`
         await verifyDeploymentFourEyes(
           deploymentId,
@@ -528,7 +529,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 
       return { success: 'GitHub-data lagret - venter på godkjenning fra annen person' }
     } catch (error) {
-      console.error('Error saving legacy data:', error)
+      logger.error('Error saving legacy data:', error)
       return { error: 'Kunne ikke lagre data' }
     }
   }
@@ -696,7 +697,7 @@ export async function action({ request, params }: Route.ActionArgs) {
     }
 
     try {
-      console.log(`🔍 Manually verifying deployment ${deployment.nais_deployment_id}...`)
+      logger.info(`🔍 Manually verifying deployment ${deployment.nais_deployment_id}...`)
 
       const success = await verifyDeploymentFourEyes(
         deployment.id,
@@ -714,7 +715,7 @@ export async function action({ request, params }: Route.ActionArgs) {
         return { error: 'Verifisering feilet - se logger for detaljer' }
       }
     } catch (error) {
-      console.error('Verification error:', error)
+      logger.error('Verification error:', error)
       if (error instanceof Error && error.message.includes('rate limit')) {
         return { error: 'GitHub rate limit nådd. Prøv igjen senere.' }
       }
@@ -783,7 +784,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       }
       return { error: 'Kunne ikke sende Slack-varsel. Sjekk at Slack er konfigurert.' }
     } catch (error) {
-      console.error('Slack notification error:', error)
+      logger.error('Slack notification error:', error)
       return { error: 'Feil ved sending av Slack-varsel' }
     }
   }

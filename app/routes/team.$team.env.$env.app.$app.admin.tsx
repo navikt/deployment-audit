@@ -47,7 +47,7 @@ import {
 } from '~/db/sync-jobs.server'
 import { generateAuditReportPdf } from '~/lib/audit-report-pdf'
 import { requireAdmin } from '~/lib/auth.server'
-import { runWithJobContext } from '~/lib/logger.server'
+import { logger, runWithJobContext } from '~/lib/logger.server'
 import { fetchVerificationDataForAllDeployments } from '~/lib/verification'
 import type { Route } from './+types/team.$team.env.$env.app.$app.admin'
 
@@ -262,7 +262,7 @@ export async function action({ request }: Route.ActionArgs) {
 
     // Start async processing (fire and forget)
     processReportJobAsync(jobId, appId, year, user.navIdent).catch((err) => {
-      console.error(`Report job ${jobId} failed:`, err)
+      logger.error(`Report job ${jobId} failed:`, err)
     })
 
     return { jobStarted: jobId }
@@ -278,7 +278,7 @@ export async function action({ request }: Route.ActionArgs) {
 
     // Start async processing (fire and forget)
     processFetchDataJobAsync(jobId, appId).catch((err) => {
-      console.error(`Fetch data job ${jobId} failed:`, err)
+      logger.error(`Fetch data job ${jobId} failed:`, err)
     })
 
     return { fetchJobStarted: jobId }

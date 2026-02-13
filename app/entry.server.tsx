@@ -6,6 +6,7 @@ import { renderToPipeableStream } from 'react-dom/server'
 import type { AppLoadContext, EntryContext } from 'react-router'
 import { ServerRouter } from 'react-router'
 import { initializeServer } from './init.server'
+import { logger } from './lib/logger.server'
 
 // Initialize server-side services once at startup
 initializeServer()
@@ -68,7 +69,7 @@ export default function handleRequest(
       onError(error: unknown) {
         responseStatusCode = 500
         if (shellRendered) {
-          console.error(error)
+          logger.error('Stream rendering error', error instanceof Error ? error : undefined)
         }
       },
     })

@@ -1,4 +1,5 @@
 import { GraphQLClient } from 'graphql-request'
+import { logger } from '~/lib/logger.server'
 
 let client: GraphQLClient | null = null
 let requestCount = 0
@@ -23,7 +24,7 @@ function getNaisClient(): GraphQLClient {
       headers,
       requestMiddleware: (request) => {
         requestCount++
-        console.log(`🌐 [Nais #${requestCount}] POST ${url}`)
+        logger.info(`🌐 [Nais #${requestCount}] POST ${url}`)
         return request
       },
     })
@@ -193,7 +194,7 @@ export async function fetchApplicationDeployments(
 ): Promise<NaisDeployment[]> {
   const client = getNaisClient()
 
-  console.log('📡 Fetching deployments from Nais API:', {
+  logger.info('📡 Fetching deployments from Nais API:', {
     team: teamSlug,
     environment: environmentName,
     app: appName,
@@ -208,7 +209,7 @@ export async function fetchApplicationDeployments(
   try {
     while (hasMore) {
       pageCount++
-      console.log(`📄 Fetching deployments page ${pageCount}${after ? ` (cursor: ${after.substring(0, 20)}...)` : ''}`)
+      logger.info(`📄 Fetching deployments page ${pageCount}${after ? ` (cursor: ${after.substring(0, 20)}...)` : ''}`)
 
       const response: TeamEnvironmentResponse = await client.request(APP_DEPLOYMENTS_QUERY, {
         team: teamSlug,
@@ -221,14 +222,14 @@ export async function fetchApplicationDeployments(
       })
 
       if (!response.team?.environment?.application) {
-        console.warn('⚠️  Application not found or no access')
+        logger.warn('⚠️  Application not found or no access')
         break
       }
 
       const deployments = response.team.environment.application.deployments
       const deploymentsCount = deployments.nodes.length
 
-      console.log(
+      logger.info(
         `📦 Received ${deploymentsCount} deployments on page ${pageCount} (total: ${deployments.pageInfo.totalCount})`,
       )
 
@@ -239,14 +240,14 @@ export async function fetchApplicationDeployments(
       hasMore = deployments.pageInfo.hasNextPage
 
       if (hasMore) {
-        console.log(`  ➡️  More deployments available, fetching next page...`)
+        logger.info(`  ➡️  More deployments available, fetching next page...`)
       }
     }
 
-    console.log(`✨ Total deployments fetched: ${allDeployments.length} (from ${pageCount} page(s))`)
+    logger.info(`✨ Total deployments fetched: ${allDeployments.length} (from ${pageCount} page(s))`)
     return allDeployments
   } catch (error) {
-    console.error('❌ Error fetching deployments from Nais:', error)
+    logger.error('❌ Error fetching deployments from Nais:', error)
 
     // Check if the error is because we got HTML instead of JSON
     if (error instanceof Error && error.message.includes('Unexpected token')) {
@@ -274,7 +275,7 @@ export async function fetchNewDeployments(
 ): Promise<{ deployments: NaisDeployment[]; stoppedEarly: boolean }> {
   const client = getNaisClient()
 
-  console.log('📡 Fetching new deployments incrementally:', {
+  logger.info('📡 Fetching new deployments incrementally:', {
     team: teamSlug,
     environment: environmentName,
     app: appName,
@@ -290,7 +291,7 @@ export async function fetchNewDeployments(
   try {
     while (hasMore) {
       pageCount++
-      console.log(`📄 Fetching page ${pageCount}${after ? ` (cursor: ${after.substring(0, 20)}...)` : ''}`)
+      logger.info(`📄 Fetching page ${pageCount}${after ? ` (cursor: ${after.substring(0, 20)}...)` : ''}`)
 
       const response: TeamEnvironmentResponse = await client.request(APP_DEPLOYMENTS_QUERY, {
         team: teamSlug,
@@ -303,7 +304,7 @@ export async function fetchNewDeployments(
       })
 
       if (!response.team?.environment?.application) {
-        console.warn('⚠️  Application not found or no access')
+        logger.warn('⚠️  Application not found or no access')
         break
       }
 
@@ -312,7 +313,7 @@ export async function fetchNewDeployments(
       // Check each deployment - stop when we find a known one
       for (const deployment of deployments.nodes) {
         if (deployment.id === stopAtDeploymentId) {
-          console.log(`🛑 Found known deployment ${stopAtDeploymentId.substring(0, 20)}... - stopping`)
+          logger.info(`🛑 Found known deployment ${stopAtDeploymentId.substring(0, 20)}... - stopping`)
           stoppedEarly = true
           hasMore = false
           break
@@ -326,12 +327,12 @@ export async function fetchNewDeployments(
       }
     }
 
-    console.log(
+    logger.info(
       `✨ Found ${newDeployments.length} new deployments (${pageCount} page(s), stopped early: ${stoppedEarly})`,
     )
     return { deployments: newDeployments, stoppedEarly }
   } catch (error) {
-    console.error('❌ Error fetching new deployments from Nais:', error)
+    logger.error('❌ Error fetching new deployments from Nais:', error)
     throw error
   }
 }
@@ -344,7 +345,7 @@ export async function discoverTeamApplications(teamSlug: string): Promise<{
 }> {
   const client = getNaisClient()
 
-  console.log('🔍 Discovering applications for team:', teamSlug)
+  logger.info('🔍 Discovering applications for team:', { teamSlug })
 
   try {
     // Fetch all applications with pagination
@@ -360,7 +361,7 @@ export async function discoverTeamApplications(teamSlug: string): Promise<{
       })
 
       if (!response.team?.applications) {
-        console.warn('⚠️  No applications found for team')
+        logger.warn('⚠️  No applications found for team')
         break
       }
 
@@ -381,13 +382,13 @@ export async function discoverTeamApplications(teamSlug: string): Promise<{
 
     // Log summary
     for (const [envName, appNames] of environments.entries()) {
-      console.log(`  📁 ${envName}: ${appNames.length} applications`)
+      logger.info(`  📁 ${envName}: ${appNames.length} applications`)
     }
 
-    console.log(`✨ Found ${environments.size} environments with ${allApps.length} total applications`)
+    logger.info(`✨ Found ${environments.size} environments with ${allApps.length} total applications`)
     return { environments }
   } catch (error) {
-    console.error('❌ Error discovering applications:', error)
+    logger.error('❌ Error discovering applications:', error)
     throw error
   }
 }
@@ -431,7 +432,7 @@ export async function getApplicationInfo(
       repository: app.deployments.nodes[0]?.repository || null,
     }
   } catch (error) {
-    console.error('❌ Error fetching application info:', error)
+    logger.error('❌ Error fetching application info:', error)
     return null
   }
 }
@@ -504,7 +505,7 @@ export async function fetchAllTeamsAndApplications(): Promise<
   }>
 > {
   const client = getNaisClient()
-  console.log('🔍 Fetching all teams and applications for search')
+  logger.info('🔍 Fetching all teams and applications for search')
 
   try {
     const allResults: Array<{ teamSlug: string; appName: string; environmentName: string }> = []
@@ -536,13 +537,13 @@ export async function fetchAllTeamsAndApplications(): Promise<
       after = response.teams.pageInfo.endCursor
       hasMore = response.teams.pageInfo.hasNextPage
 
-      console.log(`  📦 Processed ${response.teams.nodes.length} teams, total results: ${allResults.length}`)
+      logger.info(`  📦 Processed ${response.teams.nodes.length} teams, total results: ${allResults.length}`)
     }
 
-    console.log(`✨ Found ${allResults.length} team+app combinations`)
+    logger.info(`✨ Found ${allResults.length} team+app combinations`)
     return allResults
   } catch (error) {
-    console.error('❌ Error fetching teams and applications:', error)
+    logger.error('❌ Error fetching teams and applications:', error)
     throw error
   }
 }

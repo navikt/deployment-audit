@@ -4,6 +4,7 @@ import { buildReportData, getAuditReportData } from '~/db/audit-reports.server'
 import { createReportJob, updateReportJobStatus } from '~/db/report-jobs.server'
 import { generateAuditReportPdf } from '~/lib/audit-report-pdf'
 import { requireAdmin } from '~/lib/auth.server'
+import { logger } from '~/lib/logger.server'
 
 // POST: Create a new report generation job
 export async function action({ request }: ActionFunctionArgs) {
@@ -21,7 +22,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
   // Start async processing (fire and forget)
   processReportJob(jobId, monitoredAppId, year).catch((err) => {
-    console.error(`Report job ${jobId} failed:`, err)
+    logger.error(`Report job ${jobId} failed:`, err)
   })
 
   return data({ jobId })

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { Pool, type QueryResult } from 'pg'
+import { logger } from '~/lib/logger.server'
 
 let poolInstance: Pool | null = null
 
@@ -61,7 +62,7 @@ export function getPool(): Pool {
     })
 
     poolInstance.on('error', (err) => {
-      console.error('Unexpected error on idle client', err)
+      logger.error('Unexpected error on idle client', err)
     })
   }
 
