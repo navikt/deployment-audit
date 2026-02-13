@@ -32,7 +32,7 @@ type DeploymentDetail = {
     title: string
     creator?: { username: string }
     merger?: { username: string }
-    reviewers?: { username: string; state: string }[]
+    reviewers?: { username: string; state: string; submitted_at?: string }[]
   }
 }
 
@@ -182,18 +182,21 @@ function DeploymentDetailPage({
 
             {deployment.github_pr_data.reviewers && deployment.github_pr_data.reviewers.length > 0 && (
               <VStack gap="space-8">
-                <Detail textColor="subtle">Reviewers</Detail>
+                <Detail textColor="subtle">Godkjent av</Detail>
                 <HStack gap="space-8" wrap>
-                  {deployment.github_pr_data.reviewers.map((reviewer) => (
-                    <Tag
-                      key={reviewer.username}
-                      size="small"
-                      variant="outline"
-                      data-color={reviewer.state === 'APPROVED' ? 'success' : 'neutral'}
-                    >
-                      {reviewer.username} ({reviewer.state})
-                    </Tag>
-                  ))}
+                  {deployment.github_pr_data.reviewers
+                    .filter((r) => r.state === 'APPROVED')
+                    .map((reviewer) => (
+                      <Tag
+                        key={reviewer.username}
+                        size="small"
+                        variant="moderate"
+                        data-color="success"
+                        icon={<CheckmarkCircleIcon aria-hidden />}
+                      >
+                        {reviewer.username}
+                      </Tag>
+                    ))}
                 </HStack>
               </VStack>
             )}
@@ -255,8 +258,8 @@ const baseDeployment: DeploymentDetail = {
     creator: { username: 'john-doe' },
     merger: { username: 'jane-smith' },
     reviewers: [
-      { username: 'jane-smith', state: 'APPROVED' },
-      { username: 'bob-wilson', state: 'APPROVED' },
+      { username: 'jane-smith', state: 'APPROVED', submitted_at: '2026-02-08T09:45:00Z' },
+      { username: 'bob-wilson', state: 'APPROVED', submitted_at: '2026-02-08T10:15:00Z' },
     ],
   },
 }

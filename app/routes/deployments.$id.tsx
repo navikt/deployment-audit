@@ -1374,6 +1374,29 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           </>
         )}
       </HGrid>
+      {/* PR Approvers - shown prominently before the accordion */}
+      {deployment.github_pr_data?.reviewers?.some((r) => r.state === 'APPROVED') && (
+        <VStack gap="space-4">
+          <Detail>Godkjent av</Detail>
+          <HStack gap="space-8" wrap>
+            {deployment.github_pr_data.reviewers
+              .filter((r) => r.state === 'APPROVED')
+              .map((reviewer) => (
+                <Tag
+                  key={`${reviewer.username}:${reviewer.submitted_at}`}
+                  data-color="success"
+                  variant="moderate"
+                  size="small"
+                  icon={<CheckmarkIcon aria-hidden />}
+                >
+                  <a href={`https://github.com/${reviewer.username}`} target="_blank" rel="noopener noreferrer">
+                    {getUserDisplay(reviewer.username)}
+                  </a>
+                </Tag>
+              ))}
+          </HStack>
+        </VStack>
+      )}
       {/* PR Details Accordion - Reviewers, Checks, Commits */}
       {deployment.github_pr_data && (
         <Accordion>
