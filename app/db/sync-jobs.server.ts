@@ -18,6 +18,9 @@ export const SYNC_JOB_TYPE_LABELS: Record<SyncJobType, string> = {
 export const SYNC_JOB_STATUSES = ['pending', 'running', 'completed', 'failed', 'cancelled'] as const
 export type SyncJobStatus = (typeof SYNC_JOB_STATUSES)[number]
 
+/** Interval between sync cycles (used by both scheduler and cooldown check) */
+export const SYNC_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
+
 export const SYNC_JOB_STATUS_LABELS: Record<SyncJobStatus, string> = {
   pending: 'Venter',
   running: 'Kjører',
@@ -69,7 +72,19 @@ export async function acquireSyncLock(
   timeoutMinutes: number = 10,
   options?: Record<string, unknown>,
 ): Promise<number | null> {
-  // First: Release any expired locks
+  // Skip if a job for this app+type was started within the last sync interval
+  const cooldown = await pool.query(
+    `SELECT 1 FROM sync_jobs
+     WHERE job_type = $1 AND monitored_app_id = $2
+       AND started_at > NOW() - INTERVAL '1 millisecond' * $3
+     LIMIT 1`,
+    [jobType, appId, SYNC_INTERVAL_MS],
+  )
+  if (cooldown.rowCount && cooldown.rowCount > 0) {
+    return null
+  }
+
+  // Release any expired locks
   const released = await releaseExpiredLocks()
   if (released > 0) {
     logger.info(`🔓 Released ${released} expired lock(s)`)

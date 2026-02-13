@@ -1087,7 +1087,7 @@ export async function verifyDeploymentFourEyesV2(
 // Locked sync functions - for distributed execution across multiple pods
 // ============================================================================
 
-import { acquireSyncLock, cleanupOldSyncJobs, releaseSyncLock } from '~/db/sync-jobs.server'
+import { acquireSyncLock, cleanupOldSyncJobs, releaseSyncLock, SYNC_INTERVAL_MS } from '~/db/sync-jobs.server'
 
 /**
  * Incremental sync from Nais with distributed locking (for periodic sync)
@@ -1155,7 +1155,6 @@ import { getAllMonitoredApplications } from '~/db/monitored-applications.server'
 let periodicSyncInterval: ReturnType<typeof setInterval> | null = null
 let isPeriodicSyncRunning = false
 
-const SYNC_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 const VERIFY_LIMIT_PER_APP = 20 // Limit verifications per app per cycle
 
 /**
