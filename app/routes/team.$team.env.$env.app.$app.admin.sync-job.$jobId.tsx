@@ -1,7 +1,6 @@
-import { ArrowLeftIcon } from '@navikt/aksel-icons'
-import { Alert, BodyShort, Box, Button, Detail, Heading, HStack, Loader, Switch, Tag, VStack } from '@navikt/ds-react'
+import { Alert, BodyShort, Box, Detail, Heading, HStack, Loader, Switch, Tag, VStack } from '@navikt/ds-react'
 import { useEffect, useState } from 'react'
-import { Link, useRevalidator } from 'react-router'
+import { useRevalidator } from 'react-router'
 import { getMonitoredApplicationByIdentity } from '~/db/monitored-applications.server'
 import { getSyncJobById, getSyncJobLogs, SYNC_JOB_STATUS_LABELS, SYNC_JOB_TYPE_LABELS } from '~/db/sync-jobs.server'
 import { requireAdmin } from '~/lib/auth.server'
@@ -87,7 +86,6 @@ export default function SyncJobDetail({ loaderData }: Route.ComponentProps) {
   const [showDebug, setShowDebug] = useState(true)
 
   const isRunning = job.status === 'running'
-  const appUrl = `/team/${app.team_slug}/env/${app.environment_name}/app/${app.app_name}`
   const progress = job.result as Record<string, number> | null
   const filteredLogs = showDebug ? logs : logs.filter((l) => l.level !== 'debug')
 
@@ -106,11 +104,6 @@ export default function SyncJobDetail({ loaderData }: Route.ComponentProps) {
     <VStack gap="space-24">
       {/* Header */}
       <VStack gap="space-8">
-        <HStack gap="space-8" align="center">
-          <Button as={Link} to={`${appUrl}/admin`} variant="tertiary" size="small" icon={<ArrowLeftIcon aria-hidden />}>
-            Tilbake til admin
-          </Button>
-        </HStack>
         <HStack gap="space-12" align="center">
           <Heading size="medium">Jobb #{job.id}</Heading>
           <Tag variant={statusColor(job.status)} size="small">
