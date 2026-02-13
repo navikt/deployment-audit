@@ -7,14 +7,14 @@
 import { ExclamationmarkTriangleIcon } from '@navikt/aksel-icons'
 import { Link as AkselLink, BodyShort, Box, Detail, Heading, HStack, Tag, ToggleGroup, VStack } from '@navikt/ds-react'
 import { Link, useLoaderData, useSearchParams } from 'react-router'
+import { getDeviationsByAppId } from '~/db/deviations.server'
+import { getMonitoredApplicationByIdentity } from '~/db/monitored-applications.server'
+import { requireAdmin } from '~/lib/auth.server'
 import {
   DEVIATION_FOLLOW_UP_ROLE_LABELS,
   DEVIATION_INTENT_LABELS,
   DEVIATION_SEVERITY_LABELS,
-  getDeviationsByAppId,
-} from '~/db/deviations.server'
-import { getMonitoredApplicationByIdentity } from '~/db/monitored-applications.server'
-import { requireAdmin } from '~/lib/auth.server'
+} from '~/lib/deviation-constants'
 import type { Route } from './+types/team.$team.env.$env.app.$app.admin.deviations'
 
 export function meta(_args: Route.MetaArgs) {

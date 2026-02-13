@@ -50,17 +50,16 @@ import {
   updateDeploymentFourEyes,
   updateDeploymentLegacyData,
 } from '~/db/deployments.server'
-import {
-  createDeviation,
-  DEVIATION_FOLLOW_UP_ROLE_LABELS,
-  DEVIATION_INTENT_LABELS,
-  DEVIATION_SEVERITY_LABELS,
-  getDeviationsByDeploymentId,
-} from '~/db/deviations.server'
+import { createDeviation, getDeviationsByDeploymentId } from '~/db/deviations.server'
 import { getDeviationSlackChannel } from '~/db/global-settings.server'
 import { getMonitoredApplicationById } from '~/db/monitored-applications.server'
 import { getUserMappings } from '~/db/user-mappings.server'
 import { getNavIdent, getUserIdentity } from '~/lib/auth.server'
+import {
+  DEVIATION_FOLLOW_UP_ROLE_LABELS,
+  DEVIATION_INTENT_LABELS,
+  DEVIATION_SEVERITY_LABELS,
+} from '~/lib/deviation-constants'
 import { lookupLegacyByCommit, lookupLegacyByPR } from '~/lib/github.server'
 import { logger } from '~/lib/logger.server'
 import { notifyDeploymentIfNeeded, sendDeviationNotification } from '~/lib/slack.server'
