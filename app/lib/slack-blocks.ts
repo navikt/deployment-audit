@@ -169,54 +169,34 @@ export function buildDeploymentBlocks(notification: DeploymentNotification): Kno
     })
   }
 
-  // Add action buttons based on status
+  // Add description and link to app for review
   if (notification.status === 'unverified' || notification.status === 'pending_approval') {
     blocks.push({
-      type: 'actions',
-      elements: [
-        {
-          type: 'button',
-          text: {
-            type: 'plain_text',
-            text: '✅ Godkjenn',
-            emoji: true,
-          },
-          style: 'primary',
-          action_id: 'approve_deployment',
-          value: JSON.stringify({
-            deploymentId: notification.deploymentId,
-            appName: notification.appName,
-          }),
-        },
-        {
-          type: 'button',
-          text: {
-            type: 'plain_text',
-            text: '🔍 Se detaljer',
-            emoji: true,
-          },
-          action_id: 'view_details',
-          url: notification.detailsUrl,
-        },
-      ],
-    })
-  } else {
-    blocks.push({
-      type: 'actions',
-      elements: [
-        {
-          type: 'button',
-          text: {
-            type: 'plain_text',
-            text: '🔍 Se detaljer',
-            emoji: true,
-          },
-          action_id: 'view_details',
-          url: notification.detailsUrl,
-        },
-      ],
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: 'Bekreft at endringene er godkjent ved å gå til deployment i appen.',
+      },
     })
   }
+
+  blocks.push({
+    type: 'actions',
+    elements: [
+      {
+        type: 'button',
+        text: {
+          type: 'plain_text',
+          text: '🔍 Se deployment',
+          emoji: true,
+        },
+        style:
+          notification.status === 'unverified' || notification.status === 'pending_approval' ? 'primary' : undefined,
+        action_id: 'view_details',
+        url: notification.detailsUrl,
+      },
+    ],
+  })
 
   // Add context with timestamp
   blocks.push({
