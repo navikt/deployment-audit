@@ -12,7 +12,7 @@ import {
   updateCommitPrVerification,
   upsertCommits,
 } from '~/db/commits.server'
-import { logger } from '~/lib/logger.server'
+import { logger, runWithJobContext } from '~/lib/logger.server'
 
 /**
  * Feature flag for using the new modular verification system.
@@ -1120,7 +1120,9 @@ async function syncNewDeploymentsWithLock(
       team: teamSlug,
       env: environmentName,
     })
-    const result = await syncNewDeploymentsFromNais(teamSlug, environmentName, appName, monitoredAppId)
+    const result = await runWithJobContext(lockId, false, () =>
+      syncNewDeploymentsFromNais(teamSlug, environmentName, appName, monitoredAppId),
+    )
     await logSyncJobMessage(lockId, 'info', `Sync fullført`, {
       newCount: result.newCount,
       alertsCreated: result.alertsCreated,
@@ -1151,10 +1153,12 @@ export async function verifyDeploymentsWithLock(
 
   try {
     await logSyncJobMessage(lockId, 'info', `Starter GitHub verifisering`, { limit })
-    const result = await verifyDeploymentsFourEyes({
-      monitored_app_id: monitoredAppId,
-      limit,
-    })
+    const result = await runWithJobContext(lockId, false, () =>
+      verifyDeploymentsFourEyes({
+        monitored_app_id: monitoredAppId,
+        limit,
+      }),
+    )
     await logSyncJobMessage(lockId, 'info', `Verifisering fullført`, {
       verified: result.verified,
       failed: result.failed,
