@@ -175,7 +175,7 @@ export function buildDeploymentBlocks(notification: DeploymentNotification): Kno
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: 'Bekreft at endringene er godkjent ved å gå til deployment i appen.',
+        text: 'Denne deploymenten mangler godkjenning. Åpne deployment for å verifisere.',
       },
     })
   }
