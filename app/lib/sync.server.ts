@@ -1087,7 +1087,13 @@ export async function verifyDeploymentFourEyesV2(
 // Locked sync functions - for distributed execution across multiple pods
 // ============================================================================
 
-import { acquireSyncLock, cleanupOldSyncJobs, releaseSyncLock, SYNC_INTERVAL_MS } from '~/db/sync-jobs.server'
+import {
+  acquireSyncLock,
+  cleanupOldSyncJobs,
+  logSyncJobMessage,
+  releaseSyncLock,
+  SYNC_INTERVAL_MS,
+} from '~/db/sync-jobs.server'
 
 /**
  * Incremental sync from Nais with distributed locking (for periodic sync)
@@ -1109,11 +1115,21 @@ async function syncNewDeploymentsWithLock(
   }
 
   try {
+    await logSyncJobMessage(lockId, 'info', `Starter NAIS sync for ${appName}`, {
+      team: teamSlug,
+      env: environmentName,
+    })
     const result = await syncNewDeploymentsFromNais(teamSlug, environmentName, appName, monitoredAppId)
+    await logSyncJobMessage(lockId, 'info', `Sync fullført`, {
+      newCount: result.newCount,
+      alertsCreated: result.alertsCreated,
+      stoppedEarly: result.stoppedEarly,
+    })
     await releaseSyncLock(lockId, 'completed', result)
     return { success: true, result }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
+    await logSyncJobMessage(lockId, 'error', `Sync feilet: ${errorMessage}`)
     await releaseSyncLock(lockId, 'failed', undefined, errorMessage)
     throw error
   }
@@ -1133,14 +1149,21 @@ export async function verifyDeploymentsWithLock(
   }
 
   try {
+    await logSyncJobMessage(lockId, 'info', `Starter GitHub verifisering`, { limit })
     const result = await verifyDeploymentsFourEyes({
       monitored_app_id: monitoredAppId,
       limit,
+    })
+    await logSyncJobMessage(lockId, 'info', `Verifisering fullført`, {
+      verified: result.verified,
+      failed: result.failed,
+      skipped: result.skipped,
     })
     await releaseSyncLock(lockId, 'completed', result)
     return { success: true, result }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
+    await logSyncJobMessage(lockId, 'error', `Verifisering feilet: ${errorMessage}`)
     await releaseSyncLock(lockId, 'failed', undefined, errorMessage)
     throw error
   }
