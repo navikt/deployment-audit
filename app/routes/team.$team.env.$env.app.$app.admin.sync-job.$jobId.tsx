@@ -81,7 +81,7 @@ function statusColor(status: string): 'success' | 'error' | 'warning' | 'info' |
 }
 
 export default function SyncJobDetail({ loaderData }: Route.ComponentProps) {
-  const { app, job, logs, jobTypeLabel, jobStatusLabel, hasDebugLogs } = loaderData
+  const { job, logs, jobTypeLabel, jobStatusLabel, hasDebugLogs } = loaderData
   const revalidator = useRevalidator()
   const [showDebug, setShowDebug] = useState(true)
 
