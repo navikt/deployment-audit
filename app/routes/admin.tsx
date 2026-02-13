@@ -31,7 +31,7 @@ export default function AdminIndex() {
       </div>
 
       <HGrid gap="space-16" columns={{ xs: 1, md: 2, lg: 3 }}>
-        <Link to="/deployments/verify" style={{ textDecoration: 'none' }}>
+        <Link to="/deployments/verify" style={{ textDecoration: 'none', height: '100%' }}>
           <Box
             padding="space-24"
             borderRadius="8"
@@ -40,6 +40,7 @@ export default function AdminIndex() {
             borderWidth="1"
             data-color={pendingCount > 0 ? 'warning' : undefined}
             className="admin-card"
+            style={{ height: '100%' }}
           >
             <VStack gap="space-12">
               <CheckmarkCircleIcon fontSize="2rem" aria-hidden />
@@ -57,7 +58,7 @@ export default function AdminIndex() {
           </Box>
         </Link>
 
-        <Link to="/admin/audit-reports" style={{ textDecoration: 'none' }}>
+        <Link to="/admin/audit-reports" style={{ textDecoration: 'none', height: '100%' }}>
           <Box
             padding="space-24"
             borderRadius="8"
@@ -65,6 +66,7 @@ export default function AdminIndex() {
             borderColor="neutral-subtle"
             borderWidth="1"
             className="admin-card"
+            style={{ height: '100%' }}
           >
             <VStack gap="space-12">
               <FileTextIcon fontSize="2rem" aria-hidden />
@@ -80,7 +82,7 @@ export default function AdminIndex() {
           </Box>
         </Link>
 
-        <Link to="/admin/users" style={{ textDecoration: 'none' }}>
+        <Link to="/admin/users" style={{ textDecoration: 'none', height: '100%' }}>
           <Box
             padding="space-24"
             borderRadius="8"
@@ -88,6 +90,7 @@ export default function AdminIndex() {
             borderColor="neutral-subtle"
             borderWidth="1"
             className="admin-card"
+            style={{ height: '100%' }}
           >
             <VStack gap="space-12">
               <PersonGroupIcon fontSize="2rem" aria-hidden />
@@ -103,7 +106,7 @@ export default function AdminIndex() {
           </Box>
         </Link>
 
-        <Link to="/admin/sync-jobs" style={{ textDecoration: 'none' }}>
+        <Link to="/admin/sync-jobs" style={{ textDecoration: 'none', height: '100%' }}>
           <Box
             padding="space-24"
             borderRadius="8"
@@ -111,6 +114,7 @@ export default function AdminIndex() {
             borderColor="neutral-subtle"
             borderWidth="1"
             className="admin-card"
+            style={{ height: '100%' }}
           >
             <VStack gap="space-12">
               <ArrowsCirclepathIcon fontSize="2rem" aria-hidden />
@@ -126,7 +130,7 @@ export default function AdminIndex() {
           </Box>
         </Link>
 
-        <Link to="/admin/slack" style={{ textDecoration: 'none' }}>
+        <Link to="/admin/slack" style={{ textDecoration: 'none', height: '100%' }}>
           <Box
             padding="space-24"
             borderRadius="8"
@@ -134,6 +138,7 @@ export default function AdminIndex() {
             borderColor="neutral-subtle"
             borderWidth="1"
             className="admin-card"
+            style={{ height: '100%' }}
           >
             <VStack gap="space-12">
               <ChatIcon fontSize="2rem" aria-hidden />
