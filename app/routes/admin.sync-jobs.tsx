@@ -360,6 +360,7 @@ export default function AdminSyncJobs({ loaderData, actionData }: Route.Componen
                   <Detail textColor="subtle">Startet: {formatDate(job.started_at)}</Detail>
                   <Detail textColor="subtle">Varighet: {formatDuration(job.started_at, job.completed_at)}</Detail>
                   {job.locked_by && <Detail textColor="subtle">Pod: {job.locked_by}</Detail>}
+                  {job.options?.version && <Detail textColor="subtle">Versjon: {String(job.options.version)}</Detail>}
                 </HStack>
 
                 {/* Error/Result row */}

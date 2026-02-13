@@ -46,6 +46,7 @@ export interface SyncJob {
 
 // Get pod identifier from environment or generate one
 const POD_ID = process.env.HOSTNAME || `local-${process.pid}`
+const APP_VERSION = typeof __GIT_SHA__ !== 'undefined' ? __GIT_SHA__ : 'unknown'
 
 /**
  * Release expired locks - should be called periodically
@@ -96,7 +97,7 @@ export async function acquireSyncLock(
       `INSERT INTO sync_jobs (job_type, monitored_app_id, status, started_at, locked_by, lock_expires_at, options)
        VALUES ($1, $2, 'running', NOW(), $3, NOW() + INTERVAL '1 minute' * $4, $5)
        RETURNING id`,
-      [jobType, appId, POD_ID, timeoutMinutes, options ? JSON.stringify(options) : null],
+      [jobType, appId, POD_ID, timeoutMinutes, JSON.stringify({ ...options, version: APP_VERSION })],
     )
     logger.info(`🔒 Acquired ${jobType} lock for app ${appId} (job ${result.rows[0].id})`)
     return result.rows[0].id
