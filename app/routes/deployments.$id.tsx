@@ -47,11 +47,13 @@ import {
   updateDeploymentFourEyes,
   updateDeploymentLegacyData,
 } from '~/db/deployments.server'
+import { createDeviation, getDeviationsByDeploymentId } from '~/db/deviations.server'
+import { getDeviationSlackChannel } from '~/db/global-settings.server'
 import { getMonitoredApplicationById } from '~/db/monitored-applications.server'
 import { getUserMappings } from '~/db/user-mappings.server'
 import { getNavIdent, getUserIdentity } from '~/lib/auth.server'
 import { lookupLegacyByCommit, lookupLegacyByPR } from '~/lib/github.server'
-import { notifyDeploymentIfNeeded } from '~/lib/slack.server'
+import { notifyDeploymentIfNeeded, sendDeviationNotification } from '~/lib/slack.server'
 import { verifyDeploymentFourEyes } from '~/lib/sync.server'
 import { getDateRangeForPeriod, type TimePeriod } from '~/lib/time-periods'
 import { getUserDisplayName, serializeUserMappings } from '~/lib/user-display'
@@ -105,6 +107,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const manualApproval = await getManualApproval(deploymentId)
   const legacyInfo = await getLegacyInfo(deploymentId)
   const statusHistory = await getStatusHistory(deploymentId)
+  const deviations = await getDeviationsByDeploymentId(deploymentId)
 
   // Get previous and next deployments for navigation (respecting filters)
   const previousDeployment = await getPreviousDeploymentForNav(deploymentId, deployment.monitored_app_id, navFilters)
@@ -202,6 +205,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     manualApproval,
     legacyInfo,
     statusHistory,
+    deviations,
     previousDeployment,
     nextDeployment,
     userMappings: serializeUserMappings(userMappings),
@@ -324,6 +328,58 @@ export async function action({ request, params }: Route.ActionArgs) {
       return { success: 'Deployment manuelt godkjent' }
     } catch (_error) {
       return { error: 'Kunne ikke godkjenne deployment' }
+    }
+  }
+
+  if (intent === 'register_deviation') {
+    const identity = await getUserIdentity(request)
+    const reason = formData.get('deviation_reason') as string
+
+    if (!identity?.navIdent) {
+      return { error: 'Kunne ikke identifisere bruker. Vennligst logg inn på nytt.' }
+    }
+    if (!reason || reason.trim() === '') {
+      return { error: 'Begrunnelse for avvik er påkrevd' }
+    }
+
+    try {
+      const deployment = await getDeploymentById(deploymentId)
+      if (!deployment) {
+        return { error: 'Deployment ikke funnet' }
+      }
+
+      const app = await getMonitoredApplicationById(deployment.monitored_app_id)
+
+      await createDeviation({
+        deployment_id: deploymentId,
+        reason: reason.trim(),
+        registered_by: identity.navIdent,
+        registered_by_name: identity.name,
+      })
+
+      // Send Slack notification to deviation channel
+      const deviationChannelConfig = await getDeviationSlackChannel()
+      if (deviationChannelConfig.channel_id) {
+        const appUrl = app ? `/team/${app.team_slug}/env/${app.environment_name}/app/${app.app_name}` : ''
+        const baseUrl = process.env.BASE_URL || 'https://pensjon-deployment-audit.ansatt.nav.no'
+        await sendDeviationNotification(
+          {
+            deploymentId,
+            appName: app?.app_name || 'Ukjent',
+            environmentName: app?.environment_name || 'Ukjent',
+            teamSlug: app?.team_slug || 'Ukjent',
+            commitSha: deployment.commit_sha || 'Ukjent',
+            reason: reason.trim(),
+            registeredByName: identity.name || identity.navIdent,
+            detailsUrl: `${baseUrl}${appUrl}/deployments/${deploymentId}`,
+          },
+          deviationChannelConfig.channel_id,
+        )
+      }
+
+      return { success: 'Avvik registrert' }
+    } catch (_error) {
+      return { error: 'Kunne ikke registrere avvik' }
     }
   }
 
@@ -866,6 +922,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
     manualApproval,
     legacyInfo,
     statusHistory,
+    deviations,
     previousDeployment,
     nextDeployment,
     userMappings,
@@ -911,6 +968,8 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
   const requiresManualApproval =
     statusesRequiringApproval.includes(deployment.four_eyes_status ?? '') && !manualApproval
   const commentDialogRef = useRef<HTMLDialogElement>(null)
+  const deviationDialogRef = useRef<HTMLDialogElement>(null)
+  const [deviationReason, setDeviationReason] = useState('')
 
   const status = getFourEyesStatus(deployment)
 
@@ -2166,6 +2225,98 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           </VStack>
         </VStack>
       )}
+      {/* Deviations section */}
+      <VStack gap="space-16">
+        <HStack justify="space-between" align="center">
+          <Heading size="medium">Avvik</Heading>
+          <Button
+            variant="tertiary"
+            size="small"
+            icon={<ExclamationmarkTriangleIcon aria-hidden />}
+            onClick={() => deviationDialogRef.current?.showModal()}
+          >
+            Registrer avvik
+          </Button>
+        </HStack>
+
+        {deviations.length === 0 ? (
+          <BodyShort textColor="subtle" style={{ fontStyle: 'italic' }}>
+            Ingen avvik registrert.
+          </BodyShort>
+        ) : (
+          <VStack gap="space-12">
+            {deviations.map((deviation) => (
+              <Box
+                key={deviation.id}
+                padding="space-16"
+                borderRadius="8"
+                background="raised"
+                borderColor="warning-subtle"
+                borderWidth="1"
+              >
+                <VStack gap="space-4">
+                  <HStack gap="space-8" align="center">
+                    <ExclamationmarkTriangleIcon aria-hidden style={{ color: 'var(--ax-text-warning)' }} />
+                    <Detail textColor="subtle">
+                      {new Date(deviation.created_at).toLocaleString('no-NO', {
+                        dateStyle: 'medium',
+                        timeStyle: 'short',
+                      })}
+                      {' — '}
+                      {deviation.registered_by_name || deviation.registered_by}
+                    </Detail>
+                    {deviation.resolved_at ? (
+                      <Tag size="xsmall" variant="moderate" data-color="success">
+                        Løst
+                      </Tag>
+                    ) : (
+                      <Tag size="xsmall" variant="moderate" data-color="warning">
+                        Åpen
+                      </Tag>
+                    )}
+                  </HStack>
+                  <BodyShort>{deviation.reason}</BodyShort>
+                  {deviation.resolved_at && deviation.resolution_note && (
+                    <BodyShort size="small" textColor="subtle">
+                      Løsning: {deviation.resolution_note}
+                    </BodyShort>
+                  )}
+                </VStack>
+              </Box>
+            ))}
+          </VStack>
+        )}
+      </VStack>
+      <Modal ref={deviationDialogRef} header={{ heading: 'Registrer avvik' }} closeOnBackdropClick>
+        <Modal.Body>
+          <Form
+            method="post"
+            onSubmit={() => {
+              deviationDialogRef.current?.close()
+              setDeviationReason('')
+            }}
+          >
+            <input type="hidden" name="intent" value="register_deviation" />
+            <VStack gap="space-16">
+              <Textarea
+                label="Begrunnelse"
+                name="deviation_reason"
+                value={deviationReason}
+                onChange={(e) => setDeviationReason(e.target.value)}
+                description="Beskriv avviket og hvorfor det oppstod"
+              />
+            </VStack>
+            <Modal.Footer>
+              <Button type="submit" variant="danger">
+                Registrer avvik
+              </Button>
+              <Button variant="secondary" type="button" onClick={() => deviationDialogRef.current?.close()}>
+                Avbryt
+              </Button>
+            </Modal.Footer>
+          </Form>
+        </Modal.Body>
+      </Modal>
       {/* Comments section */}
       <VStack gap="space-16">
         <Heading size="medium">Kommentarer</Heading>

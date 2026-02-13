@@ -1027,6 +1027,24 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
         </VStack>
       </Box>
 
+      {/* Avvik */}
+      <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
+        <VStack gap="space-16">
+          <div>
+            <Heading size="small">Avvik</Heading>
+            <BodyShort textColor="subtle" size="small">
+              Se og administrer registrerte avvik for deployments.
+            </BodyShort>
+          </div>
+          <AkselLink
+            as={Link}
+            to={`/team/${app.team_slug}/env/${app.environment_name}/app/${app.app_name}/admin/deviations`}
+          >
+            Se avviksliste →
+          </AkselLink>
+        </VStack>
+      </Box>
+
       {/* Recent config changes */}
       {recentConfigChanges.length > 0 && (
         <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">

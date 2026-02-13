@@ -27,11 +27,24 @@ import {
   updateSlackNotification,
 } from '~/db/slack-notifications.server'
 import { getUserMappingBySlackId } from '~/db/user-mappings.server'
-import { buildDeploymentBlocks, buildHomeTabBlocks, type DeploymentNotification, getStatusEmoji } from './slack-blocks'
+import {
+  buildDeploymentBlocks,
+  buildDeviationBlocks,
+  buildHomeTabBlocks,
+  type DeploymentNotification,
+  type DeviationNotification,
+  getStatusEmoji,
+} from './slack-blocks'
 
 // Re-export types and functions from slack-blocks for backward compatibility
-export type { DeploymentNotification, HomeTabInput } from './slack-blocks'
-export { buildDeploymentBlocks, buildHomeTabBlocks, getStatusEmoji, getStatusText } from './slack-blocks'
+export type { DeploymentNotification, DeviationNotification, HomeTabInput } from './slack-blocks'
+export {
+  buildDeploymentBlocks,
+  buildDeviationBlocks,
+  buildHomeTabBlocks,
+  getStatusEmoji,
+  getStatusText,
+} from './slack-blocks'
 
 // Singleton Slack app instance
 let slackApp: App | null = null
@@ -157,6 +170,40 @@ export async function sendDeploymentNotification(
     return messageTs || null
   } catch (error) {
     console.error('Failed to send Slack notification:', error)
+    return null
+  }
+}
+
+/**
+ * Send a deviation notification to a dedicated Slack channel
+ */
+export async function sendDeviationNotification(
+  notification: DeviationNotification,
+  channelId: string,
+): Promise<string | null> {
+  const app = getSlackApp()
+  if (!app) {
+    console.log('Slack not configured, skipping deviation notification')
+    return null
+  }
+
+  if (!channelId) {
+    console.log('No deviation Slack channel configured, skipping notification')
+    return null
+  }
+
+  const blocks = buildDeviationBlocks(notification)
+  const text = `⚠️ Avvik registrert: ${notification.appName} (${notification.environmentName})`
+
+  try {
+    const result = await app.client.chat.postMessage({
+      channel: channelId,
+      blocks: blocks as KnownBlock[],
+      text,
+    })
+    return result.ts || null
+  } catch (error) {
+    console.error('Failed to send deviation Slack notification:', error)
     return null
   }
 }

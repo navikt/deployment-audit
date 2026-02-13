@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { pool } from './connection.server'
+import { getDeviationsForPeriod } from './deviations.server'
 
 // ============================================================================
 // Types
@@ -58,6 +59,18 @@ export interface AuditReportData {
   contributors: ContributorEntry[]
   reviewers: ReviewerEntry[]
   legacy_count: number
+  deviations: DeviationEntry[]
+}
+
+export interface DeviationEntry {
+  deployment_id: number
+  date: string
+  commit_sha: string
+  reason: string
+  registered_by: string
+  registered_by_name: string | null
+  resolved_at: string | null
+  resolution_note: string | null
 }
 
 export interface AuditDeploymentEntry {
@@ -221,6 +234,7 @@ export async function getAuditReportData(
     deployment_id: number
     registered_by: string
   }>
+  deviations: Awaited<ReturnType<typeof getDeviationsForPeriod>>
   reviewer_counts: Map<string, number>
   user_mappings: Map<string, { display_name: string | null; nav_ident: string | null; github_username: string }>
   canonical_map: Map<string, string>
@@ -388,14 +402,34 @@ export async function getAuditReportData(
     }
   }
 
-  return { app, repository, deployments, manual_approvals, legacy_infos, reviewer_counts, user_mappings, canonical_map }
+  const deviations = await getDeviationsForPeriod(monitoredAppId, startDate, endDate)
+
+  return {
+    app,
+    repository,
+    deployments,
+    manual_approvals,
+    legacy_infos,
+    reviewer_counts,
+    user_mappings,
+    canonical_map,
+    deviations,
+  }
 }
 
 /**
  * Build the structured report data from raw data
  */
 export function buildReportData(rawData: Awaited<ReturnType<typeof getAuditReportData>>): AuditReportData {
-  const { deployments, manual_approvals, legacy_infos, reviewer_counts, user_mappings, canonical_map } = rawData
+  const {
+    deployments,
+    manual_approvals,
+    legacy_infos,
+    reviewer_counts,
+    user_mappings,
+    canonical_map,
+    deviations: rawDeviations,
+  } = rawData
   const manualApprovalMap = new Map(manual_approvals.map((a) => [a.deployment_id, a]))
   const legacyInfoMap = new Map(legacy_infos.map((l) => [l.deployment_id, l]))
 
@@ -540,12 +574,28 @@ export function buildReportData(rawData: Awaited<ReturnType<typeof getAuditRepor
   // Count legacy deployments
   const legacyCount = deploymentEntries.filter((d) => d.method === 'legacy').length
 
+  // Build deviations list
+  const deviationEntries: DeviationEntry[] = rawDeviations.map((d) => {
+    const deployment = deployments.find((dep) => dep.id === d.deployment_id)
+    return {
+      deployment_id: d.deployment_id,
+      date: d.created_at.toISOString(),
+      commit_sha: deployment?.commit_sha || '',
+      reason: d.reason,
+      registered_by: d.registered_by,
+      registered_by_name: d.registered_by_name || getDisplayName(d.registered_by) || null,
+      resolved_at: d.resolved_at?.toISOString() || null,
+      resolution_note: d.resolution_note || null,
+    }
+  })
+
   return {
     deployments: deploymentEntries,
     manual_approvals: manualApprovalEntries,
     contributors,
     reviewers,
     legacy_count: legacyCount,
+    deviations: deviationEntries,
   }
 }
 

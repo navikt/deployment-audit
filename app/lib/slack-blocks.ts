@@ -97,6 +97,17 @@ export function getStatusText(status: DeploymentNotification['status']): string 
   }
 }
 
+export interface DeviationNotification {
+  deploymentId: number
+  appName: string
+  environmentName: string
+  teamSlug: string
+  commitSha: string
+  reason: string
+  registeredByName: string
+  detailsUrl: string
+}
+
 // =============================================================================
 // Block Builders
 // =============================================================================
@@ -210,6 +221,64 @@ export function buildDeploymentBlocks(notification: DeploymentNotification): Kno
   })
 
   return blocks
+}
+
+/**
+ * Build blocks for deviation notification
+ */
+export function buildDeviationBlocks(notification: DeviationNotification): KnownBlock[] {
+  const shortSha = notification.commitSha.substring(0, 7)
+
+  return [
+    {
+      type: 'header',
+      text: {
+        type: 'plain_text',
+        text: '⚠️ Avvik registrert',
+        emoji: true,
+      },
+    },
+    {
+      type: 'section',
+      fields: [
+        { type: 'mrkdwn', text: `*App:*\n${notification.appName}` },
+        { type: 'mrkdwn', text: `*Miljø:*\n${notification.environmentName}` },
+        { type: 'mrkdwn', text: `*Commit:*\n\`${shortSha}\`` },
+        { type: 'mrkdwn', text: `*Registrert av:*\n${notification.registeredByName}` },
+      ],
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*Begrunnelse:*\n${notification.reason}`,
+      },
+    },
+    {
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: {
+            type: 'plain_text',
+            text: '🔍 Se deployment',
+            emoji: true,
+          },
+          action_id: 'view_deviation',
+          url: notification.detailsUrl,
+        },
+      ],
+    },
+    {
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: `Team: ${notification.teamSlug} | Deployment: ${notification.deploymentId}`,
+        },
+      ],
+    },
+  ]
 }
 
 /**

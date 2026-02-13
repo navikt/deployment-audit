@@ -1,4 +1,11 @@
-import { ArrowsCirclepathIcon, ChatIcon, CheckmarkCircleIcon, FileTextIcon, PersonGroupIcon } from '@navikt/aksel-icons'
+import {
+  ArrowsCirclepathIcon,
+  ChatIcon,
+  CheckmarkCircleIcon,
+  CogIcon,
+  FileTextIcon,
+  PersonGroupIcon,
+} from '@navikt/aksel-icons'
 import { BodyShort, Box, Heading, HGrid, VStack } from '@navikt/ds-react'
 import { Link, useLoaderData } from 'react-router'
 import { getAllDeployments } from '~/db/deployments.server'
@@ -147,6 +154,28 @@ export default function AdminIndex() {
                   Slack-integrasjon
                 </Heading>
                 <BodyShort textColor="subtle">Konfigurer Slack-varsler og test integrasjonen.</BodyShort>
+              </div>
+            </VStack>
+          </Box>
+        </Link>
+
+        <Link to="/admin/global-settings" style={{ textDecoration: 'none', height: '100%' }}>
+          <Box
+            padding="space-24"
+            borderRadius="8"
+            background="raised"
+            borderColor="neutral-subtle"
+            borderWidth="1"
+            className="admin-card"
+            style={{ height: '100%' }}
+          >
+            <VStack gap="space-12">
+              <CogIcon fontSize="2rem" aria-hidden />
+              <div>
+                <Heading size="small" spacing>
+                  Globale innstillinger
+                </Heading>
+                <BodyShort textColor="subtle">Konfigurer globale innstillinger som avvikskanal i Slack.</BodyShort>
               </div>
             </VStack>
           </Box>

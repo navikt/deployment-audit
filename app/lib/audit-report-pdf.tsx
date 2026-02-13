@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { Document, Font, Link, Page, renderToBuffer, StyleSheet, Text, View } from '@react-pdf/renderer'
-import type { AuditReportData, ManualApprovalEntry } from '~/db/audit-reports.server'
+import type { AuditReportData, DeviationEntry, ManualApprovalEntry } from '~/db/audit-reports.server'
 
 // Register fonts from local files (downloaded during Docker build)
 // In production: /app/fonts/
@@ -717,6 +717,45 @@ function AuditReportPdfDocument(props: AuditReportPdfProps) {
                   )}
                 </Text>
                 <Text style={styles.manualDetail}>Kommentar: {approval.comment}</Text>
+              </View>
+            ))}
+          </View>
+          <Text
+            style={styles.pageNumber}
+            render={({ pageNumber, totalPages }) => `Side ${pageNumber} av ${totalPages}`}
+          />
+        </Page>
+      )}
+
+      {reportData.deviations && reportData.deviations.length > 0 && (
+        <Page size="A4" style={styles.page}>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Avvik ({reportData.deviations.length})</Text>
+            {reportData.deviations.map((deviation: DeviationEntry) => (
+              <View key={`${deviation.deployment_id}-${deviation.date}`} style={styles.manualBox} wrap={false}>
+                <Text style={styles.manualTitle}>
+                  Deployment #{deviation.deployment_id} - {formatDate(deviation.date)}
+                </Text>
+                <Text style={[styles.manualDetail, { fontSize: 7, color: '#666666' }]}>
+                  Commit:{' '}
+                  {deviation.commit_sha ? (
+                    <Link src={`https://github.com/${repository}/commit/${deviation.commit_sha}`} style={styles.link}>
+                      {deviation.commit_sha.substring(0, 7)}
+                    </Link>
+                  ) : (
+                    'N/A'
+                  )}
+                </Text>
+                <Text style={styles.manualDetail}>Begrunnelse: {deviation.reason}</Text>
+                <Text style={styles.manualDetail}>
+                  Registrert av: {deviation.registered_by_name || deviation.registered_by}
+                </Text>
+                <Text style={styles.manualDetail}>
+                  Status: {deviation.resolved_at ? `Løst ${formatDateTime(deviation.resolved_at)}` : 'Åpen'}
+                </Text>
+                {deviation.resolution_note && (
+                  <Text style={styles.manualDetail}>Løsning: {deviation.resolution_note}</Text>
+                )}
               </View>
             ))}
           </View>
