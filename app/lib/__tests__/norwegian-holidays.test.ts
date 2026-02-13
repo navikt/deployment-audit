@@ -99,4 +99,56 @@ describe('norwegian-holidays', () => {
       expect(getWeekdayKey(new Date(2026, 1, 15))).toBe('sun')
     })
   })
+
+  describe('2022 exhaustive verification (matches Kotlin reference)', () => {
+    // All public holidays in 2022 (Easter = April 17)
+    const fridager2022 = [
+      new Date(2022, 0, 1), // Første nyttårsdag
+      new Date(2022, 3, 14), // Skjærtorsdag
+      new Date(2022, 3, 15), // Langfredag
+      new Date(2022, 3, 17), // Første påskedag (Sunday)
+      new Date(2022, 3, 18), // Andre påskedag
+      new Date(2022, 4, 1), // Arbeidernes dag
+      new Date(2022, 4, 17), // Grunnlovsdagen
+      new Date(2022, 4, 26), // Kristi himmelfartsdag
+      new Date(2022, 5, 5), // Første pinsedag (Sunday)
+      new Date(2022, 5, 6), // Andre pinsedag
+      new Date(2022, 11, 25), // Første juledag (Sunday)
+      new Date(2022, 11, 26), // Andre juledag
+    ]
+
+    it('all 2022 public holidays are recognized as holidays', () => {
+      for (const date of fridager2022) {
+        expect(isPublicHoliday(date), `Expected ${date.toISOString()} to be a public holiday`).toBe(true)
+        expect(isBusinessDay(date), `Expected ${date.toISOString()} to NOT be a business day`).toBe(false)
+      }
+    })
+
+    it('every non-holiday weekday in 2022 is a business day', () => {
+      const fridagerKeys = new Set(
+        fridager2022.map(
+          (d) =>
+            `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+        ),
+      )
+
+      const start = new Date(2022, 0, 2) // Jan 2 (Jan 1 is a holiday)
+      for (let i = 0; i < 364; i++) {
+        const date = new Date(start)
+        date.setDate(start.getDate() + i)
+        const day = date.getDay()
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+
+        if (day === 0 || day === 6) {
+          // Weekend
+          expect(isPublicHoliday(date), `Expected weekend ${key} to be a holiday`).toBe(true)
+          expect(isBusinessDay(date), `Expected weekend ${key} to NOT be a business day`).toBe(false)
+        } else if (!fridagerKeys.has(key)) {
+          // Regular weekday
+          expect(isPublicHoliday(date), `Expected weekday ${key} to NOT be a holiday`).toBe(false)
+          expect(isBusinessDay(date), `Expected weekday ${key} to be a business day`).toBe(true)
+        }
+      }
+    })
+  })
 })
