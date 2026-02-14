@@ -927,7 +927,7 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
       <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
         <VStack gap="space-16">
           <div>
-            <Heading size="small">Purring for ugodkjente deployments</Heading>
+            <Heading size="small">Purring for ikke-godkjente deployments</Heading>
             <BodyShort textColor="subtle" size="small">
               Send automatiske påminnelser i Slack for deployments som mangler godkjenning.
             </BodyShort>
