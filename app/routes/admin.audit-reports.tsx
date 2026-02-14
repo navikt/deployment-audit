@@ -72,7 +72,7 @@ export default function AdminAuditReports() {
                     <Table.Row>
                       <Table.HeaderCell>Dokument-ID</Table.HeaderCell>
                       <Table.HeaderCell>Applikasjon</Table.HeaderCell>
-                      <Table.HeaderCell>År</Table.HeaderCell>
+                      <Table.HeaderCell>Periode</Table.HeaderCell>
                       <Table.HeaderCell>Deployments</Table.HeaderCell>
                       <Table.HeaderCell>Generert</Table.HeaderCell>
                       <Table.HeaderCell>Handlinger</Table.HeaderCell>
@@ -95,7 +95,7 @@ export default function AdminAuditReports() {
                             <Detail>{report.environment_name}</Detail>
                           </VStack>
                         </Table.DataCell>
-                        <Table.DataCell>{report.year}</Table.DataCell>
+                        <Table.DataCell>{report.period_label || report.year}</Table.DataCell>
                         <Table.DataCell>
                           <VStack gap="space-2">
                             <BodyShort size="small">{report.total_deployments} totalt</BodyShort>
@@ -149,7 +149,7 @@ export default function AdminAuditReports() {
                               {report.app_name}
                             </AkselLink>
                             <Detail>
-                              {report.environment_name} • {report.year}
+                              {report.environment_name} • {report.period_label || report.year}
                             </Detail>
                           </div>
                           <Tag variant="success" size="small">

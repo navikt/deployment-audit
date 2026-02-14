@@ -263,6 +263,7 @@ interface AuditReportPdfProps {
   teamSlug: string
   environmentName: string
   year: number
+  periodLabel?: string
   periodStart: Date
   periodEnd: Date
   reportData: AuditReportData
@@ -297,6 +298,7 @@ function AuditReportPdfDocument(props: AuditReportPdfProps) {
     repository,
     teamSlug,
     environmentName,
+    periodLabel,
     periodStart,
     periodEnd,
     reportData,
@@ -365,6 +367,7 @@ function AuditReportPdfDocument(props: AuditReportPdfProps) {
             <View style={styles.infoItem}>
               <Text style={styles.infoLabel}>Periode</Text>
               <Text style={styles.infoValue}>
+                {periodLabel ? `${periodLabel} — ` : ''}
                 {formatDate(periodStart)} - {formatDate(periodEnd)}
               </Text>
             </View>

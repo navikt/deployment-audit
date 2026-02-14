@@ -1,4 +1,5 @@
 import { pool } from '~/db/connection.server'
+import type { ReportPeriodType } from '~/lib/report-periods'
 
 export interface ReportJob {
   job_id: string
@@ -9,12 +10,19 @@ export interface ReportJob {
   pdf_data: Buffer | null
 }
 
-export async function createReportJob(monitoredAppId: number, year: number): Promise<string> {
+export async function createReportJob(
+  monitoredAppId: number,
+  year: number,
+  periodType: ReportPeriodType,
+  periodLabel: string,
+  periodStart: Date,
+  periodEnd: Date,
+): Promise<string> {
   const result = await pool.query(
-    `INSERT INTO report_jobs (monitored_app_id, year, status)
-     VALUES ($1, $2, 'pending')
+    `INSERT INTO report_jobs (monitored_app_id, year, period_type, period_label, period_start, period_end, status)
+     VALUES ($1, $2, $3, $4, $5, $6, 'pending')
      RETURNING job_id`,
-    [monitoredAppId, year],
+    [monitoredAppId, year, periodType, periodLabel, periodStart, periodEnd],
   )
   return result.rows[0].job_id
 }

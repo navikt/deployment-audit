@@ -5,6 +5,7 @@ import { createReportJob, updateReportJobStatus } from '~/db/report-jobs.server'
 import { generateAuditReportPdf } from '~/lib/audit-report-pdf'
 import { requireAdmin } from '~/lib/auth.server'
 import { logger } from '~/lib/logger.server'
+import type { ReportPeriodType } from '~/lib/report-periods'
 
 // POST: Create a new report generation job
 export async function action({ request }: ActionFunctionArgs) {
@@ -13,15 +14,22 @@ export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData()
   const monitoredAppId = Number(formData.get('monitoredAppId'))
   const year = Number(formData.get('year'))
+  const periodType = (formData.get('period_type') as ReportPeriodType) || 'yearly'
+  const periodLabel = (formData.get('period_label') as string) || String(year)
+  const periodStartStr = formData.get('period_start') as string
+  const periodEndStr = formData.get('period_end') as string
 
   if (!monitoredAppId || !year) {
     return data({ error: 'Missing monitoredAppId or year' }, { status: 400 })
   }
 
-  const jobId = await createReportJob(monitoredAppId, year)
+  const periodStart = periodStartStr ? new Date(periodStartStr) : new Date(year, 0, 1)
+  const periodEnd = periodEndStr ? new Date(periodEndStr) : new Date(year, 11, 31, 23, 59, 59)
+
+  const jobId = await createReportJob(monitoredAppId, year, periodType, periodLabel, periodStart, periodEnd)
 
   // Start async processing (fire and forget)
-  processReportJob(jobId, monitoredAppId, year).catch((err) => {
+  processReportJob(jobId, monitoredAppId, periodStart, periodEnd).catch((err) => {
     logger.error(`Report job ${jobId} failed:`, err)
   })
 
@@ -29,14 +37,14 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 // Async function to process the report job
-async function processReportJob(jobId: string, monitoredAppId: number, year: number) {
+async function processReportJob(jobId: string, monitoredAppId: number, periodStart: Date, periodEnd: Date) {
   try {
     await updateReportJobStatus(jobId, 'processing')
 
-    const rawData = await getAuditReportData(monitoredAppId, year)
+    const rawData = await getAuditReportData(monitoredAppId, periodStart, periodEnd)
     const reportData = buildReportData(rawData)
 
-    const reportId = `${rawData.app.app_name}-${year}-${Date.now()}`
+    const reportId = `${rawData.app.app_name}-${periodStart.getFullYear()}-${Date.now()}`
     const contentHash = createHash('sha256').update(JSON.stringify(reportData)).digest('hex')
     const generatedAt = new Date()
 
@@ -45,9 +53,9 @@ async function processReportJob(jobId: string, monitoredAppId: number, year: num
       repository: rawData.repository,
       teamSlug: rawData.app.team_slug,
       environmentName: rawData.app.environment_name,
-      year,
-      periodStart: new Date(year, 0, 1),
-      periodEnd: new Date(year, 11, 31, 23, 59, 59),
+      year: periodStart.getFullYear(),
+      periodStart,
+      periodEnd,
       reportData,
       contentHash,
       reportId,

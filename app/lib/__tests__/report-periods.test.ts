@@ -1,0 +1,154 @@
+import { describe, expect, it } from 'vitest'
+import { generateReportId, getCompletedPeriods, isPeriodCompleted, type ReportPeriod } from '../report-periods'
+
+describe('getCompletedPeriods', () => {
+  describe('yearly', () => {
+    it('returns only completed years', () => {
+      const ref = new Date(2026, 5, 15) // June 15, 2026
+      const periods = getCompletedPeriods('yearly', ref)
+
+      expect(periods[0].label).toBe('2025')
+      expect(periods[0].year).toBe(2025)
+      expect(periods[0].startDate).toEqual(new Date(2025, 0, 1))
+      expect(periods[0].endDate).toEqual(new Date(2025, 11, 31, 23, 59, 59, 999))
+
+      // Should not include 2026 (current year)
+      expect(periods.every((p) => p.year < 2026)).toBe(true)
+    })
+
+    it('returns years in descending order', () => {
+      const ref = new Date(2026, 5, 15)
+      const periods = getCompletedPeriods('yearly', ref)
+      for (let i = 1; i < periods.length; i++) {
+        expect(periods[i - 1].year).toBeGreaterThan(periods[i].year)
+      }
+    })
+  })
+
+  describe('quarterly', () => {
+    it('returns only completed quarters', () => {
+      const ref = new Date(2026, 4, 10) // May 10, 2026 (Q2)
+      const periods = getCompletedPeriods('quarterly', ref)
+
+      // Q1 2026 should be completed (ended Mar 31)
+      expect(periods[0].label).toBe('Q1 2026')
+      expect(periods[0].startDate).toEqual(new Date(2026, 0, 1))
+      expect(periods[0].endDate).toEqual(new Date(2026, 2, 31, 23, 59, 59, 999))
+
+      // Q2 2026 should NOT be included (we're in it)
+      expect(periods.find((p) => p.label === 'Q2 2026')).toBeUndefined()
+    })
+
+    it('handles start of quarter correctly', () => {
+      const ref = new Date(2026, 3, 1) // April 1 (start of Q2)
+      const periods = getCompletedPeriods('quarterly', ref)
+      expect(periods[0].label).toBe('Q1 2026')
+    })
+
+    it('returns Q3 and Q4 of previous year', () => {
+      const ref = new Date(2026, 1, 15) // Feb 15, 2026 (Q1)
+      const periods = getCompletedPeriods('quarterly', ref)
+
+      // No quarters in 2026 should be complete yet
+      expect(periods[0].label).toBe('Q4 2025')
+      expect(periods[1].label).toBe('Q3 2025')
+    })
+
+    it('computes correct end-of-quarter dates', () => {
+      const ref = new Date(2026, 11, 31)
+      const periods = getCompletedPeriods('quarterly', ref)
+
+      const q1 = periods.find((p) => p.label === 'Q1 2026')!
+      expect(q1.endDate.getMonth()).toBe(2) // March
+      expect(q1.endDate.getDate()).toBe(31)
+
+      const q2 = periods.find((p) => p.label === 'Q2 2026')!
+      expect(q2.endDate.getMonth()).toBe(5) // June
+      expect(q2.endDate.getDate()).toBe(30)
+
+      const q3 = periods.find((p) => p.label === 'Q3 2026')!
+      expect(q3.endDate.getMonth()).toBe(8) // September
+      expect(q3.endDate.getDate()).toBe(30)
+    })
+  })
+
+  describe('monthly', () => {
+    it('returns only completed months', () => {
+      const ref = new Date(2026, 2, 15) // March 15, 2026
+      const periods = getCompletedPeriods('monthly', ref)
+
+      expect(periods[0].label).toBe('Februar 2026')
+      expect(periods[1].label).toBe('Januar 2026')
+
+      // March should NOT be included
+      expect(periods.find((p) => p.label === 'Mars 2026')).toBeUndefined()
+    })
+
+    it('handles end-of-month dates correctly', () => {
+      const ref = new Date(2026, 3, 1) // April 1
+      const periods = getCompletedPeriods('monthly', ref)
+
+      const feb = periods.find((p) => p.label === 'Februar 2026')!
+      expect(feb.endDate.getDate()).toBe(28) // 2026 is not a leap year
+
+      const jan = periods.find((p) => p.label === 'Januar 2026')!
+      expect(jan.endDate.getDate()).toBe(31)
+    })
+
+    it('handles leap year February', () => {
+      const ref = new Date(2028, 3, 1) // April 1, 2028 (leap year)
+      const periods = getCompletedPeriods('monthly', ref)
+      const feb = periods.find((p) => p.label === 'Februar 2028')!
+      expect(feb.endDate.getDate()).toBe(29)
+    })
+
+    it('returns months in descending order', () => {
+      const ref = new Date(2026, 6, 1)
+      const periods = getCompletedPeriods('monthly', ref)
+      expect(periods[0].label).toBe('Juni 2026')
+      expect(periods[1].label).toBe('Mai 2026')
+      expect(periods[2].label).toBe('April 2026')
+    })
+  })
+})
+
+describe('isPeriodCompleted', () => {
+  it('returns true for past periods', () => {
+    const period: ReportPeriod = {
+      type: 'monthly',
+      label: 'Januar 2025',
+      year: 2025,
+      startDate: new Date(2025, 0, 1),
+      endDate: new Date(2025, 0, 31, 23, 59, 59, 999),
+    }
+    expect(isPeriodCompleted(period, new Date(2025, 1, 1))).toBe(true)
+  })
+
+  it('returns false for current/future periods', () => {
+    const period: ReportPeriod = {
+      type: 'monthly',
+      label: 'Mars 2026',
+      year: 2026,
+      startDate: new Date(2026, 2, 1),
+      endDate: new Date(2026, 2, 31, 23, 59, 59, 999),
+    }
+    expect(isPeriodCompleted(period, new Date(2026, 2, 15))).toBe(false)
+  })
+})
+
+describe('generateReportId', () => {
+  it('generates yearly report ID', () => {
+    const id = generateReportId('yearly', '2025', 'pensjon-pen', 'prod-gcp', 'abcdef1234567890')
+    expect(id).toBe('AUDIT-2025-pensjon-pen-prod-gcp-abcdef12')
+  })
+
+  it('generates quarterly report ID with sanitized label', () => {
+    const id = generateReportId('quarterly', 'Q3 2025', 'pensjon-pen', 'prod-gcp', 'abcdef1234567890')
+    expect(id).toBe('AUDIT-Q3-2025-pensjon-pen-prod-gcp-abcdef12')
+  })
+
+  it('generates monthly report ID with sanitized label', () => {
+    const id = generateReportId('monthly', 'Oktober 2025', 'pensjon-pen', 'prod-gcp', 'abcdef1234567890')
+    expect(id).toBe('AUDIT-Oktober-2025-pensjon-pen-prod-gcp-abcdef12')
+  })
+})

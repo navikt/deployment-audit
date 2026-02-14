@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto'
+import type { ReportPeriodType } from '~/lib/report-periods'
+import { generateReportId } from '~/lib/report-periods'
 import { pool } from './connection.server'
 import { getDeviationsForPeriod } from './deviations.server'
 
@@ -39,6 +41,8 @@ export interface AuditReport {
   environment_name: string
   repository: string
   year: number
+  period_type: ReportPeriodType
+  period_label: string
   period_start: Date
   period_end: Date
   total_deployments: number
@@ -133,6 +137,8 @@ export interface AuditReportSummary {
   team_slug: string
   environment_name: string
   year: number
+  period_type: ReportPeriodType
+  period_label: string
   total_deployments: number
   pr_approved_count: number
   manually_approved_count: number
@@ -159,11 +165,15 @@ export interface AuditReadinessCheck {
 // ============================================================================
 
 /**
- * Check if all production deployments for an app in a year are approved
+ * Check if all production deployments for an app in a period are approved
  */
-export async function checkAuditReadiness(monitoredAppId: number, year: number): Promise<AuditReadinessCheck> {
-  const startDate = new Date(year, 0, 1) // Jan 1
-  const endDate = new Date(year, 11, 31, 23, 59, 59, 999) // Dec 31
+export async function checkAuditReadiness(
+  monitoredAppId: number,
+  periodStart: Date,
+  periodEnd: Date,
+): Promise<AuditReadinessCheck> {
+  const startDate = periodStart
+  const endDate = periodEnd
 
   // Get all deployments for the year in production environments
   const result = await pool.query<{
@@ -222,7 +232,8 @@ export async function checkAuditReadiness(monitoredAppId: number, year: number):
  */
 export async function getAuditReportData(
   monitoredAppId: number,
-  year: number,
+  periodStart: Date,
+  periodEnd: Date,
 ): Promise<{
   app: { app_name: string; team_slug: string; environment_name: string; test_requirement: string }
   repository: string
@@ -243,8 +254,8 @@ export async function getAuditReportData(
   user_mappings: Map<string, { display_name: string | null; nav_ident: string | null; github_username: string }>
   canonical_map: Map<string, string>
 }> {
-  const startDate = new Date(year, 0, 1)
-  const endDate = new Date(year, 11, 31, 23, 59, 59, 999)
+  const startDate = periodStart
+  const endDate = periodEnd
 
   // Get app info
   const appResult = await pool.query(
@@ -616,14 +627,6 @@ function calculateReportHash(reportData: AuditReportData): string {
 }
 
 /**
- * Generate a unique report ID
- */
-function generateReportId(year: number, appName: string, environment: string, hash: string): string {
-  const shortHash = hash.substring(0, 8)
-  return `AUDIT-${year}-${appName}-${environment}-${shortHash}`
-}
-
-/**
  * Save an audit report to the database
  */
 export async function saveAuditReport(params: {
@@ -633,16 +636,30 @@ export async function saveAuditReport(params: {
   environmentName: string
   repository: string
   year: number
+  periodType: ReportPeriodType
+  periodLabel: string
+  periodStart: Date
+  periodEnd: Date
   reportData: AuditReportData
   generatedBy?: string
 }): Promise<AuditReport> {
-  const { monitoredAppId, appName, teamSlug, environmentName, repository, year, reportData, generatedBy } = params
-
-  const periodStart = new Date(year, 0, 1)
-  const periodEnd = new Date(year, 11, 31)
+  const {
+    monitoredAppId,
+    appName,
+    teamSlug,
+    environmentName,
+    repository,
+    year,
+    periodType,
+    periodLabel,
+    periodStart,
+    periodEnd,
+    reportData,
+    generatedBy,
+  } = params
 
   const contentHash = calculateReportHash(reportData)
-  const reportId = generateReportId(year, appName, environmentName, contentHash)
+  const reportId = generateReportId(periodType, periodLabel, appName, environmentName, contentHash)
 
   const prApprovedCount = reportData.deployments.filter((d) => d.method === 'pr').length
   const manuallyApprovedCount = reportData.deployments.filter((d) => d.method === 'manual').length
@@ -650,18 +667,18 @@ export async function saveAuditReport(params: {
   const result = await pool.query<AuditReport>(
     `INSERT INTO audit_reports (
       report_id, monitored_app_id, app_name, team_slug, environment_name, repository,
-      year, period_start, period_end,
+      year, period_type, period_label, period_start, period_end,
       total_deployments, pr_approved_count, manually_approved_count,
       unique_deployers, unique_reviewers,
       report_data, content_hash, generated_by
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-    ON CONFLICT (monitored_app_id, year) DO UPDATE SET
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+    ON CONFLICT (monitored_app_id, period_type, period_start) DO UPDATE SET
       report_id = EXCLUDED.report_id,
       app_name = EXCLUDED.app_name,
       team_slug = EXCLUDED.team_slug,
       environment_name = EXCLUDED.environment_name,
       repository = EXCLUDED.repository,
-      period_start = EXCLUDED.period_start,
+      period_label = EXCLUDED.period_label,
       period_end = EXCLUDED.period_end,
       total_deployments = EXCLUDED.total_deployments,
       pr_approved_count = EXCLUDED.pr_approved_count,
@@ -681,6 +698,8 @@ export async function saveAuditReport(params: {
       environmentName,
       repository,
       year,
+      periodType,
+      periodLabel,
       periodStart,
       periodEnd,
       reportData.deployments.length,
@@ -710,7 +729,7 @@ export async function getAuditReportById(id: number): Promise<AuditReport | null
  */
 export async function getAllAuditReports(): Promise<AuditReportSummary[]> {
   const result = await pool.query<AuditReportSummary>(
-    `SELECT id, report_id, app_name, team_slug, environment_name, year,
+    `SELECT id, report_id, app_name, team_slug, environment_name, year, period_type, period_label,
             total_deployments, pr_approved_count, manually_approved_count, generated_at
      FROM audit_reports
      ORDER BY generated_at DESC`,
@@ -723,11 +742,11 @@ export async function getAllAuditReports(): Promise<AuditReportSummary[]> {
  */
 export async function getAuditReportsForApp(monitoredAppId: number): Promise<AuditReportSummary[]> {
   const result = await pool.query<AuditReportSummary>(
-    `SELECT id, report_id, app_name, team_slug, environment_name, year,
+    `SELECT id, report_id, app_name, team_slug, environment_name, year, period_type, period_label,
             total_deployments, pr_approved_count, manually_approved_count, generated_at
      FROM audit_reports
      WHERE monitored_app_id = $1
-     ORDER BY year DESC`,
+     ORDER BY year DESC, period_start DESC`,
     [monitoredAppId],
   )
   return result.rows

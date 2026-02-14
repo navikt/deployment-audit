@@ -48,6 +48,7 @@ import {
 import { generateAuditReportPdf } from '~/lib/audit-report-pdf'
 import { requireAdmin } from '~/lib/auth.server'
 import { logger, runWithJobContext } from '~/lib/logger.server'
+import { getCompletedPeriods, REPORT_PERIOD_TYPE_LABELS, type ReportPeriodType } from '~/lib/report-periods'
 import { fetchVerificationDataForAllDeployments } from '~/lib/verification'
 import type { Route } from './+types/team.$team.env.$env.app.$app.admin'
 
@@ -77,12 +78,24 @@ async function processFetchDataJobAsync(jobId: number, appId: number) {
   })
 }
 
+interface ReportJobParams {
+  jobId: string
+  appId: number
+  year: number
+  periodType: ReportPeriodType
+  periodLabel: string
+  periodStart: Date
+  periodEnd: Date
+  generatedBy: string
+}
+
 // Async function to process report generation in background
-async function processReportJobAsync(jobId: string, appId: number, year: number, generatedBy: string) {
+async function processReportJobAsync(params: ReportJobParams) {
+  const { jobId, appId, year, periodType, periodLabel, periodStart, periodEnd, generatedBy } = params
   try {
     await updateReportJobStatus(jobId, 'processing')
 
-    const rawData = await getAuditReportData(appId, year)
+    const rawData = await getAuditReportData(appId, periodStart, periodEnd)
     const reportData = buildReportData(rawData)
 
     // Save report metadata
@@ -93,6 +106,10 @@ async function processReportJobAsync(jobId: string, appId: number, year: number,
       environmentName: rawData.app.environment_name,
       repository: rawData.repository,
       year,
+      periodType,
+      periodLabel,
+      periodStart,
+      periodEnd,
       reportData,
       generatedBy,
     })
@@ -104,6 +121,7 @@ async function processReportJobAsync(jobId: string, appId: number, year: number,
       teamSlug: report.team_slug,
       environmentName: report.environment_name,
       year: report.year,
+      periodLabel: report.period_label,
       periodStart: new Date(report.period_start),
       periodEnd: new Date(report.period_end),
       reportData: report.report_data,
@@ -147,12 +165,11 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const currentYear = new Date().getFullYear()
   const selectedYear = Number(url.searchParams.get('year')) || currentYear - 1
 
-  const [implicitApprovalSettings, recentConfigChanges, auditReports, readiness, latestFetchJob, githubDataStats] =
+  const [implicitApprovalSettings, recentConfigChanges, auditReports, latestFetchJob, githubDataStats] =
     await Promise.all([
       getImplicitApprovalSettings(app.id),
       getAppConfigAuditLog(app.id, { limit: 10 }),
       getAuditReportsForApp(app.id),
-      isProdApp ? checkAuditReadiness(app.id, selectedYear) : null,
       getLatestSyncJob(app.id, 'fetch_verification_data'),
       getGitHubDataStatsForApp(app.id, app.audit_start_year),
     ])
@@ -163,7 +180,6 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     recentConfigChanges,
     auditReports,
     isProdApp,
-    readiness,
     selectedYear,
     latestFetchJob,
     githubDataStats,
@@ -228,28 +244,36 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   if (action === 'check_readiness') {
-    const year = Number(formData.get('year'))
-    if (!appId || !year) {
-      return { error: 'Mangler app eller år' }
+    const periodStart = formData.get('period_start') as string
+    const periodEnd = formData.get('period_end') as string
+    if (!appId || !periodStart || !periodEnd) {
+      return { error: 'Mangler app eller periode' }
     }
-    const readiness = await checkAuditReadiness(appId, year)
+    const readiness = await checkAuditReadiness(appId, new Date(periodStart), new Date(periodEnd))
     return { readiness }
   }
 
   if (action === 'generate_report') {
+    const periodType = (formData.get('period_type') as ReportPeriodType) || 'yearly'
+    const periodLabel = formData.get('period_label') as string
+    const periodStartStr = formData.get('period_start') as string
+    const periodEndStr = formData.get('period_end') as string
     const year = Number(formData.get('year'))
-    if (!appId || !year) {
-      return { error: 'Mangler app eller år' }
+
+    if (!appId || !periodStartStr || !periodEndStr || !periodLabel || !year) {
+      return { error: 'Mangler påkrevde felter for rapportgenerering' }
     }
 
-    // Block current year - year is not complete
-    const currentYear = new Date().getFullYear()
-    if (year >= currentYear) {
-      return { error: 'Kan ikke generere rapport for inneværende eller fremtidige år' }
+    const periodStart = new Date(periodStartStr)
+    const periodEnd = new Date(periodEndStr)
+
+    // Block incomplete periods
+    if (periodEnd > new Date()) {
+      return { error: 'Kan ikke generere rapport for ufullstendige perioder' }
     }
 
     // Check readiness first
-    const readiness = await checkAuditReadiness(appId, year)
+    const readiness = await checkAuditReadiness(appId, periodStart, periodEnd)
     if (!readiness.is_ready) {
       return {
         error: `Kan ikke generere rapport. ${readiness.pending_count} deployments mangler godkjenning.`,
@@ -258,10 +282,19 @@ export async function action({ request }: Route.ActionArgs) {
     }
 
     // Create background job for PDF generation
-    const jobId = await createReportJob(appId, year)
+    const jobId = await createReportJob(appId, year, periodType, periodLabel, periodStart, periodEnd)
 
     // Start async processing (fire and forget)
-    processReportJobAsync(jobId, appId, year, user.navIdent).catch((err) => {
+    processReportJobAsync({
+      jobId,
+      appId,
+      year,
+      periodType,
+      periodLabel,
+      periodStart,
+      periodEnd,
+      generatedBy: user.navIdent,
+    }).catch((err) => {
       logger.error(`Report job ${jobId} failed:`, err)
     })
 
@@ -384,7 +417,6 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
     recentConfigChanges,
     auditReports,
     isProdApp,
-    readiness,
     selectedYear,
     latestFetchJob,
     githubDataStats,
@@ -404,25 +436,16 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
   const [fetchJobId, setFetchJobId] = useState<number | null>(null)
   const [fetchJobStatus, setFetchJobStatus] = useState<SyncJob | null>(latestFetchJob)
 
-  const currentYear = new Date().getFullYear()
-  // Only allow previous years down to audit_start_year
-  const startYear = app.audit_start_year || currentYear - 5
-  const years = Array.from({ length: currentYear - startYear }, (_, i) => currentYear - 1 - i).filter(
-    (y) => y >= startYear,
-  )
+  // Period selection state
+  const [periodType, setPeriodType] = useState<ReportPeriodType>('yearly')
+  const availablePeriods = getCompletedPeriods(periodType)
+  const [selectedPeriodIndex, setSelectedPeriodIndex] = useState(0)
+  const selectedPeriod = availablePeriods[selectedPeriodIndex] || availablePeriods[0]
 
   const appUrl = `/team/${app.team_slug}/env/${app.environment_name}/app/${app.app_name}`
 
-  // Use loader readiness data (fall back to action data for error cases)
-  const readinessData = readiness || actionData?.readiness
-
-  // Handle year change by updating URL (triggers loader reload)
-  const handleYearChange = (year: string) => {
-    setSearchParams((prev) => {
-      prev.set('year', year)
-      return prev
-    })
-  }
+  // Use action data for readiness (checked on demand)
+  const readinessData = actionData?.readiness
 
   // Start polling when fetch job is started
   useEffect(() => {
@@ -563,22 +586,59 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
 
             <Form method="post">
               <input type="hidden" name="app_id" value={app.id} />
-              <input type="hidden" name="year" value={selectedYear} />
+              {selectedPeriod && (
+                <>
+                  <input type="hidden" name="year" value={selectedPeriod.year} />
+                  <input type="hidden" name="period_type" value={selectedPeriod.type} />
+                  <input type="hidden" name="period_label" value={selectedPeriod.label} />
+                  <input type="hidden" name="period_start" value={selectedPeriod.startDate.toISOString()} />
+                  <input type="hidden" name="period_end" value={selectedPeriod.endDate.toISOString()} />
+                </>
+              )}
               <VStack gap="space-16">
                 <HStack gap="space-16" align="end" wrap>
                   <Select
-                    label="År"
-                    value={String(selectedYear)}
-                    onChange={(e) => handleYearChange(e.target.value)}
+                    label="Rapporttype"
+                    value={periodType}
+                    onChange={(e) => {
+                      setPeriodType(e.target.value as ReportPeriodType)
+                      setSelectedPeriodIndex(0)
+                    }}
                     size="small"
-                    style={{ minWidth: '120px' }}
+                    style={{ minWidth: '140px' }}
                   >
-                    {years.map((year) => (
-                      <option key={year} value={year}>
-                        {year}
+                    {Object.entries(REPORT_PERIOD_TYPE_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
                       </option>
                     ))}
                   </Select>
+
+                  <Select
+                    label="Periode"
+                    value={String(selectedPeriodIndex)}
+                    onChange={(e) => setSelectedPeriodIndex(Number(e.target.value))}
+                    size="small"
+                    style={{ minWidth: '180px' }}
+                  >
+                    {availablePeriods.map((period, index) => (
+                      <option key={period.label} value={index}>
+                        {period.label}
+                      </option>
+                    ))}
+                  </Select>
+
+                  <Button
+                    type="submit"
+                    name="action"
+                    value="check_readiness"
+                    variant="secondary"
+                    size="small"
+                    loading={isSubmitting && navigation.formData?.get('action') === 'check_readiness'}
+                    disabled={!selectedPeriod || !!pendingJobId}
+                  >
+                    Sjekk beredskap
+                  </Button>
 
                   <Button
                     type="submit"
@@ -669,7 +729,7 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
                 <VStack gap="space-4">
                   {auditReports.map((report) => (
                     <HStack key={report.id} gap="space-16" align="center">
-                      <BodyShort weight="semibold">{report.year}</BodyShort>
+                      <BodyShort weight="semibold">{report.period_label}</BodyShort>
                       <Detail textColor="subtle">{report.report_id}</Detail>
                       <HStack gap="space-8">
                         <AkselLink href={`/admin/audit-reports/${report.id}/view`} target="_blank">
