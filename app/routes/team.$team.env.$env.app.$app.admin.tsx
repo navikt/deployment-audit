@@ -430,7 +430,7 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
 
   // Period selection state
   const [periodType, setPeriodType] = useState<ReportPeriodType>('yearly')
-  const availablePeriods = getCompletedPeriods(periodType)
+  const availablePeriods = getCompletedPeriods(periodType, new Date(), app.audit_start_year ?? undefined)
   const [selectedPeriodIndex, setSelectedPeriodIndex] = useState(0)
   const selectedPeriod = availablePeriods[selectedPeriodIndex] || availablePeriods[0]
 

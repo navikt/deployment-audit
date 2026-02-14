@@ -157,6 +157,45 @@ describe('getCompletedPeriods', () => {
       expect(periods[2].label).toBe('April 2026')
     })
   })
+
+  describe('startYear filtering', () => {
+    it('yearly: excludes years before startYear', () => {
+      const ref = new Date(2026, 5, 15)
+      const periods = getCompletedPeriods('yearly', ref, 2025)
+      expect(periods.length).toBe(1)
+      expect(periods[0].label).toBe('2025')
+    })
+
+    it('quarterly: excludes quarters before startYear', () => {
+      const ref = new Date(2026, 5, 15)
+      const periods = getCompletedPeriods('quarterly', ref, 2026)
+      // Only Q1 2026 should be included (Q1 ended Mar 31)
+      expect(periods.every((p) => p.year >= 2026)).toBe(true)
+      expect(periods[0].label).toBe('Q1 2026')
+    })
+
+    it('tertiary: excludes tertialer before startYear', () => {
+      const ref = new Date(2026, 5, 15)
+      const periods = getCompletedPeriods('tertiary', ref, 2026)
+      expect(periods.every((p) => p.year >= 2026)).toBe(true)
+      expect(periods[0].label).toBe('T1 2026')
+    })
+
+    it('monthly: excludes months before startYear', () => {
+      const ref = new Date(2026, 2, 15)
+      const periods = getCompletedPeriods('monthly', ref, 2026)
+      expect(periods.every((p) => p.year >= 2026)).toBe(true)
+      expect(periods[0].label).toBe('Februar 2026')
+      expect(periods[1].label).toBe('Januar 2026')
+      expect(periods.length).toBe(2)
+    })
+
+    it('returns empty when startYear is current year and no periods completed', () => {
+      const ref = new Date(2026, 0, 15) // Jan 15
+      const periods = getCompletedPeriods('yearly', ref, 2026)
+      expect(periods.length).toBe(0)
+    })
+  })
 })
 
 describe('isPeriodCompleted', () => {

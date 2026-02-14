@@ -45,9 +45,12 @@ const MONTH_LABELS = [
  * Get completed periods of a given type up to the reference date.
  * Only returns periods that are fully completed (end date is in the past).
  */
-export function getCompletedPeriods(type: ReportPeriodType, referenceDate: Date = new Date()): ReportPeriod[] {
+export function getCompletedPeriods(
+  type: ReportPeriodType,
+  referenceDate: Date = new Date(),
+  startYear = 2024,
+): ReportPeriod[] {
   const periods: ReportPeriod[] = []
-  const startYear = 2024 // Earliest year with data
 
   if (type === 'yearly') {
     for (let year = referenceDate.getFullYear() - 1; year >= startYear; year--) {
