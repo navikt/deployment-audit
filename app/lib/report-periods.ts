@@ -3,7 +3,7 @@
  * Shared between server and client code.
  */
 
-export type ReportPeriodType = 'yearly' | 'quarterly' | 'monthly'
+export type ReportPeriodType = 'yearly' | 'tertiary' | 'quarterly' | 'monthly'
 
 export interface ReportPeriod {
   type: ReportPeriodType
@@ -11,6 +11,12 @@ export interface ReportPeriod {
   year: number
   startDate: Date
   endDate: Date
+}
+
+const TERTIARY_LABELS: Record<number, string> = {
+  0: 'T1',
+  1: 'T2',
+  2: 'T3',
 }
 
 const QUARTER_LABELS: Record<number, string> = {
@@ -52,6 +58,23 @@ export function getCompletedPeriods(type: ReportPeriodType, referenceDate: Date 
         startDate: new Date(year, 0, 1),
         endDate: new Date(year, 11, 31, 23, 59, 59, 999),
       })
+    }
+  } else if (type === 'tertiary') {
+    const currentTertiary = Math.floor(referenceDate.getMonth() / 4)
+    const currentYear = referenceDate.getFullYear()
+
+    for (let year = currentYear; year >= startYear; year--) {
+      const maxT = year === currentYear ? currentTertiary - 1 : 2
+      for (let t = maxT; t >= 0; t--) {
+        const startMonth = t * 4
+        periods.push({
+          type: 'tertiary',
+          label: `${TERTIARY_LABELS[t]} ${year}`,
+          year,
+          startDate: new Date(year, startMonth, 1),
+          endDate: new Date(year, startMonth + 4, 0, 23, 59, 59, 999),
+        })
+      }
     }
   } else if (type === 'quarterly') {
     const currentQuarter = Math.floor(referenceDate.getMonth() / 3)
@@ -115,6 +138,7 @@ export function generateReportId(
 
 export const REPORT_PERIOD_TYPE_LABELS: Record<ReportPeriodType, string> = {
   yearly: 'Årlig',
+  tertiary: 'Tertialsvis',
   quarterly: 'Kvartalsvis',
   monthly: 'Månedlig',
 }

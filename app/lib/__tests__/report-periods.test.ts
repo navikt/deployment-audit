@@ -72,6 +72,53 @@ describe('getCompletedPeriods', () => {
     })
   })
 
+  describe('tertiary', () => {
+    it('returns only completed tertialer', () => {
+      const ref = new Date(2026, 5, 15) // June 15, 2026 (T2)
+      const periods = getCompletedPeriods('tertiary', ref)
+
+      // T1 2026 should be completed (ended Apr 30)
+      expect(periods[0].label).toBe('T1 2026')
+      expect(periods[0].startDate).toEqual(new Date(2026, 0, 1))
+      expect(periods[0].endDate).toEqual(new Date(2026, 3, 30, 23, 59, 59, 999))
+
+      // T2 2026 should NOT be included (we're in it)
+      expect(periods.find((p) => p.label === 'T2 2026')).toBeUndefined()
+    })
+
+    it('handles start of tertial correctly', () => {
+      const ref = new Date(2026, 4, 1) // May 1 (start of T2)
+      const periods = getCompletedPeriods('tertiary', ref)
+      expect(periods[0].label).toBe('T1 2026')
+    })
+
+    it('returns T3 of previous year when in T1', () => {
+      const ref = new Date(2026, 2, 15) // March 15, 2026 (T1)
+      const periods = getCompletedPeriods('tertiary', ref)
+
+      // No tertialer in 2026 should be complete yet
+      expect(periods[0].label).toBe('T3 2025')
+      expect(periods[1].label).toBe('T2 2025')
+    })
+
+    it('computes correct end-of-tertial dates', () => {
+      const ref = new Date(2026, 11, 31)
+      const periods = getCompletedPeriods('tertiary', ref)
+
+      const t1 = periods.find((p) => p.label === 'T1 2026')
+      expect(t1?.endDate.getMonth()).toBe(3) // April
+      expect(t1?.endDate.getDate()).toBe(30)
+
+      const t2 = periods.find((p) => p.label === 'T2 2026')
+      expect(t2?.endDate.getMonth()).toBe(7) // August
+      expect(t2?.endDate.getDate()).toBe(31)
+
+      const t3 = periods.find((p) => p.label === 'T3 2025')
+      expect(t3?.endDate.getMonth()).toBe(11) // December
+      expect(t3?.endDate.getDate()).toBe(31)
+    })
+  })
+
   describe('monthly', () => {
     it('returns only completed months', () => {
       const ref = new Date(2026, 2, 15) // March 15, 2026
