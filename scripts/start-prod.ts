@@ -101,11 +101,9 @@ async function runMigrations() {
 async function startServer() {
   console.log('🚀 Starting application server...');
 
-  const serverPath = join(__dirname, '..', 'build', 'server', 'index.js');
-  const reactRouterServePath = join(__dirname, '..', 'node_modules', '.bin', 'react-router-serve');
+  const serverPath = join(__dirname, '..', 'server.js');
 
-  // Use react-router-serve to run the server (React Router 7 requirement)
-  const server = spawn(process.execPath, [reactRouterServePath, serverPath], {
+  const server = spawn(process.execPath, [serverPath], {
     stdio: 'inherit',
     env: process.env,
   });

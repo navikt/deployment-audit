@@ -18,8 +18,9 @@ COPY . .
 # Build the application
 RUN npm run build
 
-# Compile TypeScript startup script to JavaScript
+# Compile TypeScript startup script and custom server to JavaScript
 RUN npx tsc scripts/start-prod.ts --outDir scripts --module nodenext --moduleResolution nodenext --target es2022
+RUN npx tsc server.ts --module nodenext --moduleResolution nodenext --target es2022 --esModuleInterop
 
 # Download fonts for PDF generation (react-pdf requires TTF format)
 RUN mkdir -p /app/fonts && \
@@ -58,8 +59,9 @@ COPY --from=builder /app/fonts ./fonts
 COPY --from=builder /app/app/db/migrations ./app/db/migrations
 COPY --from=builder /app/.node-pg-migrate.json ./
 
-# Copy compiled startup script
+# Copy compiled startup script and custom server
 COPY --from=builder /app/scripts/start-prod.js ./scripts/
+COPY --from=builder /app/server.js ./
 
 # Expose port (adjust based on your app)
 EXPOSE 3000

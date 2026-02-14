@@ -276,7 +276,13 @@ export async function action({ request }: Route.ActionArgs) {
     }
 
     // Create background job for PDF generation
-    const jobId = await createReportJob(appId, year, periodType, periodLabel, periodStart, periodEnd)
+    let jobId: string
+    try {
+      jobId = await createReportJob(appId, year, periodType, periodLabel, periodStart, periodEnd)
+    } catch (err) {
+      logger.error('Failed to create report job', err)
+      return { error: 'Kunne ikke opprette rapportjobb. Sjekk serverloggen for detaljer.' }
+    }
 
     // Start async processing (fire and forget)
     processReportJobAsync({
