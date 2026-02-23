@@ -1,12 +1,5 @@
 /* Application CSS - using Aksel design system */
 
-html,
-body {
-  margin: 0;
-  padding: 0;
-  background-color: #ffffff;
-}
-
 .error-stack {
   width: 100%;
   padding: var(--ax-space-16);
