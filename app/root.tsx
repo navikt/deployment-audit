@@ -10,11 +10,11 @@ import {
 } from 'react-router'
 
 import type { Route } from './+types/root'
-import './app.css'
 import '@navikt/ds-css'
 import { Page, Theme } from '@navikt/ds-react'
 import { ThemeProvider } from './hooks/useTheme'
 import { getTheme, setThemeCookie, type ThemeValue } from './lib/theme.server'
+import styles from './styles/common.module.css'
 
 // Get theme from cookie
 export async function loader({ request }: Route.LoaderArgs) {
@@ -88,7 +88,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
           <h1>{message}</h1>
           <p>{details}</p>
           {stack && (
-            <pre className="error-stack">
+            <pre className={styles.errorStack}>
               <code>{stack}</code>
             </pre>
           )}

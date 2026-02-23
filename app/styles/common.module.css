@@ -50,3 +50,13 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Error stack trace display */
+.errorStack {
+  width: 100%;
+  padding: var(--ax-space-16);
+  overflow-x: auto;
+  background: var(--ax-bg-neutral-soft);
+  border: 1px solid var(--ax-border-neutral-subtle);
+  border-radius: var(--ax-radius-8);
+}
