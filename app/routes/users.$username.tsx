@@ -76,7 +76,7 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
     if (isGitHubBot(githubUsername)) {
-      return { error: 'Kan ikke opprette mapping for bot-brukere' }
+      return { error: 'Kan ikke opprette mapping for GitHub-botkontoer' }
     }
 
     // Validate email format

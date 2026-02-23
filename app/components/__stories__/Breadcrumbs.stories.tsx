@@ -102,14 +102,14 @@ export const Admin: Story = {
 }
 
 export const AdminUsers: Story = {
-  name: 'Admin > Brukere',
+  name: 'Admin > Brukermappinger',
   render: () => (
     <MemoryRouter>
       <MockBreadcrumbs
         crumbs={[
           { path: '/', label: 'Hjem' },
           { path: '/admin', label: 'Admin' },
-          { path: '/admin/users', label: 'Brukere' },
+          { path: '/admin/users', label: 'Brukermappinger' },
         ]}
       />
     </MemoryRouter>

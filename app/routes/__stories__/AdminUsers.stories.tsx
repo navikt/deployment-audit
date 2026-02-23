@@ -62,7 +62,7 @@ function AdminUsersPage({ mappings, unmappedUsers }: { mappings: UserMapping[]; 
     <Box padding={{ xs: 'space-16', md: 'space-24' }}>
       <VStack gap="space-24">
         <HStack justify="space-between" align="center" wrap gap="space-8">
-          <Heading size="large">Brukere</Heading>
+          <Heading size="large">Brukermappinger</Heading>
           <HStack gap="space-8">
             <Button variant="secondary" size="small" icon={<PlusIcon aria-hidden />}>
               <Show above="sm">Legg til</Show>
@@ -158,7 +158,7 @@ function AdminUsersPage({ mappings, unmappedUsers }: { mappings: UserMapping[]; 
 
         {unmappedUsers.length > 0 && (
           <VStack gap="space-16">
-            <Heading size="medium">Brukere uten mapping ({unmappedUsers.length})</Heading>
+            <Heading size="medium">GitHub-brukere uten mapping ({unmappedUsers.length})</Heading>
             <div>
               {unmappedUsers.map((user) => (
                 <Box
