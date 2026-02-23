@@ -6,7 +6,6 @@ import {
   Button,
   Detail,
   Heading,
-  Hide,
   HStack,
   Modal,
   Show,
@@ -128,6 +127,8 @@ export default function AdminUsers() {
   const [editMapping, setEditMapping] = useState<UserMapping | null>(null)
   const [addFormKey, setAddFormKey] = useState(0)
   const [prefillUsername, setPrefillUsername] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState<UserMapping | null>(null)
+  const deleteModalRef = useRef<HTMLDialogElement>(null)
   const modalRef = useRef<HTMLDialogElement>(null)
   const addModalRef = useRef<HTMLDialogElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -138,6 +139,7 @@ export default function AdminUsers() {
       setAddFormKey((k) => k + 1)
       addModalRef.current?.close()
       modalRef.current?.close()
+      deleteModalRef.current?.close()
     }
   }, [actionData, navigation.state])
 
@@ -162,7 +164,7 @@ export default function AdminUsers() {
     <Box padding={{ xs: 'space-16', md: 'space-24' }}>
       <VStack gap="space-24">
         <HStack justify="space-between" align="center" wrap gap="space-8">
-          <Heading size="large">Brukermappinger</Heading>
+          <Heading size="large">Brukere</Heading>
           <HStack gap="space-8">
             <Button
               as="a"
@@ -240,14 +242,9 @@ export default function AdminUsers() {
                 className={styles.stackedListItem}
               >
                 <VStack gap="space-12">
-                  {/* First row: GitHub username, name (desktop), actions */}
+                  {/* First row: Display name heading, actions */}
                   <HStack gap="space-8" align="center" justify="space-between" wrap>
-                    <HStack gap="space-12" align="center" style={{ flex: 1 }}>
-                      <Link to={`/users/${mapping.github_username}`}>
-                        <BodyShort weight="semibold">{mapping.github_username}</BodyShort>
-                      </Link>
-                      <Show above="md">{mapping.display_name && <BodyShort>{mapping.display_name}</BodyShort>}</Show>
-                    </HStack>
+                    <Heading size="xsmall">{mapping.display_name || mapping.github_username}</Heading>
                     <HStack gap="space-8">
                       <Button
                         variant="tertiary"
@@ -257,31 +254,44 @@ export default function AdminUsers() {
                       >
                         <Show above="sm">Rediger</Show>
                       </Button>
-                      <Form method="post">
-                        <input type="hidden" name="github_username" value={mapping.github_username} />
-                        <Button
-                          variant="tertiary-neutral"
-                          size="small"
-                          type="submit"
-                          name="intent"
-                          value="delete"
-                          icon={<TrashIcon aria-hidden />}
-                          loading={isSubmitting}
-                        >
-                          <Show above="sm">Slett</Show>
-                        </Button>
-                      </Form>
+                      <Button
+                        variant="tertiary-neutral"
+                        size="small"
+                        icon={<TrashIcon aria-hidden />}
+                        onClick={() => {
+                          setDeleteTarget(mapping)
+                          deleteModalRef.current?.showModal()
+                        }}
+                      >
+                        <Show above="sm">Slett</Show>
+                      </Button>
                     </HStack>
                   </HStack>
 
-                  {/* Name on mobile */}
-                  <Hide above="md">{mapping.display_name && <BodyShort>{mapping.display_name}</BodyShort>}</Hide>
-
                   {/* Details row */}
                   <HStack gap="space-16" wrap>
+                    <Link to={`/users/${mapping.github_username}`}>
+                      <Detail textColor="subtle">{mapping.github_username}</Detail>
+                    </Link>
                     {mapping.nav_email && <Detail textColor="subtle">{mapping.nav_email}</Detail>}
-                    {mapping.nav_ident && <Detail textColor="subtle">Ident: {mapping.nav_ident}</Detail>}
-                    {mapping.slack_member_id && <Detail textColor="subtle">Slack: {mapping.slack_member_id}</Detail>}
+                    {mapping.nav_ident && (
+                      <a
+                        href={`https://teamkatalogen.nav.no/resource/${mapping.nav_ident}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <Detail textColor="subtle">Ident: {mapping.nav_ident}</Detail>
+                      </a>
+                    )}
+                    {mapping.slack_member_id && (
+                      <a
+                        href={`https://nav-it.slack.com/team/${mapping.slack_member_id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <Detail textColor="subtle">Slack: {mapping.slack_member_id}</Detail>
+                      </a>
+                    )}
                     {!mapping.nav_email && !mapping.nav_ident && !mapping.slack_member_id && (
                       <Detail textColor="subtle">Ingen tilleggsinformasjon</Detail>
                     )}
@@ -403,6 +413,33 @@ export default function AdminUsers() {
               Lagre
             </Button>
             <Button variant="secondary" onClick={() => modalRef.current?.close()}>
+              Avbryt
+            </Button>
+          </Modal.Footer>
+        </Modal>
+
+        {/* Delete Confirmation Modal */}
+        <Modal
+          ref={deleteModalRef}
+          header={{ heading: 'Bekreft sletting' }}
+          width="small"
+          onClose={() => setDeleteTarget(null)}
+        >
+          <Modal.Body>
+            <BodyShort>
+              Er du sikker på at du vil slette brukermappingen for{' '}
+              <strong>{deleteTarget?.display_name || deleteTarget?.github_username}</strong>
+              {deleteTarget?.display_name ? ` (${deleteTarget.github_username})` : ''}?
+            </BodyShort>
+          </Modal.Body>
+          <Modal.Footer>
+            <Form method="post">
+              <input type="hidden" name="github_username" value={deleteTarget?.github_username ?? ''} />
+              <Button variant="danger" type="submit" name="intent" value="delete" loading={isSubmitting}>
+                Slett
+              </Button>
+            </Form>
+            <Button variant="secondary" onClick={() => deleteModalRef.current?.close()}>
               Avbryt
             </Button>
           </Modal.Footer>

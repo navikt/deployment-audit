@@ -109,7 +109,7 @@ export const AdminUsers: Story = {
         crumbs={[
           { path: '/', label: 'Hjem' },
           { path: '/admin', label: 'Admin' },
-          { path: '/admin/users', label: 'Brukermappinger' },
+          { path: '/admin/users', label: 'Brukere' },
         ]}
       />
     </MemoryRouter>
