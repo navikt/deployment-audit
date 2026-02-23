@@ -812,6 +812,11 @@ export async function action({ request, params }: Route.ActionArgs) {
   return null
 }
 
+export function meta({ data }: Route.MetaArgs) {
+  const deployment = data?.deployment
+  return [{ title: deployment ? `Deployment #${deployment.id} - Pensjon Deployment Audit` : 'Deployment' }]
+}
+
 function getFourEyesStatus(deployment: any): {
   text: string
   variant: 'success' | 'warning' | 'error' | 'info'

@@ -79,6 +79,10 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   }
 }
 
+export function meta(_args: Route.MetaArgs) {
+  return [{ title: 'Debug Verifisering' }]
+}
+
 function downloadJson(data: unknown, filename: string) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)

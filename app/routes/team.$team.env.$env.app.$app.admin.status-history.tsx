@@ -25,6 +25,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   return { app, deployments }
 }
 
+export function meta(_args: Route.MetaArgs) {
+  return [{ title: 'Statusoverganger' }]
+}
+
 function formatChangeSource(source: string): string {
   const labels: Record<string, string> = {
     verification: 'Verifisering',

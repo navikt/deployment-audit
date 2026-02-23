@@ -198,6 +198,10 @@ export async function action({ request }: Route.ActionArgs) {
   return null
 }
 
+export function meta(_args: Route.MetaArgs) {
+  return [{ title: 'Verifiseringsavvik' }]
+}
+
 export default function VerificationDiffPage() {
   const { diffs, appContext } = useLoaderData<typeof loader>()
   const navigation = useNavigation()

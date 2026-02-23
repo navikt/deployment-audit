@@ -118,6 +118,10 @@ export async function action({ request }: ActionFunctionArgs) {
   return { error: 'Ukjent handling' }
 }
 
+export function meta() {
+  return [{ title: 'Brukermappinger - Admin' }]
+}
+
 export default function AdminUsers() {
   const { mappings, unmappedUsers } = useLoaderData<typeof loader>()
   const actionData = useActionData<typeof action>()

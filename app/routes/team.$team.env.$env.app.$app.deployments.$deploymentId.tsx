@@ -36,6 +36,11 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   }
 }
 
+export function meta({ data }: Route.MetaArgs) {
+  const deployment = data?.deployment
+  return [{ title: deployment ? `Deployment #${deployment.id} - Pensjon Deployment Audit` : 'Deployment' }]
+}
+
 // Wrap the action to pass deploymentId as id
 export async function action({ params, request }: Route.ActionArgs) {
   return deploymentAction({

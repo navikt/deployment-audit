@@ -49,6 +49,10 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   }
 }
 
+export function meta({ data }: { data?: { app: { app_name: string } } }) {
+  return [{ title: `Slack - ${data?.app?.app_name ?? 'App'} - Pensjon Deployment Audit` }]
+}
+
 function formatDate(date: Date | string | null): string {
   if (!date) return '-'
   const d = typeof date === 'string' ? new Date(date) : date

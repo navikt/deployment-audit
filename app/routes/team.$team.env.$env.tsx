@@ -42,6 +42,10 @@ export async function loader({ params }: LoaderFunctionArgs) {
   }
 }
 
+export function meta({ data }: { data?: { team: string; env: string } }) {
+  return [{ title: `${data?.team ?? 'Team'} / ${data?.env ?? 'Env'} - Pensjon Deployment Audit` }]
+}
+
 export default function TeamEnvPage() {
   const { team, env, apps } = useLoaderData<typeof loader>()
 

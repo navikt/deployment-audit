@@ -26,6 +26,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
   return { reports }
 }
 
+export function meta() {
+  return [{ title: 'Leveranserapporter - Admin' }]
+}
+
 function formatDateTime(date: Date | string): string {
   const d = typeof date === 'string' ? new Date(date) : date
   return d.toLocaleString('nb-NO', {

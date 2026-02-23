@@ -96,6 +96,10 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   }
 }
 
+export function meta({ data }: { data?: { app: { app_name: string } } }) {
+  return [{ title: `${data?.app?.app_name ?? 'App'} - Pensjon Deployment Audit` }]
+}
+
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData()
   const action = formData.get('action')

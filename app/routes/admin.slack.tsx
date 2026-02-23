@@ -68,6 +68,10 @@ export async function action({ request }: Route.ActionArgs) {
   return { success: false, error: 'Ukjent handling' }
 }
 
+export function meta(_args: Route.MetaArgs) {
+  return [{ title: 'Slack-integrasjon - Admin' }]
+}
+
 export default function SlackAdminPage() {
   const { isConfigured, channelId, hasBotToken, hasAppToken } = useLoaderData<typeof loader>()
   const actionData = useActionData<typeof action>()
