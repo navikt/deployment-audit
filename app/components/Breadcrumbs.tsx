@@ -134,7 +134,7 @@ const dynamicBreadcrumbs: Array<{
       const username = pathname.split('/')[2]
       return username || 'Bruker'
     },
-    parent: '/',
+    parent: '/admin/users',
   },
 ]
 

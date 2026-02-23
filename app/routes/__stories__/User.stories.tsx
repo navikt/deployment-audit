@@ -55,19 +55,11 @@ function UserPage({
 
   return (
     <VStack gap="space-32">
-      <div>
-        <Heading size="large">{username}</Heading>
-        {mapping?.display_name && <BodyShort textColor="subtle">{mapping.display_name}</BodyShort>}
-      </div>
+      <VStack gap="space-8">
+        <Heading size="large">{mapping?.display_name || username}</Heading>
+      </VStack>
 
       <HGrid gap="space-16" columns={{ xs: 2, md: 4 }}>
-        <Box padding="space-16" borderRadius="8" background="sunken">
-          <VStack gap="space-4">
-            <Detail textColor="subtle">Deployments</Detail>
-            <Heading size="medium">{deploymentCount}</Heading>
-          </VStack>
-        </Box>
-
         <Box padding="space-16" borderRadius="8" background="sunken">
           <VStack gap="space-4">
             <Detail textColor="subtle">GitHub</Detail>
@@ -77,11 +69,20 @@ function UserPage({
           </VStack>
         </Box>
 
+        {mapping?.nav_email && (
+          <Box padding="space-16" borderRadius="8" background="sunken">
+            <VStack gap="space-4">
+              <Detail textColor="subtle">E-post</Detail>
+              <BodyShort>{mapping.nav_email}</BodyShort>
+            </VStack>
+          </Box>
+        )}
+
         {mapping?.nav_ident && (
           <Box padding="space-16" borderRadius="8" background="sunken">
             <VStack gap="space-4">
               <Detail textColor="subtle">Teamkatalogen</Detail>
-              <AkselLink href={`https://teamkatalog.nav.no/resource/${mapping.nav_ident}`} target="_blank">
+              <AkselLink href={`https://teamkatalogen.nav.no/resource/${mapping.nav_ident}`} target="_blank">
                 {mapping.nav_ident} <ExternalLinkIcon aria-hidden />
               </AkselLink>
             </VStack>
@@ -109,40 +110,6 @@ function UserPage({
             </Button>
           </HStack>
         </Alert>
-      )}
-
-      {mapping && (
-        <Box padding="space-20" borderRadius="8" background="sunken">
-          <VStack gap="space-12">
-            <Heading size="small">Detaljer</Heading>
-            <VStack gap="space-8">
-              {mapping.nav_email && (
-                <HStack gap="space-8">
-                  <Detail textColor="subtle" style={{ minWidth: '80px' }}>
-                    E-post:
-                  </Detail>
-                  <BodyShort>{mapping.nav_email}</BodyShort>
-                </HStack>
-              )}
-              {mapping.nav_ident && (
-                <HStack gap="space-8">
-                  <Detail textColor="subtle" style={{ minWidth: '80px' }}>
-                    Nav-ident:
-                  </Detail>
-                  <BodyShort>{mapping.nav_ident}</BodyShort>
-                </HStack>
-              )}
-              {mapping.slack_member_id && (
-                <HStack gap="space-8">
-                  <Detail textColor="subtle" style={{ minWidth: '80px' }}>
-                    Slack ID:
-                  </Detail>
-                  <BodyShort>{mapping.slack_member_id}</BodyShort>
-                </HStack>
-              )}
-            </VStack>
-          </VStack>
-        </Box>
       )}
 
       <VStack gap="space-16">
