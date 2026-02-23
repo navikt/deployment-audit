@@ -1055,7 +1055,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
       </HStack>
       {/* Main header */}
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <HStack align="center" gap="space-12" wrap>
           <Heading size="large" level="1" style={{ flex: 1 }}>
             {deployment.github_pr_data?.title || `${deployment.app_name} @ ${deployment.environment_name}`}
           </Heading>
@@ -1126,7 +1126,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
               </Form>
             )}
           </HStack>
-        </div>
+        </HStack>
         <BodyShort textColor="subtle">
           {new Date(deployment.created_at).toLocaleString('no-NO', {
             dateStyle: 'long',
@@ -1204,9 +1204,9 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                   </>
                 )}
               </BodyShort>
-              <ul style={{ margin: 0, paddingLeft: '1.5rem' }}>
+              <ul style={{ margin: 0, paddingLeft: 'var(--ax-space-24)' }}>
                 {filteredUnverifiedCommits.map((commit: any) => (
-                  <li key={commit.sha} style={{ marginBottom: '0.5rem' }}>
+                  <li key={commit.sha} style={{ marginBottom: 'var(--ax-space-8)' }}>
                     <a
                       href={commit.html_url}
                       target="_blank"
@@ -1822,7 +1822,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
             </BodyShort>
           </Alert>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <VStack gap="space-8">
             {deployment.github_pr_data.unreviewed_commits.map((commit) => (
               <Box
                 key={commit.sha}
@@ -1832,16 +1832,9 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                 borderWidth="1"
                 borderColor="danger-subtleA"
               >
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <HStack gap="space-12">
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        display: 'flex',
-                        gap: '0.5rem',
-                        alignItems: 'baseline',
-                        flexWrap: 'wrap',
-                      }}
-                    >
+                    <HStack gap="space-8" align="baseline" wrap>
                       <a
                         href={commit.html_url}
                         target="_blank"
@@ -1860,16 +1853,18 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                           minute: '2-digit',
                         })}
                       </span>
-                    </div>
-                    <BodyShort size="small" style={{ marginTop: '0.25rem' }}>
+                    </HStack>
+                    <BodyShort size="small" style={{ marginTop: 'var(--ax-space-4)' }}>
                       {commit.message.split('\n')[0]}
                     </BodyShort>
-                    <Detail style={{ marginTop: '0.5rem', color: 'var(--ax-text-danger)' }}>{commit.reason}</Detail>
+                    <Detail style={{ marginTop: 'var(--ax-space-8)', color: 'var(--ax-text-danger)' }}>
+                      {commit.reason}
+                    </Detail>
                   </div>
-                </div>
+                </HStack>
               </Box>
             ))}
-          </div>
+          </VStack>
         </div>
       )}
       {/* Admin: Send Slack notification */}

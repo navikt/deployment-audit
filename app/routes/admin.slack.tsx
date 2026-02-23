@@ -144,7 +144,7 @@ export default function SlackAdminPage() {
             <Heading level="2" size="small">
               Oppsett av Slack App
             </Heading>
-            <ol style={{ paddingLeft: '1.5rem', margin: 0 }}>
+            <ol style={{ paddingLeft: 'var(--ax-space-24)', margin: 0 }}>
               <li>
                 Gå til{' '}
                 <a href="https://api.slack.com/apps" target="_blank" rel="noopener noreferrer">
