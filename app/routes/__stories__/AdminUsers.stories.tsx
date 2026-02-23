@@ -62,7 +62,9 @@ function AdminUsersPage({ mappings, unmappedUsers }: { mappings: UserMapping[]; 
     <Box padding={{ xs: 'space-16', md: 'space-24' }}>
       <VStack gap="space-24">
         <HStack justify="space-between" align="center" wrap gap="space-8">
-          <Heading size="large">Brukermappinger</Heading>
+          <Heading level="1" size="large">
+            Brukermappinger
+          </Heading>
           <HStack gap="space-8">
             <Button variant="secondary" size="small" icon={<PlusIcon aria-hidden />}>
               <Show above="sm">Legg til</Show>
@@ -97,7 +99,9 @@ function AdminUsersPage({ mappings, unmappedUsers }: { mappings: UserMapping[]; 
                 <VStack gap="space-12">
                   <HStack gap="space-8" align="center" justify="space-between" wrap>
                     <Link to={`/users/${mapping.github_username}`} style={{ textDecoration: 'none' }}>
-                      <Heading size="xsmall">{mapping.display_name || mapping.github_username}</Heading>
+                      <Heading level="3" size="xsmall">
+                        {mapping.display_name || mapping.github_username}
+                      </Heading>
                     </Link>
                     <HStack gap="space-8">
                       <Button variant="tertiary" size="small" icon={<PencilIcon aria-hidden />}>
@@ -158,7 +162,9 @@ function AdminUsersPage({ mappings, unmappedUsers }: { mappings: UserMapping[]; 
 
         {unmappedUsers.length > 0 && (
           <VStack gap="space-16">
-            <Heading size="medium">GitHub-brukere uten mapping ({unmappedUsers.length})</Heading>
+            <Heading level="2" size="medium">
+              GitHub-brukere uten mapping ({unmappedUsers.length})
+            </Heading>
             <div>
               {unmappedUsers.map((user) => (
                 <Box

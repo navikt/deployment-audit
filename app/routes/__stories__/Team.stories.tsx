@@ -12,7 +12,9 @@ function TeamPage({ team, appsByEnv }: { team: string; appsByEnv: Record<string,
     <Box paddingInline={{ xs: 'space-16', md: 'space-24' }} paddingBlock="space-24">
       <VStack gap="space-24">
         <VStack gap="space-8">
-          <Heading size="xlarge">{team}</Heading>
+          <Heading level="1" size="xlarge">
+            {team}
+          </Heading>
           <HStack gap="space-8" align="center">
             <AkselLink href={`https://console.nav.cloud.nais.io/team/${team}/applications`} target="_blank">
               <HStack gap="space-4" align="center">
@@ -27,7 +29,9 @@ function TeamPage({ team, appsByEnv }: { team: string; appsByEnv: Record<string,
             <VStack key={env} gap="space-16">
               <HStack gap="space-8" align="center">
                 <Link to={`/team/${team}/env/${env}`} className="no-underline hover:underline">
-                  <Heading size="small">{env}</Heading>
+                  <Heading level="2" size="small">
+                    {env}
+                  </Heading>
                 </Link>
                 <Tag size="xsmall" variant="neutral">
                   {appsByEnv[env].length} {appsByEnv[env].length === 1 ? 'app' : 'apper'}

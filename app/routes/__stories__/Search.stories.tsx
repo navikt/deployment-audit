@@ -16,7 +16,9 @@ function SearchPage({ query, results }: { query: string; results: SearchResult[]
   return (
     <VStack gap="space-24">
       <VStack gap="space-8">
-        <Heading size="large">Søk</Heading>
+        <Heading level="1" size="large">
+          Søk
+        </Heading>
         <Hide above="md">
           <BodyShort>Søk på navn, NAV-ident, e-post, brukernavn, SHA eller ID</BodyShort>
         </Hide>

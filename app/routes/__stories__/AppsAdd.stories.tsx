@@ -52,7 +52,9 @@ function AppsAddPage({
 
   return (
     <VStack gap="space-32">
-      <Heading size="large">Legg til applikasjon</Heading>
+      <Heading level="1" size="large">
+        Legg til applikasjon
+      </Heading>
 
       {error && <Alert variant="error">{error}</Alert>}
 
@@ -81,7 +83,9 @@ function AppsAddPage({
                     borderWidth="1"
                   >
                     <VStack gap="space-16">
-                      <Heading size="small">{teamSlug}</Heading>
+                      <Heading level="3" size="small">
+                        {teamSlug}
+                      </Heading>
 
                       {Object.entries(envs)
                         .sort(([a], [b]) => a.localeCompare(b))

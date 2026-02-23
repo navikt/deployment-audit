@@ -84,7 +84,9 @@ function DeploymentDetailPage({
       <HStack gap="space-16" align="center" justify="space-between" wrap>
         <VStack gap="space-4">
           <HStack gap="space-8" align="center">
-            <Heading size="medium">Deployment #{deployment.id}</Heading>
+            <Heading level="1" size="medium">
+              Deployment #{deployment.id}
+            </Heading>
             <Tag variant="moderate" data-color={statusColor} icon={getStatusIcon(deployment.four_eyes_status)}>
               {getFourEyesStatusLabel(deployment.four_eyes_status)}
             </Tag>
@@ -149,7 +151,9 @@ function DeploymentDetailPage({
       {/* Commit message */}
       <Box padding="space-20" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
         <VStack gap="space-12">
-          <Heading size="small">Commit</Heading>
+          <Heading level="2" size="small">
+            Commit
+          </Heading>
           <BodyShort style={{ whiteSpace: 'pre-wrap' }}>{deployment.commit_message}</BodyShort>
         </VStack>
       </Box>
@@ -158,7 +162,9 @@ function DeploymentDetailPage({
       {deployment.github_pr_data && (
         <Box padding="space-20" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
           <VStack gap="space-16">
-            <Heading size="small">Pull Request</Heading>
+            <Heading level="2" size="small">
+              Pull Request
+            </Heading>
             <BodyShort weight="semibold">{deployment.github_pr_data.title}</BodyShort>
 
             <HStack gap="space-24" wrap>
@@ -208,7 +214,9 @@ function DeploymentDetailPage({
       {isAdmin && deployment.four_eyes_status !== 'approved' && (
         <Box padding="space-20" borderRadius="8" background="raised" borderColor="warning-subtle" borderWidth="1">
           <VStack gap="space-16">
-            <Heading size="small">Admin-handlinger</Heading>
+            <Heading level="2" size="small">
+              Admin-handlinger
+            </Heading>
             <HStack gap="space-8">
               <Button variant="secondary" size="small">
                 Re-verifiser

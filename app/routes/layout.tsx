@@ -5,6 +5,7 @@ import {
   BodyShort,
   Detail,
   Hide,
+  HStack,
   InternalHeader,
   Page,
   Show,
@@ -102,11 +103,9 @@ export default function Layout({ loaderData }: Route.ComponentProps) {
 
         {/* Global search dialog */}
         <Show above="md" asChild>
-          <div
-            style={{ display: 'flex', alignItems: 'center', alignSelf: 'center', paddingInline: 'var(--ax-space-20)' }}
-          >
+          <HStack align="center" style={{ alignSelf: 'center', paddingInline: 'var(--ax-space-20)' }}>
             <SearchDialog />
-          </div>
+          </HStack>
         </Show>
 
         <Spacer />

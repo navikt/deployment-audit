@@ -105,7 +105,9 @@ function AppDetailPage({
       {/* Header */}
       <HStack justify="space-between" align="start" wrap>
         <div>
-          <Heading size="large">{app.app_name}</Heading>
+          <Heading level="1" size="large">
+            {app.app_name}
+          </Heading>
           <HStack gap="space-16" align="center" wrap>
             <BodyShort textColor="subtle">
               Team: <code style={{ fontSize: '0.75rem' }}>{app.team_slug}</code> | Miljø:{' '}
@@ -137,7 +139,7 @@ function AppDetailPage({
       <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
         <VStack gap="space-20">
           <HStack justify="space-between" align="center" wrap>
-            <Heading size="medium">
+            <Heading level="2" size="medium">
               <BarChartIcon aria-hidden /> Statistikk
             </Heading>
             <Form method="get">
@@ -182,7 +184,7 @@ function AppDetailPage({
       {app.environment_name.startsWith('prod-') && auditReports.length > 0 && (
         <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
           <VStack gap="space-20">
-            <Heading size="medium">
+            <Heading level="2" size="medium">
               <FileTextIcon aria-hidden /> Leveranserapport
             </Heading>
             <VStack gap="space-12">
@@ -221,7 +223,7 @@ function AppDetailPage({
       {alerts.length > 0 && (
         <Box padding="space-24" borderRadius="8" background="raised" borderColor="warning-subtle" borderWidth="1">
           <VStack gap="space-16">
-            <Heading size="medium">
+            <Heading level="2" size="medium">
               <ExclamationmarkTriangleIcon aria-hidden /> Åpne varsler ({alerts.length})
             </Heading>
             <VStack gap="space-12">
@@ -269,7 +271,7 @@ function AppDetailPage({
       {/* Repositories Section */}
       <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
         <VStack gap="space-20">
-          <Heading size="medium">
+          <Heading level="2" size="medium">
             <PackageIcon aria-hidden /> Repositories
           </Heading>
 

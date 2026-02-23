@@ -8,7 +8,9 @@ function TeamEnvPage({ team, env, apps }: { team: string; env: string; apps: App
     <Box paddingInline={{ xs: 'space-16', md: 'space-24' }} paddingBlock="space-24">
       <VStack gap="space-24">
         <VStack gap="space-8">
-          <Heading size="xlarge">{team}</Heading>
+          <Heading level="1" size="xlarge">
+            {team}
+          </Heading>
           <HStack gap="space-8" align="center">
             <Tag variant="neutral" size="small">
               {env}

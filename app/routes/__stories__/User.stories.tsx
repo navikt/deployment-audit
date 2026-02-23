@@ -56,7 +56,9 @@ function UserPage({
   return (
     <VStack gap="space-32">
       <VStack gap="space-8">
-        <Heading size="large">{mapping?.display_name || username}</Heading>
+        <Heading level="1" size="large">
+          {mapping?.display_name || username}
+        </Heading>
       </VStack>
 
       <HGrid gap="space-16" columns={{ xs: 2, md: 4 }}>
@@ -113,7 +115,9 @@ function UserPage({
       )}
 
       <VStack gap="space-16">
-        <Heading size="small">Siste deployments ({deploymentCount})</Heading>
+        <Heading level="2" size="small">
+          Siste deployments ({deploymentCount})
+        </Heading>
 
         {recentDeployments.length === 0 ? (
           <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">

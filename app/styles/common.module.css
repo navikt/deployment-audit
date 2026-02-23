@@ -20,7 +20,7 @@
 
 .layoutMain {
   flex: 1;
-  padding: 2rem;
+  padding: var(--ax-space-32);
   max-width: 1400px;
   width: 100%;
   margin: 0 auto;

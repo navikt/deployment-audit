@@ -7,7 +7,7 @@ function AdminPage({ pendingCount }: { pendingCount: number }) {
   return (
     <VStack gap="space-24">
       <div>
-        <Heading size="large" spacing>
+        <Heading level="1" size="large" spacing>
           Administrasjon
         </Heading>
         <BodyShort textColor="subtle">Administrer brukere, synkronisering og systeminnstillinger.</BodyShort>
@@ -27,7 +27,7 @@ function AdminPage({ pendingCount }: { pendingCount: number }) {
             <VStack gap="space-12">
               <CheckmarkCircleIcon fontSize="2rem" aria-hidden />
               <div>
-                <Heading size="small" spacing>
+                <Heading level="2" size="small" spacing>
                   GitHub-verifisering
                 </Heading>
                 <BodyShort textColor="subtle">
@@ -52,7 +52,7 @@ function AdminPage({ pendingCount }: { pendingCount: number }) {
             <VStack gap="space-12">
               <FileTextIcon fontSize="2rem" aria-hidden />
               <div>
-                <Heading size="small" spacing>
+                <Heading level="2" size="small" spacing>
                   Leveranserapport
                 </Heading>
                 <BodyShort textColor="subtle">
@@ -75,7 +75,7 @@ function AdminPage({ pendingCount }: { pendingCount: number }) {
             <VStack gap="space-12">
               <PersonGroupIcon fontSize="2rem" aria-hidden />
               <div>
-                <Heading size="small" spacing>
+                <Heading level="2" size="small" spacing>
                   Brukermappinger
                 </Heading>
                 <BodyShort textColor="subtle">
@@ -98,7 +98,7 @@ function AdminPage({ pendingCount }: { pendingCount: number }) {
             <VStack gap="space-12">
               <ArrowsCirclepathIcon fontSize="2rem" aria-hidden />
               <div>
-                <Heading size="small" spacing>
+                <Heading level="2" size="small" spacing>
                   Sync Jobs
                 </Heading>
                 <BodyShort textColor="subtle">
@@ -121,7 +121,7 @@ function AdminPage({ pendingCount }: { pendingCount: number }) {
             <VStack gap="space-12">
               <ChatIcon fontSize="2rem" aria-hidden />
               <div>
-                <Heading size="small" spacing>
+                <Heading level="2" size="small" spacing>
                   Slack-integrasjon
                 </Heading>
                 <BodyShort textColor="subtle">Konfigurer Slack-varsler og test integrasjonen.</BodyShort>
