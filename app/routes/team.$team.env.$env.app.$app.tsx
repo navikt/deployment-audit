@@ -532,31 +532,31 @@ export default function AppDetail() {
                         <Detail textColor="subtle">{new Date(repo.created_at).toLocaleDateString('no-NO')}</Detail>
                       </HStack>
                       <HStack gap="space-8" wrap>
-                        <form method="post" style={{ display: 'inline' }}>
+                        <Form method="post" style={{ display: 'inline' }}>
                           <input type="hidden" name="action" value="approve_repo" />
                           <input type="hidden" name="repo_id" value={repo.id} />
                           <input type="hidden" name="set_active" value="true" />
                           <Button type="submit" size="xsmall" variant="primary" icon={<CheckmarkIcon aria-hidden />}>
                             Godkjenn som aktiv
                           </Button>
-                        </form>
+                        </Form>
                         <Show above="sm">
-                          <form method="post" style={{ display: 'inline' }}>
+                          <Form method="post" style={{ display: 'inline' }}>
                             <input type="hidden" name="action" value="approve_repo" />
                             <input type="hidden" name="repo_id" value={repo.id} />
                             <input type="hidden" name="set_active" value="false" />
                             <Button type="submit" size="xsmall" variant="secondary">
                               Godkjenn som historisk
                             </Button>
-                          </form>
+                          </Form>
                         </Show>
-                        <form method="post" style={{ display: 'inline' }}>
+                        <Form method="post" style={{ display: 'inline' }}>
                           <input type="hidden" name="action" value="reject_repo" />
                           <input type="hidden" name="repo_id" value={repo.id} />
                           <Button type="submit" size="xsmall" variant="danger" icon={<XMarkIcon aria-hidden />}>
                             Avvis
                           </Button>
-                        </form>
+                        </Form>
                       </HStack>
                     </VStack>
                   </Box>
@@ -588,13 +588,13 @@ export default function AppDetail() {
                           <Detail textColor="subtle">{new Date(repo.created_at).toLocaleDateString('no-NO')}</Detail>
                         </Show>
                       </HStack>
-                      <form method="post" style={{ display: 'inline' }}>
+                      <Form method="post" style={{ display: 'inline' }}>
                         <input type="hidden" name="action" value="set_active" />
                         <input type="hidden" name="repo_id" value={repo.id} />
                         <Button type="submit" size="xsmall" variant="secondary">
                           Sett som aktiv
                         </Button>
-                      </form>
+                      </Form>
                     </HStack>
                   </Box>
                 ))}

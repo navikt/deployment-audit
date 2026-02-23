@@ -1,7 +1,18 @@
 import { ChevronDownIcon, MenuHamburgerIcon, MoonIcon, SunIcon } from '@navikt/aksel-icons'
-import { ActionMenu, BodyShort, Detail, Hide, InternalHeader, Show, Spacer } from '@navikt/ds-react'
+import {
+  ActionMenu,
+  Alert,
+  BodyShort,
+  Detail,
+  Hide,
+  InternalHeader,
+  Page,
+  Show,
+  Spacer,
+  VStack,
+} from '@navikt/ds-react'
 import { useEffect, useRef, useState } from 'react'
-import { Link, Outlet, useLocation, useNavigate } from 'react-router'
+import { isRouteErrorResponse, Link, Outlet, useLocation, useNavigate, useRouteError } from 'react-router'
 import { Breadcrumbs } from '~/components/Breadcrumbs'
 import { SearchDialog } from '~/components/SearchDialog'
 import { getUserMappingByNavIdent } from '~/db/user-mappings.server'
@@ -173,6 +184,39 @@ export default function Layout({ loaderData }: Route.ComponentProps) {
 
       <div className={styles.layoutMain}>
         <Outlet />
+      </div>
+    </div>
+  )
+}
+
+export function ErrorBoundary() {
+  const error = useRouteError()
+
+  let title = 'Noe gikk galt'
+  let message = 'En uventet feil oppstod.'
+
+  if (isRouteErrorResponse(error)) {
+    title = error.status === 404 ? 'Siden ble ikke funnet' : `Feil ${error.status}`
+    message = error.status === 404 ? 'Siden du leter etter finnes ikke.' : error.statusText || message
+  } else if (error instanceof Error) {
+    message = error.message
+  }
+
+  return (
+    <div className={styles.layoutContainer}>
+      <div className={styles.layoutMain}>
+        <Page>
+          <Page.Block as="main" width="xl" gutters>
+            <VStack gap="space-16">
+              <Alert variant="error">
+                <VStack gap="space-8">
+                  <strong>{title}</strong>
+                  <span>{message}</span>
+                </VStack>
+              </Alert>
+            </VStack>
+          </Page.Block>
+        </Page>
       </div>
     </div>
   )

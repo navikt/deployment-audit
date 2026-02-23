@@ -17,8 +17,8 @@ import {
   TextField,
   VStack,
 } from '@navikt/ds-react'
-import { useCallback, useEffect, useState } from 'react'
-import { Form, Link, useNavigation, useRevalidator } from 'react-router'
+import { useEffect, useRef, useState } from 'react'
+import { Form, Link, useFetcher, useNavigation, useRevalidator } from 'react-router'
 import {
   getAppConfigAuditLog,
   getImplicitApprovalSettings,
@@ -424,11 +424,15 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
   const revalidator = useRevalidator()
   const isSubmitting = navigation.state === 'submitting'
 
-  // Polling state for report background job
+  // Polling state for report background job (using useFetcher)
+  const jobFetcher = useFetcher<{ status: string; error?: string }>()
   const [pendingJobId, setPendingJobId] = useState<string | null>(null)
-  const [jobStatus, setJobStatus] = useState<'pending' | 'processing' | 'completed' | 'failed' | null>(null)
   const [jobError, setJobError] = useState<string | null>(null)
   const [jobCompleted, setJobCompleted] = useState(false)
+
+  const jobStatus = pendingJobId
+    ? ((jobFetcher.data?.status as 'pending' | 'processing' | 'completed' | 'failed' | null) ?? 'pending')
+    : null
 
   // Polling state for fetch data job
   const [fetchJobId, setFetchJobId] = useState<number | null>(null)
@@ -487,46 +491,42 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
   useEffect(() => {
     if (actionData?.jobStarted) {
       setPendingJobId(actionData.jobStarted)
-      setJobStatus('pending')
       setJobError(null)
       setJobCompleted(false)
     }
   }, [actionData?.jobStarted])
 
-  // Poll for job status
-  const pollJobStatus = useCallback(async () => {
-    if (!pendingJobId) return
+  // Stable ref for fetcher.load to avoid infinite re-renders in polling effect
+  const jobFetcherLoadRef = useRef(jobFetcher.load)
+  jobFetcherLoadRef.current = jobFetcher.load
 
-    try {
-      const response = await fetch(`/api/reports/status?jobId=${pendingJobId}`)
-      const data = await response.json()
-
-      setJobStatus(data.status)
-
-      if (data.status === 'completed') {
-        setPendingJobId(null)
-        setJobCompleted(true)
-        // Reload to show new report in list
-        revalidator.revalidate()
-      } else if (data.status === 'failed') {
-        setPendingJobId(null)
-        setJobError(data.error || 'Ukjent feil')
-      }
-    } catch {
-      setJobError('Kunne ikke sjekke status')
-      setPendingJobId(null)
-    }
-  }, [pendingJobId, revalidator])
-
+  // Poll for job status using useFetcher
   useEffect(() => {
     if (!pendingJobId) return
 
-    const interval = setInterval(pollJobStatus, 2000)
-    // Also poll immediately
-    pollJobStatus()
+    const load = () => jobFetcherLoadRef.current(`/api/reports/status?jobId=${pendingJobId}`)
+
+    // Load immediately
+    load()
+
+    const interval = setInterval(load, 2000)
 
     return () => clearInterval(interval)
-  }, [pendingJobId, pollJobStatus])
+  }, [pendingJobId])
+
+  // React to fetcher data changes
+  useEffect(() => {
+    if (!jobFetcher.data || !pendingJobId) return
+
+    if (jobFetcher.data.status === 'completed') {
+      setPendingJobId(null)
+      setJobCompleted(true)
+      revalidator.revalidate()
+    } else if (jobFetcher.data.status === 'failed') {
+      setPendingJobId(null)
+      setJobError(jobFetcher.data.error || 'Ukjent feil')
+    }
+  }, [jobFetcher.data, pendingJobId, revalidator])
 
   return (
     <VStack gap="space-32">
