@@ -164,7 +164,9 @@ export default function AdminUsers() {
     <Box padding={{ xs: 'space-16', md: 'space-24' }}>
       <VStack gap="space-24">
         <HStack justify="space-between" align="center" wrap gap="space-8">
-          <Heading size="large">Brukermappinger</Heading>
+          <Heading level="1" size="large">
+            Brukermappinger
+          </Heading>
           <HStack gap="space-8">
             <Button
               as="a"
@@ -245,7 +247,9 @@ export default function AdminUsers() {
                   {/* First row: Display name heading, actions */}
                   <HStack gap="space-8" align="center" justify="space-between" wrap>
                     <Link to={`/users/${mapping.github_username}`} style={{ textDecoration: 'none' }}>
-                      <Heading size="xsmall">{mapping.display_name || mapping.github_username}</Heading>
+                      <Heading level="3" size="xsmall">
+                        {mapping.display_name || mapping.github_username}
+                      </Heading>
                     </Link>
                     <HStack gap="space-8">
                       <Button
@@ -313,7 +317,9 @@ export default function AdminUsers() {
         {/* Unmapped users section at bottom */}
         {unmappedUsers.length > 0 && (
           <VStack gap="space-16">
-            <Heading size="medium">GitHub-brukere uten mapping ({unmappedUsers.length})</Heading>
+            <Heading level="2" size="medium">
+              GitHub-brukere uten mapping ({unmappedUsers.length})
+            </Heading>
             <div>
               {unmappedUsers.map((user) => (
                 <Box

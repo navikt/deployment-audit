@@ -534,7 +534,9 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
       <div>
         <HStack gap="space-12" align="center">
           <CogIcon aria-hidden fontSize="1.5rem" />
-          <Heading size="large">Administrasjon for {app.app_name}</Heading>
+          <Heading size="large" level="1">
+            Administrasjon for {app.app_name}
+          </Heading>
         </HStack>
         <BodyShort textColor="subtle">Administrer leveranserapporter og innstillinger for applikasjonen.</BodyShort>
       </div>
@@ -575,7 +577,9 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
         <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
           <VStack gap="space-16">
             <div>
-              <Heading size="small">Leveranserapport</Heading>
+              <Heading size="small" level="2">
+                Leveranserapport
+              </Heading>
               <BodyShort textColor="subtle" size="small">
                 Generer leveranserapport for revisjon. Rapporten dokumenterer four-eyes-prinsippet for alle deployments
                 i valgt år.
@@ -665,12 +669,16 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
                         {readinessData.is_ready ? (
                           <>
                             <CheckmarkCircleIcon aria-hidden fontSize="1.5rem" />
-                            <Heading size="xsmall">Klar for leveranserapport</Heading>
+                            <Heading size="xsmall" level="3">
+                              Klar for leveranserapport
+                            </Heading>
                           </>
                         ) : (
                           <>
                             <ExclamationmarkTriangleIcon aria-hidden fontSize="1.5rem" />
-                            <Heading size="xsmall">Ikke klar</Heading>
+                            <Heading size="xsmall" level="3">
+                              Ikke klar
+                            </Heading>
                           </>
                         )}
                       </HStack>
@@ -749,7 +757,9 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
       {/* Default Branch */}
       <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
         <VStack gap="space-16">
-          <Heading size="small">Default branch</Heading>
+          <Heading size="small" level="2">
+            Default branch
+          </Heading>
           <Form method="post">
             <input type="hidden" name="action" value="update_default_branch" />
             <input type="hidden" name="app_id" value={app.id} />
@@ -773,7 +783,9 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
       {/* Audit Start Year */}
       <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
         <VStack gap="space-16">
-          <Heading size="small">Startår for revisjon</Heading>
+          <Heading size="small" level="2">
+            Startår for revisjon
+          </Heading>
           <Form method="post">
             <input type="hidden" name="action" value="update_audit_start_year" />
             <input type="hidden" name="app_id" value={app.id} />
@@ -799,7 +811,9 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
       <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
         <VStack gap="space-16">
           <div>
-            <Heading size="small">Implisitt godkjenning</Heading>
+            <Heading size="small" level="2">
+              Implisitt godkjenning
+            </Heading>
             <BodyShort textColor="subtle" size="small">
               Godkjenner automatisk en PR hvis den som merger ikke er PR-oppretteren og ikke har siste commit.
             </BodyShort>
@@ -841,7 +855,9 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
       <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
         <VStack gap="space-16">
           <div>
-            <Heading size="small">Testkrav for leveranser</Heading>
+            <Heading size="small" level="2">
+              Testkrav for leveranser
+            </Heading>
             <BodyShort textColor="subtle" size="small">
               Spesifiser hvilke tester som må være vellykket før en leveranse kan gjennomføres.
             </BodyShort>
@@ -882,7 +898,9 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
             <HStack gap="space-8" align="center">
               <ChatIcon aria-hidden fontSize="1.25rem" />
               <div>
-                <Heading size="small">Slack-varsler</Heading>
+                <Heading size="small" level="2">
+                  Slack-varsler
+                </Heading>
                 <BodyShort textColor="subtle" size="small">
                   Konfigurer Slack-varsler for uverifiserte deployments.
                 </BodyShort>
@@ -927,7 +945,9 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
       <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
         <VStack gap="space-16">
           <div>
-            <Heading size="small">Purring for ikke-godkjente deployments</Heading>
+            <Heading size="small" level="2">
+              Purring for ikke-godkjente deployments
+            </Heading>
             <BodyShort textColor="subtle" size="small">
               Send automatiske påminnelser i Slack for deployments som mangler godkjenning.
             </BodyShort>
@@ -997,7 +1017,9 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
       <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
         <VStack gap="space-16">
           <div>
-            <Heading size="small">Hent verifiseringsdata fra GitHub</Heading>
+            <Heading size="small" level="2">
+              Hent verifiseringsdata fra GitHub
+            </Heading>
             <BodyShort textColor="subtle" size="small">
               Henter og lagrer data fra GitHub for alle deployments. Kjører kun for deployments som mangler data eller
               har utdatert schema-versjon.
@@ -1178,7 +1200,9 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
       <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
         <VStack gap="space-16">
           <div>
-            <Heading size="small">Reverifisering</Heading>
+            <Heading size="small" level="2">
+              Reverifisering
+            </Heading>
             <BodyShort textColor="subtle" size="small">
               Sammenlign cached data med gjeldende verifiseringslogikk. Avvik kan godkjennes enkeltvis.
             </BodyShort>
@@ -1202,7 +1226,9 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
       <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
         <VStack gap="space-16">
           <div>
-            <Heading size="small">Avvik</Heading>
+            <Heading size="small" level="2">
+              Avvik
+            </Heading>
             <BodyShort textColor="subtle" size="small">
               Se og administrer registrerte avvik for deployments.
             </BodyShort>

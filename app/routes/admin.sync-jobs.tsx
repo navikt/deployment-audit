@@ -200,7 +200,9 @@ function StatCard({
       <BodyShort size="small" textColor="subtle">
         {label}
       </BodyShort>
-      <Heading size="large">{value}</Heading>
+      <Heading level="3" size="large">
+        {value}
+      </Heading>
     </Box>
   )
 }
@@ -225,7 +227,7 @@ export default function AdminSyncJobs({ loaderData, actionData }: Route.Componen
   return (
     <VStack gap="space-24">
       <div>
-        <Heading size="large" spacing>
+        <Heading level="1" size="large" spacing>
           Sync Jobs
         </Heading>
         <BodyShort textColor="subtle">Oversikt over synkroniseringsjobber og låser mellom podder.</BodyShort>

@@ -79,7 +79,9 @@ export function SyncJobDetailView({ job, logs, jobTypeLabel, jobStatusLabel, has
       {/* Header */}
       <VStack gap="space-8">
         <HStack gap="space-12" align="center">
-          <Heading size="medium">Jobb #{job.id}</Heading>
+          <Heading level="2" size="medium">
+            Jobb #{job.id}
+          </Heading>
           <Tag variant={statusColor(job.status)} size="small">
             {jobStatusLabel}
           </Tag>
@@ -151,7 +153,9 @@ export function SyncJobDetailView({ job, logs, jobTypeLabel, jobStatusLabel, has
       <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
         <VStack gap="space-16">
           <HStack gap="space-12" align="center" justify="space-between">
-            <Heading size="small">Logg ({filteredLogs.length} meldinger)</Heading>
+            <Heading level="3" size="small">
+              Logg ({filteredLogs.length} meldinger)
+            </Heading>
             <HStack gap="space-12" align="center">
               {hasDebugLogs && (
                 <Switch size="small" checked={showDebug} onChange={() => setShowDebug(!showDebug)}>

@@ -139,7 +139,9 @@ export default function AppsDiscover({ loaderData, actionData }: Route.Component
 
   return (
     <VStack gap="space-32">
-      <Heading size="large">Legg til applikasjon</Heading>
+      <Heading level="1" size="large">
+        Legg til applikasjon
+      </Heading>
 
       {actionData?.success && (
         <Alert variant="success" closeButton>
@@ -176,7 +178,9 @@ export default function AppsDiscover({ loaderData, actionData }: Route.Component
                     borderWidth="1"
                   >
                     <VStack gap="space-16">
-                      <Heading size="small">{teamSlug}</Heading>
+                      <Heading level="2" size="small">
+                        {teamSlug}
+                      </Heading>
 
                       {Object.entries(envs)
                         .sort(([a], [b]) => a.localeCompare(b))

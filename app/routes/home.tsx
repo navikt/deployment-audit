@@ -86,7 +86,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       {Object.entries(appsByTeam).map(([teamSlug, teamApps]) => (
         <VStack key={teamSlug} gap="space-16">
           <Link to={`/team/${teamSlug}`} style={{ textDecoration: 'none' }}>
-            <Heading size="small">
+            <Heading level="2" size="small">
               {teamSlug} ({teamApps.length})
             </Heading>
           </Link>

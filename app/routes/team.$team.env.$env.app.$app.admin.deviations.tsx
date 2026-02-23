@@ -48,7 +48,9 @@ export default function AppDeviationsPage() {
     <Box paddingBlock="space-8" paddingInline={{ xs: 'space-4', md: 'space-8' }}>
       <VStack gap="space-24">
         <VStack gap="space-8">
-          <Heading size="large">Avvik for {app.app_name}</Heading>
+          <Heading level="1" size="large">
+            Avvik for {app.app_name}
+          </Heading>
           <BodyShort textColor="subtle">Registrerte avvik for deployments i {app.environment_name}.</BodyShort>
         </VStack>
 

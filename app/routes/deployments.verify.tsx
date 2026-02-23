@@ -133,7 +133,7 @@ export default function DeploymentsVerify({ loaderData, actionData }: Route.Comp
   return (
     <VStack gap="space-32">
       <div>
-        <Heading size="large" spacing>
+        <Heading level="1" size="large" spacing>
           Batch GitHub-verifisering{appId ? ' for applikasjon' : ''}
         </Heading>
         <BodyShort textColor="subtle">
@@ -157,14 +157,18 @@ export default function DeploymentsVerify({ loaderData, actionData }: Route.Comp
 
       <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
         <VStack gap="space-16">
-          <Heading size="small">Status</Heading>
+          <Heading level="2" size="small">
+            Status
+          </Heading>
           <HGrid gap="space-16" columns={{ xs: 2, md: 4 }}>
             <Box padding="space-16" borderRadius="8" background="sunken">
               <VStack gap="space-4">
                 <BodyShort size="small" textColor="subtle">
                   Totalt deployments
                 </BodyShort>
-                <Heading size="medium">{stats.total}</Heading>
+                <Heading level="3" size="medium">
+                  {stats.total}
+                </Heading>
               </VStack>
             </Box>
             <Box padding="space-16" borderRadius="8" background="sunken" data-color="warning">
@@ -172,7 +176,9 @@ export default function DeploymentsVerify({ loaderData, actionData }: Route.Comp
                 <BodyShort size="small" textColor="subtle">
                   Trenger verifisering
                 </BodyShort>
-                <Heading size="medium">{stats.needsVerification}</Heading>
+                <Heading level="3" size="medium">
+                  {stats.needsVerification}
+                </Heading>
               </VStack>
             </Box>
             <Box padding="space-16" borderRadius="8" background="sunken">
@@ -180,7 +186,9 @@ export default function DeploymentsVerify({ loaderData, actionData }: Route.Comp
                 <BodyShort size="small" textColor="subtle">
                   Pending
                 </BodyShort>
-                <Heading size="medium">{stats.pending}</Heading>
+                <Heading level="3" size="medium">
+                  {stats.pending}
+                </Heading>
               </VStack>
             </Box>
             <Box padding="space-16" borderRadius="8" background="sunken" data-color="danger">
@@ -188,7 +196,9 @@ export default function DeploymentsVerify({ loaderData, actionData }: Route.Comp
                 <BodyShort size="small" textColor="subtle">
                   Error
                 </BodyShort>
-                <Heading size="medium">{stats.error}</Heading>
+                <Heading level="3" size="medium">
+                  {stats.error}
+                </Heading>
               </VStack>
             </Box>
           </HGrid>
@@ -196,7 +206,7 @@ export default function DeploymentsVerify({ loaderData, actionData }: Route.Comp
       </Box>
 
       <Alert variant="info">
-        <Heading size="small" spacing>
+        <Heading level="2" size="small" spacing>
           Om GitHub Rate Limits
         </Heading>
         <BodyShort>

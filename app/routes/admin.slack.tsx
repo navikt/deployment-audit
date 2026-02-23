@@ -75,12 +75,16 @@ export default function SlackAdminPage() {
   return (
     <Box paddingBlock="space-8" paddingInline={{ xs: 'space-4', md: 'space-8' }}>
       <VStack gap="space-6">
-        <Heading size="large">Slack-integrasjon</Heading>
+        <Heading level="1" size="large">
+          Slack-integrasjon
+        </Heading>
 
         {/* Configuration status */}
         <Box background="neutral-soft" padding="space-4" borderRadius="8">
           <VStack gap="space-4">
-            <Heading size="small">Konfigurasjonsstatus</Heading>
+            <Heading level="2" size="small">
+              Konfigurasjonsstatus
+            </Heading>
             <HStack gap="space-8">
               <BodyShort>SLACK_BOT_TOKEN: {hasBotToken ? '✅ Satt' : '❌ Mangler'}</BodyShort>
               <BodyShort>SLACK_APP_TOKEN: {hasAppToken ? '✅ Satt' : '❌ Mangler'}</BodyShort>
@@ -101,7 +105,9 @@ export default function SlackAdminPage() {
         {/* Test notification */}
         <Box background="neutral-soft" padding="space-4" borderRadius="8">
           <VStack gap="space-4">
-            <Heading size="small">Test varsling</Heading>
+            <Heading level="2" size="small">
+              Test varsling
+            </Heading>
             <BodyShort>Send en testmelding til en Slack-kanal for å verifisere at integrasjonen fungerer.</BodyShort>
 
             <Form method="post">
@@ -131,7 +137,9 @@ export default function SlackAdminPage() {
         {/* Setup instructions */}
         <Box background="neutral-soft" padding="space-4" borderRadius="8">
           <VStack gap="space-4">
-            <Heading size="small">Oppsett av Slack App</Heading>
+            <Heading level="2" size="small">
+              Oppsett av Slack App
+            </Heading>
             <ol style={{ paddingLeft: '1.5rem', margin: 0 }}>
               <li>
                 Gå til{' '}

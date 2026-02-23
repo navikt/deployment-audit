@@ -43,7 +43,7 @@ export default function AdminAuditReports() {
   return (
     <VStack gap="space-24">
       <div>
-        <Heading size="large" spacing>
+        <Heading level="1" size="large" spacing>
           Leveranserapport
         </Heading>
         <BodyShort textColor="subtle">
@@ -55,7 +55,7 @@ export default function AdminAuditReports() {
       <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
         <VStack gap="space-16">
           <div>
-            <Heading size="medium" spacing>
+            <Heading level="2" size="medium" spacing>
               Utstedte leveranserapport
             </Heading>
             <BodyShort textColor="subtle">{reports.length} leveranserapport er generert.</BodyShort>

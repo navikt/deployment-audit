@@ -216,7 +216,9 @@ export default function AppDetail() {
     <VStack gap="space-32">
       <HStack justify="space-between" align="start" wrap>
         <div>
-          <Heading size="large">{app.app_name}</Heading>
+          <Heading level="1" size="large">
+            {app.app_name}
+          </Heading>
           <HStack gap="space-16" align="center" wrap>
             <BodyShort textColor="subtle">
               Team: <code style={{ fontSize: '0.75rem' }}>{app.team_slug}</code> | Miljø:{' '}
@@ -251,7 +253,7 @@ export default function AppDetail() {
       <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
         <VStack gap="space-20">
           <HStack justify="space-between" align="center" wrap>
-            <Heading size="medium">
+            <Heading level="2" size="medium">
               <BarChartIcon aria-hidden /> Statistikk
             </Heading>
             <Form method="get" onChange={(e) => e.currentTarget.submit()}>
@@ -310,7 +312,7 @@ export default function AppDetail() {
       {app.environment_name.startsWith('prod-') && (
         <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
           <VStack gap="space-20">
-            <Heading size="medium">
+            <Heading level="2" size="medium">
               <FileTextIcon aria-hidden /> Leveranserapport
             </Heading>
 
@@ -376,7 +378,7 @@ export default function AppDetail() {
           borderWidth="1"
         >
           <VStack gap="space-16">
-            <Heading size="medium">
+            <Heading level="2" size="medium">
               <ExclamationmarkTriangleIcon aria-hidden /> Åpne varsler ({alerts.length})
             </Heading>
             <VStack gap="space-12">
@@ -482,7 +484,7 @@ export default function AppDetail() {
       {/* Repositories Section */}
       <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
         <VStack gap="space-20">
-          <Heading size="medium">
+          <Heading level="2" size="medium">
             <PackageIcon aria-hidden /> Repositories
           </Heading>
 

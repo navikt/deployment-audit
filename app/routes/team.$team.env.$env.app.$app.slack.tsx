@@ -68,7 +68,9 @@ export default function AppSlackPage() {
     <Box paddingInline={{ xs: 'space-16', md: 'space-24' }} paddingBlock="space-24">
       <VStack gap="space-24">
         <VStack gap="space-8">
-          <Heading size="large">Slack-kommunikasjon</Heading>
+          <Heading level="1" size="large">
+            Slack-kommunikasjon
+          </Heading>
           <Detail textColor="subtle">
             {app.app_name} • {app.environment_name}
           </Detail>
@@ -96,7 +98,9 @@ export default function AppSlackPage() {
           <Alert variant="info">Ingen Slack-meldinger er sendt for denne applikasjonen ennå.</Alert>
         ) : (
           <VStack gap="space-16">
-            <Heading size="small">Meldingshistorikk ({notifications.length})</Heading>
+            <Heading level="2" size="small">
+              Meldingshistorikk ({notifications.length})
+            </Heading>
 
             <Table size="small">
               <Table.Header>

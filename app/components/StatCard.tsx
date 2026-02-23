@@ -68,7 +68,7 @@ function StatCardContent({
             {label}
           </BodyShort>
         )}
-        <Heading size="large" style={textColor ? { color: textColor } : undefined}>
+        <Heading level="3" size="large" style={textColor ? { color: textColor } : undefined}>
           {value}
         </Heading>
         {subtitle && (
@@ -117,7 +117,9 @@ export function StatCard(props: StatCardProps & { compact?: boolean }) {
             {rest.label}
           </BodyShort>
         )}
-        <Heading size="large">{rest.value}</Heading>
+        <Heading level="3" size="large">
+          {rest.value}
+        </Heading>
         {rest.subtitle && (
           <BodyShort size="small" textColor="subtle">
             {rest.subtitle}

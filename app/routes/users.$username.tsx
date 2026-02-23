@@ -137,7 +137,9 @@ export default function UserPage() {
       {/* Header */}
       <VStack gap="space-8">
         <HStack gap="space-12" align="center">
-          <Heading size="large">{mapping?.display_name || botDisplayName || username}</Heading>
+          <Heading level="1" size="large">
+            {mapping?.display_name || botDisplayName || username}
+          </Heading>
           {isBot && (
             <Tag variant="neutral" size="small">
               Bot
@@ -209,7 +211,9 @@ export default function UserPage() {
 
       {/* Recent deployments */}
       <VStack gap="space-16">
-        <Heading size="small">Siste deployments ({deploymentCount})</Heading>
+        <Heading level="2" size="small">
+          Siste deployments ({deploymentCount})
+        </Heading>
 
         {recentDeployments.length === 0 ? (
           <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">

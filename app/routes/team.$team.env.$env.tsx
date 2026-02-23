@@ -49,7 +49,7 @@ export default function TeamEnvPage() {
     <Box paddingInline={{ xs: 'space-16', md: 'space-24' }} paddingBlock="space-24">
       <VStack gap="space-24">
         <VStack gap="space-8">
-          <Heading size="xlarge">
+          <Heading level="1" size="xlarge">
             {team} / {env}
           </Heading>
           <HStack gap="space-16" align="center">

@@ -117,7 +117,9 @@ export default function VerificationDiffDeploymentPage({ loaderData }: Route.Com
       <VStack gap="space-6">
         <HStack justify="space-between" align="center">
           <VStack gap="space-2">
-            <Heading size="large">🔬 Debug Verifisering</Heading>
+            <Heading size="large" level="1">
+              🔬 Debug Verifisering
+            </Heading>
             <BodyShort>
               Deployment #{deployment.id} - {deployment.commit_sha?.substring(0, 7)}
             </BodyShort>
@@ -145,7 +147,7 @@ export default function VerificationDiffDeploymentPage({ loaderData }: Route.Com
 
         {error && (
           <Alert variant="error">
-            <Heading size="small" spacing>
+            <Heading size="small" level="2" spacing>
               Feil ved verifisering
             </Heading>
             <BodyShort>{error}</BodyShort>
@@ -196,7 +198,9 @@ function DebugResultView({ result }: { result: DebugVerificationResult }) {
       <HStack gap="space-4" wrap>
         <Box background="neutral-soft" padding="space-4" borderRadius="8" style={{ flex: '1 1 300px' }}>
           <VStack gap="space-4">
-            <Heading size="small">Eksisterende status</Heading>
+            <Heading size="small" level="2">
+              Eksisterende status
+            </Heading>
             <DataRow label="Status" value={existingStatus.status || 'null'} />
             <DataRow label="Four eyes" value={String(existingStatus.hasFourEyes)} />
             <DataRow label="PR nummer" value={existingStatus.prNumber?.toString() || 'null'} />
@@ -206,7 +210,9 @@ function DebugResultView({ result }: { result: DebugVerificationResult }) {
 
         <Box background="neutral-soft" padding="space-4" borderRadius="8" style={{ flex: '1 1 300px' }}>
           <VStack gap="space-4">
-            <Heading size="small">Nytt resultat (V2)</Heading>
+            <Heading size="small" level="2">
+              Nytt resultat (V2)
+            </Heading>
             <DataRow label="Status" value={newResult.status} highlight={comparison.statusChanged} />
             <DataRow
               label="Four eyes"
@@ -223,10 +229,14 @@ function DebugResultView({ result }: { result: DebugVerificationResult }) {
 
       <Box background="neutral-soft" padding="space-4" borderRadius="8">
         <VStack gap="space-4">
-          <Heading size="small">Hentet data fra GitHub</Heading>
+          <Heading size="small" level="2">
+            Hentet data fra GitHub
+          </Heading>
 
           <VStack gap="space-2">
-            <Heading size="xsmall">Deployment info</Heading>
+            <Heading size="xsmall" level="3">
+              Deployment info
+            </Heading>
             <DataRow label="Commit SHA" value={fetchedData.commitSha} />
             <DataRow label="Repository" value={fetchedData.repository} />
             <DataRow label="Environment" value={fetchedData.environmentName} />
@@ -234,7 +244,9 @@ function DebugResultView({ result }: { result: DebugVerificationResult }) {
           </VStack>
 
           <VStack gap="space-2">
-            <Heading size="xsmall">Deployed PR</Heading>
+            <Heading size="xsmall" level="3">
+              Deployed PR
+            </Heading>
             {fetchedData.deployedPr ? (
               <>
                 <DataRow label="PR nummer" value={`#${fetchedData.deployedPr.number}`} />
@@ -250,7 +262,9 @@ function DebugResultView({ result }: { result: DebugVerificationResult }) {
           </VStack>
 
           <VStack gap="space-2">
-            <Heading size="xsmall">Commits mellom deployments</Heading>
+            <Heading size="xsmall" level="3">
+              Commits mellom deployments
+            </Heading>
             <DataRow label="Antall commits" value={fetchedData.commitsBetween.length.toString()} />
             {fetchedData.commitsBetween.slice(0, 5).map((commit) => (
               <Box key={commit.sha} padding="space-2" background="raised" borderRadius="4">
@@ -267,7 +281,9 @@ function DebugResultView({ result }: { result: DebugVerificationResult }) {
 
           {fetchedData.deployedPr && fetchedData.deployedPr.reviews.length > 0 && (
             <VStack gap="space-2">
-              <Heading size="xsmall">Reviews</Heading>
+              <Heading size="xsmall" level="3">
+                Reviews
+              </Heading>
               {fetchedData.deployedPr.reviews.map((review) => (
                 <Box
                   key={`${review.username}-${review.submittedAt}`}
@@ -288,7 +304,9 @@ function DebugResultView({ result }: { result: DebugVerificationResult }) {
 
           {newResult.unverifiedCommits.length > 0 && (
             <VStack gap="space-2">
-              <Heading size="xsmall">Uverifiserte commits</Heading>
+              <Heading size="xsmall" level="3">
+                Uverifiserte commits
+              </Heading>
               {newResult.unverifiedCommits.map((commit) => (
                 <Box key={commit.sha} padding="space-2" background="danger-soft" borderRadius="4">
                   <VStack gap="space-1">

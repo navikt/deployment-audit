@@ -45,14 +45,18 @@ export default function GlobalSettingsPage() {
   return (
     <Box paddingBlock="space-8" paddingInline={{ xs: 'space-4', md: 'space-8' }}>
       <VStack gap="space-24">
-        <Heading size="large">Globale innstillinger</Heading>
+        <Heading level="1" size="large">
+          Globale innstillinger
+        </Heading>
 
         {actionData?.success && <Alert variant="success">{actionData.success}</Alert>}
         {actionData?.error && <Alert variant="error">{actionData.error}</Alert>}
 
         <Box background="neutral-soft" padding="space-24" borderRadius="8">
           <VStack gap="space-16">
-            <Heading size="small">Slack-kanal for avvik</Heading>
+            <Heading level="2" size="small">
+              Slack-kanal for avvik
+            </Heading>
             <BodyShort>
               Konfigurer hvilken Slack-kanal som skal motta varsler når avvik registreres på deployments. Kanalen er
               global for alle apper.

@@ -208,7 +208,9 @@ export default function VerificationDiffPage() {
     <Box paddingBlock="space-8" paddingInline={{ xs: 'space-4', md: 'space-8' }}>
       <VStack gap="space-6">
         <VStack gap="space-2">
-          <Heading size="large">Verifiseringsavvik</Heading>
+          <Heading level="1" size="large">
+            Verifiseringsavvik
+          </Heading>
           <BodyShort textColor="subtle">
             Deployments hvor gammel og ny verifisering gir forskjellig resultat. Klikk på en deployment for detaljer.
           </BodyShort>

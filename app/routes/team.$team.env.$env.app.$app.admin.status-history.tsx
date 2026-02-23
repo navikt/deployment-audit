@@ -55,7 +55,7 @@ export default function StatusHistoryPage({ loaderData }: Route.ComponentProps) 
   return (
     <VStack gap="space-24">
       <div>
-        <Heading size="medium" spacing>
+        <Heading level="1" size="medium" spacing>
           Statusoverganger
         </Heading>
         <BodyShort textColor="subtle">

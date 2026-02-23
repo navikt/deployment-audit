@@ -1051,7 +1051,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
       {/* Main header */}
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <Heading size="large" style={{ flex: 1 }}>
+          <Heading size="large" level="1" style={{ flex: 1 }}>
             {deployment.github_pr_data?.title || `${deployment.app_name} @ ${deployment.environment_name}`}
           </Heading>
           <HStack gap="space-8" align="center">
@@ -1145,7 +1145,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
         deployment.four_eyes_status !== 'manually_approved' &&
         deployment.four_eyes_status !== 'implicitly_approved' && (
           <Alert variant={status.variant}>
-            <Heading size="small" spacing>
+            <Heading size="small" level="3" spacing>
               {status.text}
             </Heading>
             <BodyShort>
@@ -1181,7 +1181,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
         return (
           filteredUnverifiedCommits.length > 0 && (
             <Alert variant="error">
-              <Heading size="small" spacing>
+              <Heading size="small" level="3" spacing>
                 Ikke-verifiserte commits ({filteredUnverifiedCommits.length})
               </Heading>
               <BodyShort spacing>
@@ -1224,7 +1224,9 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
         )
       })()}
       {/* Deployment Details Section */}
-      <Heading size="medium">Detaljer</Heading>
+      <Heading size="medium" level="2">
+        Detaljer
+      </Heading>
       <HGrid gap="space-16" columns={{ xs: 1, sm: 2, md: 3 }}>
         <VStack gap="space-4">
           <Detail>Deployer</Detail>
@@ -1703,7 +1705,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
       {/* Resources section */}
       {deployment.resources && deployment.resources.length > 0 && (
         <div>
-          <Heading size="small" spacing>
+          <Heading size="small" level="3" spacing>
             Kubernetes Resources
           </Heading>
           <HStack gap="space-8" wrap>
@@ -1720,7 +1722,9 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
         <VStack gap="space-16">
           {deployment.github_pr_data.body && (
             <div>
-              <Heading size="medium">Beskrivelse</Heading>
+              <Heading size="medium" level="2">
+                Beskrivelse
+              </Heading>
               <Box background="neutral-soft" padding="space-16" borderRadius="12" marginBlock="space-8 space-0">
                 <BodyShort style={{ whiteSpace: 'pre-wrap' }}>
                   {/* biome-ignore lint/security/noDangerouslySetInnerHtml: GitHub PR body contains safe markdown HTML */}
@@ -1805,7 +1809,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
       {deployment.github_pr_data?.unreviewed_commits && deployment.github_pr_data.unreviewed_commits.length > 0 && (
         <div>
           <Alert variant="error">
-            <Heading size="small" spacing>
+            <Heading size="small" level="3" spacing>
               <ExclamationmarkTriangleIcon aria-hidden /> Ureviewed commits funnet
             </Heading>
             <BodyShort spacing>
@@ -1871,7 +1875,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
         !deployment.has_four_eyes && (
           <Box background="info-moderate" padding="space-24" borderRadius="8">
             <VStack gap="space-16">
-              <Heading size="small">
+              <Heading size="small" level="3">
                 <ChatIcon aria-hidden /> Send Slack-varsel
               </Heading>
               <BodyShort>Send varsel til Slack-kanal om at dette deploymentet krever oppfølging.</BodyShort>
@@ -1888,7 +1892,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
       {requiresManualApproval && (
         <Box background="warning-moderate" padding="space-24" borderRadius="8">
           <VStack gap="space-16">
-            <Heading size="small">
+            <Heading size="small" level="3">
               <ExclamationmarkTriangleIcon aria-hidden /> Krever manuell godkjenning
             </Heading>
             <BodyShort>
@@ -1910,7 +1914,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
 
             {isCurrentUserInvolved ? (
               <Alert variant="warning">
-                <Heading size="xsmall" spacing>
+                <Heading size="xsmall" level="4" spacing>
                   Du kan ikke godkjenne dette deploymentet
                 </Heading>
                 <BodyShort>{involvementReason}</BodyShort>
@@ -1962,7 +1966,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
       {isLegacy && !legacyInfo && !manualApproval && (
         <Box background="info-moderate" padding="space-24" borderRadius="8">
           <VStack gap="space-16">
-            <Heading size="small">
+            <Heading size="small" level="3">
               <ClockIcon aria-hidden /> Legacy deployment - hent data fra GitHub
             </Heading>
             <BodyShort>
@@ -1981,7 +1985,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
               // Show preview of looked up data
               <VStack gap="space-16">
                 <Alert variant={actionData.legacyLookup.isWithinThreshold ? 'success' : 'warning'}>
-                  <Heading size="xsmall">
+                  <Heading size="xsmall" level="4">
                     {actionData.legacyLookup.isWithinThreshold ? 'Data funnet!' : 'Data funnet, men tidspunkt avviker'}
                   </Heading>
                   <BodyShort>
@@ -2126,7 +2130,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
       {(isPendingApproval || (legacyInfo && !manualApproval)) && (
         <Box background="warning-moderate" padding="space-24" borderRadius="8">
           <VStack gap="space-16">
-            <Heading size="small">
+            <Heading size="small" level="3">
               <ExclamationmarkTriangleIcon aria-hidden /> Venter på godkjenning
             </Heading>
             <BodyShort>
@@ -2180,7 +2184,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
       {/* Show existing manual approval if present */}
       {manualApproval && (
         <Alert variant="success">
-          <Heading size="small">
+          <Heading size="small" level="3">
             <CheckmarkIcon aria-hidden /> Manuelt godkjent
           </Heading>
           <BodyShort>
@@ -2210,7 +2214,9 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
       {/* Status history section */}
       {statusHistory.length > 0 && (
         <VStack gap="space-16">
-          <Heading size="medium">Statushistorikk</Heading>
+          <Heading size="medium" level="2">
+            Statushistorikk
+          </Heading>
           <VStack gap="space-8">
             {statusHistory.map((transition) => (
               <Box key={transition.id} padding="space-12" borderRadius="4" borderColor="neutral-subtle" borderWidth="1">
@@ -2249,7 +2255,9 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
       {/* Deviations section */}
       <VStack gap="space-16">
         <HStack justify="space-between" align="center">
-          <Heading size="medium">Avvik</Heading>
+          <Heading size="medium" level="2">
+            Avvik
+          </Heading>
           <Button
             variant="tertiary"
             size="small"
@@ -2397,7 +2405,9 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
       </Modal>
       {/* Comments section */}
       <VStack gap="space-16">
-        <Heading size="medium">Kommentarer</Heading>
+        <Heading size="medium" level="2">
+          Kommentarer
+        </Heading>
 
         {comments.length === 0 ? (
           <BodyShort textColor="subtle" style={{ fontStyle: 'italic' }}>
