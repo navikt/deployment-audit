@@ -1138,7 +1138,7 @@ export async function getDeploymentsNeedingSlackNotification(limit = 50): Promis
  */
 export async function claimDeploymentForDeployNotify(
   deploymentId: number,
-  channelId: string,
+  _channelId: string,
   messageTs: string,
 ): Promise<DeploymentWithApp | null> {
   const result = await pool.query(

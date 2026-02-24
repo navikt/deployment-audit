@@ -58,17 +58,20 @@ describe('getCompletedPeriods', () => {
       const ref = new Date(2026, 11, 31)
       const periods = getCompletedPeriods('quarterly', ref)
 
-      const q1 = periods.find((p) => p.label === 'Q1 2026')!
-      expect(q1.endDate.getMonth()).toBe(2) // March
-      expect(q1.endDate.getDate()).toBe(31)
+      const q1 = periods.find((p) => p.label === 'Q1 2026')
+      expect(q1).toBeDefined()
+      expect(q1?.endDate.getMonth()).toBe(2) // March
+      expect(q1?.endDate.getDate()).toBe(31)
 
-      const q2 = periods.find((p) => p.label === 'Q2 2026')!
-      expect(q2.endDate.getMonth()).toBe(5) // June
-      expect(q2.endDate.getDate()).toBe(30)
+      const q2 = periods.find((p) => p.label === 'Q2 2026')
+      expect(q2).toBeDefined()
+      expect(q2?.endDate.getMonth()).toBe(5) // June
+      expect(q2?.endDate.getDate()).toBe(30)
 
-      const q3 = periods.find((p) => p.label === 'Q3 2026')!
-      expect(q3.endDate.getMonth()).toBe(8) // September
-      expect(q3.endDate.getDate()).toBe(30)
+      const q3 = periods.find((p) => p.label === 'Q3 2026')
+      expect(q3).toBeDefined()
+      expect(q3?.endDate.getMonth()).toBe(8) // September
+      expect(q3?.endDate.getDate()).toBe(30)
     })
   })
 
@@ -135,18 +138,21 @@ describe('getCompletedPeriods', () => {
       const ref = new Date(2026, 3, 1) // April 1
       const periods = getCompletedPeriods('monthly', ref)
 
-      const feb = periods.find((p) => p.label === 'Februar 2026')!
-      expect(feb.endDate.getDate()).toBe(28) // 2026 is not a leap year
+      const feb = periods.find((p) => p.label === 'Februar 2026')
+      expect(feb).toBeDefined()
+      expect(feb?.endDate.getDate()).toBe(28) // 2026 is not a leap year
 
-      const jan = periods.find((p) => p.label === 'Januar 2026')!
-      expect(jan.endDate.getDate()).toBe(31)
+      const jan = periods.find((p) => p.label === 'Januar 2026')
+      expect(jan).toBeDefined()
+      expect(jan?.endDate.getDate()).toBe(31)
     })
 
     it('handles leap year February', () => {
       const ref = new Date(2028, 3, 1) // April 1, 2028 (leap year)
       const periods = getCompletedPeriods('monthly', ref)
-      const feb = periods.find((p) => p.label === 'Februar 2028')!
-      expect(feb.endDate.getDate()).toBe(29)
+      const feb = periods.find((p) => p.label === 'Februar 2028')
+      expect(feb).toBeDefined()
+      expect(feb?.endDate.getDate()).toBe(29)
     })
 
     it('returns months in descending order', () => {
