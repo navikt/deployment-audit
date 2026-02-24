@@ -24,6 +24,7 @@ import { Form, Link, useSearchParams } from 'react-router'
 import {
   cleanupOldSyncJobs,
   getAllSyncJobs,
+  getSyncJobAppNames,
   getSyncJobStats,
   releaseExpiredLocks,
   type SyncJobStatus,
@@ -50,17 +51,20 @@ export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url)
   const status = url.searchParams.get('status') as SyncJobStatus | null
   const jobType = url.searchParams.get('type') as SyncJobType | null
+  const appName = url.searchParams.get('app') || null
 
-  const [jobs, stats] = await Promise.all([
+  const [jobs, stats, appNames] = await Promise.all([
     getAllSyncJobs({
       status: status || undefined,
       jobType: jobType || undefined,
+      appName: appName || undefined,
       limit: 100,
     }),
     getSyncJobStats(),
+    getSyncJobAppNames(),
   ])
 
-  return { jobs, stats, filters: { status, jobType } }
+  return { jobs, stats, appNames, filters: { status, jobType, appName } }
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -208,7 +212,7 @@ function StatCard({
 }
 
 export default function AdminSyncJobs({ loaderData, actionData }: Route.ComponentProps) {
-  const { jobs, stats, filters } = loaderData
+  const { jobs, stats, appNames, filters } = loaderData
   const [, setSearchParams] = useSearchParams()
 
   function setStatusFilter(status: string | null) {
@@ -295,6 +299,14 @@ export default function AdminSyncJobs({ loaderData, actionData }: Route.Componen
               <option value="github_verify">GitHub Verifisering</option>
               <option value="fetch_verification_data">Hent verifiseringsdata</option>
               <option value="reverify_app">Reverifisering</option>
+            </Select>
+            <Select label="App" name="app" defaultValue={filters.appName || ''} size="small">
+              <option value="">Alle</option>
+              {appNames.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
             </Select>
             <Button type="submit" size="small" variant="secondary" style={{ alignSelf: 'flex-end' }}>
               Filtrer

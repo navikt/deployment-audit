@@ -163,6 +163,7 @@ export interface SyncJobWithApp extends SyncJob {
 export async function getAllSyncJobs(filters?: {
   status?: SyncJobStatus
   jobType?: SyncJobType
+  appName?: string
   limit?: number
 }): Promise<SyncJobWithApp[]> {
   const whereClauses: string[] = []
@@ -178,6 +179,12 @@ export async function getAllSyncJobs(filters?: {
   if (filters?.jobType) {
     whereClauses.push(`sj.job_type = $${paramIndex}`)
     params.push(filters.jobType)
+    paramIndex++
+  }
+
+  if (filters?.appName) {
+    whereClauses.push(`ma.app_name = $${paramIndex}`)
+    params.push(filters.appName)
     paramIndex++
   }
 
@@ -198,6 +205,19 @@ export async function getAllSyncJobs(filters?: {
     [...params, limit],
   )
   return result.rows
+}
+
+/**
+ * Get distinct app names that have sync jobs
+ */
+export async function getSyncJobAppNames(): Promise<string[]> {
+  const result = await pool.query(`
+    SELECT DISTINCT ma.app_name
+    FROM sync_jobs sj
+    JOIN monitored_applications ma ON sj.monitored_app_id = ma.id
+    ORDER BY ma.app_name
+  `)
+  return result.rows.map((row: { app_name: string }) => row.app_name)
 }
 
 /**
