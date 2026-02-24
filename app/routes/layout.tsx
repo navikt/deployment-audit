@@ -179,11 +179,14 @@ export default function Layout({ loaderData }: Route.ComponentProps) {
         )}
       </InternalHeader>
 
-      <Breadcrumbs />
-
-      <div className={styles.layoutMain}>
-        <Outlet />
-      </div>
+      <Page>
+        <VStack gap="space-32">
+          <Page.Block as="main" width="2xl" gutters>
+            <Breadcrumbs />
+            <Outlet />
+          </Page.Block>
+        </VStack>
+      </Page>
     </div>
   )
 }
@@ -203,20 +206,18 @@ export function ErrorBoundary() {
 
   return (
     <div className={styles.layoutContainer}>
-      <div className={styles.layoutMain}>
-        <Page>
-          <Page.Block as="main" width="xl" gutters>
-            <VStack gap="space-16">
-              <Alert variant="error">
-                <VStack gap="space-8">
-                  <strong>{title}</strong>
-                  <span>{message}</span>
-                </VStack>
-              </Alert>
-            </VStack>
-          </Page.Block>
-        </Page>
-      </div>
+      <Page>
+        <Page.Block as="main" width="2xl" gutters>
+          <VStack gap="space-16">
+            <Alert variant="error">
+              <VStack gap="space-8">
+                <strong>{title}</strong>
+                <span>{message}</span>
+              </VStack>
+            </Alert>
+          </VStack>
+        </Page.Block>
+      </Page>
     </div>
   )
 }
