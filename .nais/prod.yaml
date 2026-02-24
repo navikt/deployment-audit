@@ -88,6 +88,7 @@ spec:
     outbound:
       external:
         - host: api.github.com
+        - host: pipelines.actions.githubusercontent.com
         - host: console.nav.cloud.nais.io
         - host: slack.com
         - host: wss-primary.slack.com
