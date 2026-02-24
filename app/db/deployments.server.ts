@@ -1106,6 +1106,8 @@ export async function getDeploymentsNeedingSlackNotification(limit = 50): Promis
      WHERE d.slack_message_ts IS NULL
        AND ma.slack_notifications_enabled = true
        AND ma.slack_channel_id IS NOT NULL
+       AND ma.slack_notifications_enabled_at IS NOT NULL
+       AND d.created_at >= ma.slack_notifications_enabled_at
        AND d.created_at > NOW() - INTERVAL '7 days'
      ORDER BY d.created_at DESC
      LIMIT $1`,
@@ -1155,6 +1157,8 @@ export async function getDeploymentsNeedingDeployNotify(limit = 50): Promise<Dep
      WHERE d.slack_deploy_message_ts IS NULL
        AND ma.slack_deploy_notify_enabled = true
        AND ma.slack_deploy_channel_id IS NOT NULL
+       AND ma.slack_deploy_notify_enabled_at IS NOT NULL
+       AND d.created_at >= ma.slack_deploy_notify_enabled_at
        AND d.four_eyes_status NOT IN ('pending', 'unknown')
        AND d.created_at > NOW() - INTERVAL '7 days'
      ORDER BY d.created_at DESC

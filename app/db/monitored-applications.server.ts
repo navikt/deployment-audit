@@ -15,8 +15,10 @@ export interface MonitoredApplication {
   reminder_time: string | null
   reminder_days: string[] | null
   reminder_last_sent_at: Date | null
+  slack_notifications_enabled_at: Date | null
   slack_deploy_channel_id: string | null
   slack_deploy_notify_enabled: boolean
+  slack_deploy_notify_enabled_at: Date | null
   created_at: Date
   updated_at: Date
 }
@@ -150,6 +152,11 @@ export async function updateMonitoredApplication(
   if (data.slack_notifications_enabled !== undefined) {
     updates.push(`slack_notifications_enabled = $${paramCount++}`)
     values.push(data.slack_notifications_enabled)
+    if (data.slack_notifications_enabled) {
+      updates.push(`slack_notifications_enabled_at = COALESCE(slack_notifications_enabled_at, CURRENT_TIMESTAMP)`)
+    } else {
+      updates.push(`slack_notifications_enabled_at = NULL`)
+    }
   }
 
   if (data.slack_deploy_channel_id !== undefined) {
@@ -160,6 +167,11 @@ export async function updateMonitoredApplication(
   if (data.slack_deploy_notify_enabled !== undefined) {
     updates.push(`slack_deploy_notify_enabled = $${paramCount++}`)
     values.push(data.slack_deploy_notify_enabled)
+    if (data.slack_deploy_notify_enabled) {
+      updates.push(`slack_deploy_notify_enabled_at = COALESCE(slack_deploy_notify_enabled_at, CURRENT_TIMESTAMP)`)
+    } else {
+      updates.push(`slack_deploy_notify_enabled_at = NULL`)
+    }
   }
 
   if (data.reminder_enabled !== undefined) {
