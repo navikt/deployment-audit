@@ -98,7 +98,7 @@ export default function Layout({ loaderData }: Route.ComponentProps) {
         </ActionMenu>
 
         <InternalHeader.Title as={Link} to="/">
-          Pensjon Deployment Audit
+          Deployment Audit
         </InternalHeader.Title>
 
         {/* Global search dialog */}

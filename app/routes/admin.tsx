@@ -13,7 +13,7 @@ import { requireAdmin } from '~/lib/auth.server'
 import type { Route } from './+types/admin'
 
 export function meta(_args: Route.MetaArgs) {
-  return [{ title: 'Admin - Pensjon Deployment Audit' }]
+  return [{ title: 'Admin - Deployment Audit' }]
 }
 
 export async function loader({ request }: Route.LoaderArgs) {

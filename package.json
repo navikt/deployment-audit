@@ -1,5 +1,5 @@
 {
-  "name": "pensjon-deployment-audit",
+  "name": "deployment-audit",
   "private": true,
   "type": "module",
   "scripts": {

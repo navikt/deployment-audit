@@ -9,7 +9,7 @@ import type { loader as layoutLoader } from './layout'
 
 export function meta(_args: Route.MetaArgs) {
   return [
-    { title: 'Pensjon Deployment Audit' },
+    { title: 'Deployment Audit' },
     { name: 'description', content: 'Audit Nais deployments for godkjenningsstatus' },
   ]
 }

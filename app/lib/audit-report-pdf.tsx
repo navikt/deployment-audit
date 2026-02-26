@@ -419,9 +419,7 @@ function AuditReportPdfDocument(props: AuditReportPdfProps) {
         </View>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            Generert: {formatDateTime(generatedAt)} | Pensjon Deployment Audit System
-          </Text>
+          <Text style={styles.footerText}>Generert: {formatDateTime(generatedAt)} | Deployment Audit System</Text>
           <Text style={styles.hashText}>SHA256: {contentHash}</Text>
         </View>
         <Text
@@ -548,7 +546,7 @@ function AuditReportPdfDocument(props: AuditReportPdfProps) {
           <Text style={styles.sectionTitle}>Verifisering</Text>
           <View style={styles.methodologyBox}>
             <Text style={styles.methodologyText}>
-              Dette dokumentet er generert automatisk av Pensjon Deployment Audit System.
+              Dette dokumentet er generert automatisk av Deployment Audit System.
             </Text>
             <Text style={styles.methodologyText}>Datagrunnlag hentet fra:</Text>
             <Text style={styles.methodologyText}>• Nais Console API (deployments)</Text>

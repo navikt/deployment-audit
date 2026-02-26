@@ -815,7 +815,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 
 export function meta({ data }: Route.MetaArgs) {
   const deployment = data?.deployment
-  return [{ title: deployment ? `Deployment #${deployment.id} - Pensjon Deployment Audit` : 'Deployment' }]
+  return [{ title: deployment ? `Deployment #${deployment.id} - Deployment Audit` : 'Deployment' }]
 }
 
 function CheckLogViewer({ owner, repo, jobId }: { owner: string; repo: string; jobId: number }) {

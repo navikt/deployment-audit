@@ -41,7 +41,7 @@ const JOB_TYPE_LABELS: Record<string, string> = {
 }
 
 export function meta(_args: Route.MetaArgs) {
-  return [{ title: 'Sync Jobs - Admin - Pensjon Deployment Audit' }]
+  return [{ title: 'Sync Jobs - Admin - Deployment Audit' }]
 }
 
 export async function loader({ request }: Route.LoaderArgs) {

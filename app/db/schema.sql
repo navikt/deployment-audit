@@ -1,4 +1,4 @@
--- Database schema for Pensjon Deployment Audit Application
+-- Database schema for Deployment Audit Application
 -- Application-centric model with repository validation
 
 -- Monitored applications (primary entity)

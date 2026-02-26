@@ -65,7 +65,7 @@ function AppsAddPage({
               label="Søk etter team eller applikasjon"
               description={searchQuery ? `Viser ${totalResults} treff fra ${totalTeams} team` : undefined}
               defaultValue={searchQuery}
-              placeholder="F.eks. pensjon, pen, rocket..."
+              placeholder="F.eks. team-navn, app-navn..."
             />
           </Box>
 

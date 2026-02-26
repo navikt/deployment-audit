@@ -9,7 +9,7 @@ import { fetchAllTeamsAndApplications, getApplicationInfo } from '../lib/nais.se
 import type { Route } from './+types/apps.add'
 
 export function meta(_args: Route.MetaArgs) {
-  return [{ title: 'Legg til applikasjon - Pensjon Deployment Audit' }]
+  return [{ title: 'Legg til applikasjon - Deployment Audit' }]
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -160,7 +160,7 @@ export default function AppsDiscover({ loaderData, actionData }: Route.Component
               description={searchQuery ? `Viser ${totalResults} treff fra ${totalTeams} team` : undefined}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="F.eks. pensjon, pen, rocket..."
+              placeholder="F.eks. team-navn, app-navn..."
             />
           </Box>
 

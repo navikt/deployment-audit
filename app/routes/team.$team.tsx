@@ -51,7 +51,7 @@ export async function loader({ params: { team } }: Route.LoaderArgs) {
 }
 
 export function meta({ data }: Route.MetaArgs) {
-  return [{ title: `Team ${data?.team ?? 'Team'} - Pensjon Deployment Audit` }]
+  return [{ title: `Team ${data?.team ?? 'Team'} - Deployment Audit` }]
 }
 
 export default function TeamPage({ loaderData: { team, appsByEnv } }: Route.ComponentProps) {

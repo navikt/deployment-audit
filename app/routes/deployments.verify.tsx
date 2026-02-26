@@ -9,7 +9,7 @@ import { verifyDeploymentsWithLock } from '../lib/sync.server'
 import type { Route } from './+types/deployments.verify'
 
 export function meta(_args: Route.MetaArgs) {
-  return [{ title: 'Verifiser deployments - Pensjon Deployment Audit' }]
+  return [{ title: 'Verifiser deployments - Deployment Audit' }]
 }
 
 export async function loader({ request }: Route.LoaderArgs) {

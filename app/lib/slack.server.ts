@@ -385,7 +385,7 @@ function registerActionHandlers(app: App): void {
  * Uses atomic database claim to prevent duplicate notifications across pods.
  *
  * @param deployment - Deployment with app info (must include app_slack_channel_id)
- * @param baseUrl - Base URL for links (e.g., https://pensjon-deployment-audit.ansatt.nav.no)
+ * @param baseUrl - Base URL for links (e.g., https://deployment-audit.ansatt.nav.no)
  * @returns true if notification was sent, false if skipped (already sent or not configured)
  */
 export async function notifyDeploymentIfNeeded(

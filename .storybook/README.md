@@ -1,4 +1,4 @@
-# Storybook for pensjon-deployment-audit
+# Storybook for deployment-audit
 
 ## Motivasjon
 
