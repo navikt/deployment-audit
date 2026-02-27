@@ -16,6 +16,44 @@ interface CheckToCache {
  * Limits to deployments from the last 7 days to stay within API quotas.
  */
 async function getUncachedChecks(monitoredAppId: number): Promise<CheckToCache[]> {
+  // First check how many deployments have checks data at all
+  const statsResult = await pool.query<{
+    total_deployments: string
+    with_pr_data: string
+    with_checks: string
+    with_repo: string
+  }>(
+    `
+    SELECT 
+      COUNT(*) as total_deployments,
+      COUNT(CASE WHEN d.github_pr_data IS NOT NULL THEN 1 END) as with_pr_data,
+      COUNT(CASE WHEN d.github_pr_data->'checks' IS NOT NULL THEN 1 END) as with_checks,
+      COUNT(CASE WHEN ar.full_name IS NOT NULL THEN 1 END) as with_repo
+    FROM deployments d
+    JOIN monitored_applications ma ON d.monitored_app_id = ma.id
+    LEFT JOIN application_repositories ar ON ar.monitored_app_id = ma.id
+    WHERE d.monitored_app_id = $1
+      AND d.created_at >= NOW() - INTERVAL '7 days'
+      AND ma.is_active = true
+    `,
+    [monitoredAppId],
+  )
+
+  if (statsResult.rows.length > 0) {
+    const s = statsResult.rows[0]
+    const total = parseInt(s.total_deployments, 10)
+    if (total > 0) {
+      const withPrData = parseInt(s.with_pr_data, 10)
+      const withChecks = parseInt(s.with_checks, 10)
+      const withRepo = parseInt(s.with_repo, 10)
+      if (withChecks === 0) {
+        logger.debug(
+          `[cacheCheckLogs] App ${monitoredAppId}: ${total} deployments siste 7 dager, ${withPrData} med pr_data, ${withChecks} med checks, ${withRepo} med repo-kobling`,
+        )
+      }
+    }
+  }
+
   const result = await pool.query<{
     id: number
     github_pr_data: {
@@ -47,15 +85,32 @@ async function getUncachedChecks(monitoredAppId: number): Promise<CheckToCache[]
   )
 
   const checks: CheckToCache[] = []
+  let skippedNoRepo = 0
+  let skippedNoId = 0
+  let skippedAlreadyCached = 0
+  let skippedNotCompleted = 0
+
   for (const row of result.rows) {
-    if (!row.github_pr_data?.checks || !row.repository_full_name) continue
+    if (!row.github_pr_data?.checks || !row.repository_full_name) {
+      if (!row.repository_full_name) skippedNoRepo++
+      continue
+    }
     const [owner, repo] = row.repository_full_name.split('/')
     if (!owner || !repo) continue
 
     for (const check of row.github_pr_data.checks) {
-      if (!check.id) continue
-      if (check.log_cached) continue
-      if (check.status !== 'completed') continue
+      if (!check.id) {
+        skippedNoId++
+        continue
+      }
+      if (check.log_cached) {
+        skippedAlreadyCached++
+        continue
+      }
+      if (check.status !== 'completed') {
+        skippedNotCompleted++
+        continue
+      }
 
       checks.push({
         deployment_id: row.id,
@@ -67,6 +122,13 @@ async function getUncachedChecks(monitoredAppId: number): Promise<CheckToCache[]
     }
   }
 
+  if (result.rows.length > 0 && checks.length === 0) {
+    logger.debug(
+      `[cacheCheckLogs] App ${monitoredAppId}: ${result.rows.length} deployments med checks, men ingen å cache. ` +
+        `Hoppet over: ${skippedNoRepo} uten repo, ${skippedNoId} uten id, ${skippedAlreadyCached} allerede cachet, ${skippedNotCompleted} ikke fullført`,
+    )
+  }
+
   return checks
 }
 
@@ -75,7 +137,10 @@ async function getUncachedChecks(monitoredAppId: number): Promise<CheckToCache[]
  * Returns the number of logs successfully cached.
  */
 export async function cacheCheckLogs(monitoredAppId: number): Promise<number> {
-  if (!isGcsConfigured()) return 0
+  if (!isGcsConfigured()) {
+    logger.debug(`[cacheCheckLogs] GCS ikke konfigurert, hopper over app ${monitoredAppId}`)
+    return 0
+  }
 
   const checks = await getUncachedChecks(monitoredAppId)
   if (checks.length === 0) return 0
