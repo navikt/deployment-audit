@@ -28,7 +28,6 @@ import {
   getSyncJobAppNames,
   getSyncJobStats,
   releaseExpiredLocks,
-  SYNC_JOB_TYPE_LABELS,
   type SyncJobStatus,
   type SyncJobType,
 } from '~/db/sync-jobs.server'
