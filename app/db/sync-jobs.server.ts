@@ -1,40 +1,19 @@
 import { logger } from '~/lib/logger.server'
 import { pool } from './connection.server'
 
-// =============================================================================
-// Sync Job Types and Statuses
-// =============================================================================
+export {
+  SYNC_JOB_STATUS_LABELS,
+  SYNC_JOB_STATUSES,
+  SYNC_JOB_TYPE_LABELS,
+  SYNC_JOB_TYPES,
+  type SyncJobStatus,
+  type SyncJobType,
+} from './sync-job-types'
 
-export const SYNC_JOB_TYPES = [
-  'nais_sync',
-  'github_verify',
-  'fetch_verification_data',
-  'reverify_app',
-  'cache_check_logs',
-] as const
-export type SyncJobType = (typeof SYNC_JOB_TYPES)[number]
-
-export const SYNC_JOB_TYPE_LABELS: Record<SyncJobType, string> = {
-  nais_sync: 'NAIS Sync',
-  github_verify: 'GitHub Verifisering',
-  fetch_verification_data: 'Hent verifiseringsdata',
-  reverify_app: 'Reverifisering',
-  cache_check_logs: 'Cache sjekk-logger',
-}
-
-export const SYNC_JOB_STATUSES = ['pending', 'running', 'completed', 'failed', 'cancelled'] as const
-export type SyncJobStatus = (typeof SYNC_JOB_STATUSES)[number]
+import type { SyncJobStatus, SyncJobType } from './sync-job-types'
 
 /** Interval between sync cycles (used by both scheduler and cooldown check) */
 export const SYNC_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
-
-export const SYNC_JOB_STATUS_LABELS: Record<SyncJobStatus, string> = {
-  pending: 'Venter',
-  running: 'Kjører',
-  completed: 'Fullført',
-  failed: 'Feilet',
-  cancelled: 'Avbrutt',
-}
 
 export interface SyncJob {
   id: number

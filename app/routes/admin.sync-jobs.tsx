@@ -21,6 +21,7 @@ import {
   VStack,
 } from '@navikt/ds-react'
 import { Form, Link, useSearchParams } from 'react-router'
+import { SYNC_JOB_TYPE_LABELS } from '~/db/sync-job-types'
 import {
   cleanupOldSyncJobs,
   getAllSyncJobs,
