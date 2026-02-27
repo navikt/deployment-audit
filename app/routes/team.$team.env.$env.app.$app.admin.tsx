@@ -654,7 +654,7 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
                     loading={isSubmitting && navigation.formData?.get('action') === 'check_readiness'}
                     disabled={!selectedPeriod || !!pendingJobId}
                   >
-                    Sjekk beredskap
+                    Kontroller grunnlag
                   </Button>
 
                   <Button
