@@ -1547,13 +1547,17 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
             <VStack gap="space-4">
               <Detail>PR Opprettet av</Detail>
               <BodyShort>
-                <a
-                  href={`https://github.com/${deployment.github_pr_data.creator.username}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {getUserDisplay(deployment.github_pr_data.creator.username)}
-                </a>
+                {deployment.github_pr_data.creator?.username ? (
+                  <a
+                    href={`https://github.com/${deployment.github_pr_data.creator.username}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {getUserDisplay(deployment.github_pr_data.creator.username)}
+                  </a>
+                ) : (
+                  'ukjent'
+                )}
               </BodyShort>
             </VStack>
 
@@ -1940,10 +1944,10 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                 <VStack gap="space-12">
                   {deployment.github_pr_data.comments.map((comment) => (
                     <HStack key={comment.id} gap="space-12" align="start">
-                      {comment.user.avatar_url && (
+                      {comment.user?.avatar_url && (
                         <img
                           src={comment.user.avatar_url}
-                          alt={getUserDisplay(comment.user.username) ?? ''}
+                          alt={getUserDisplay(comment.user?.username) ?? ''}
                           style={{
                             width: '32px',
                             height: '32px',
@@ -1955,11 +1959,11 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                       <VStack gap="space-4" style={{ flex: 1 }}>
                         <HStack gap="space-8" align="baseline" wrap>
                           <a
-                            href={`https://github.com/${comment.user.username}`}
+                            href={`https://github.com/${comment.user?.username ?? ''}`}
                             target="_blank"
                             rel="noopener noreferrer"
                           >
-                            {getUserDisplay(comment.user.username)}
+                            {getUserDisplay(comment.user?.username) ?? 'ukjent'}
                           </a>
                           <span style={{ color: 'var(--ax-text-neutral-subtle)' }}>
                             {new Date(comment.created_at).toLocaleString('no-NO', {

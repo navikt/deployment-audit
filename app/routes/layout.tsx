@@ -3,7 +3,10 @@ import {
   ActionMenu,
   Alert,
   BodyShort,
+  Box,
+  CopyButton,
   Detail,
+  Heading,
   Hide,
   HStack,
   InternalHeader,
@@ -214,30 +217,72 @@ export default function Layout({ loaderData }: Route.ComponentProps) {
 
 export function ErrorBoundary() {
   const error = useRouteError()
+  const location = useLocation()
 
   let title = 'Noe gikk galt'
   let message = 'En uventet feil oppstod.'
+  let stack: string | undefined
+  let statusCode: number | undefined
 
   if (isRouteErrorResponse(error)) {
+    statusCode = error.status
     title = error.status === 404 ? 'Siden ble ikke funnet' : `Feil ${error.status}`
     message = error.status === 404 ? 'Siden du leter etter finnes ikke.' : error.statusText || message
   } else if (error instanceof Error) {
     message = error.message
+    stack = error.stack
   }
+
+  const fullError = [
+    `URL: ${location.pathname}`,
+    `Tidspunkt: ${new Date().toISOString()}`,
+    statusCode ? `Status: ${statusCode}` : null,
+    `Feil: ${message}`,
+    stack ? `\nStack trace:\n${stack}` : null,
+  ]
+    .filter(Boolean)
+    .join('\n')
 
   return (
     <div className={styles.layoutContainer}>
+      <InternalHeader>
+        <InternalHeader.Title as={Link} to="/">
+          Deployment Audit
+        </InternalHeader.Title>
+      </InternalHeader>
+
       <Page>
-        <Page.Block as="main" width="2xl" gutters>
-          <VStack gap="space-16">
-            <Alert variant="error">
-              <VStack gap="space-8">
-                <strong>{title}</strong>
-                <span>{message}</span>
-              </VStack>
-            </Alert>
-          </VStack>
-        </Page.Block>
+        <VStack gap="space-32">
+          <Breadcrumbs />
+          <Page.Block as="main" width="2xl" gutters>
+            <VStack gap="space-24">
+              <Alert variant="error">
+                <VStack gap="space-8">
+                  <Heading size="small" level="1">
+                    {title}
+                  </Heading>
+                  <BodyShort>{message}</BodyShort>
+                </VStack>
+              </Alert>
+
+              {stack && (
+                <VStack gap="space-8">
+                  <HStack gap="space-8" align="center">
+                    <Heading size="xsmall" level="2">
+                      Stack trace
+                    </Heading>
+                    <CopyButton copyText={fullError} size="small" text="Kopier" activeText="Kopiert!" />
+                  </HStack>
+                  <Box background="neutral-moderate" padding="space-16" borderRadius="8">
+                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.8rem' }}>
+                      <code>{stack}</code>
+                    </pre>
+                  </Box>
+                </VStack>
+              )}
+            </VStack>
+          </Page.Block>
+        </VStack>
       </Page>
     </div>
   )
