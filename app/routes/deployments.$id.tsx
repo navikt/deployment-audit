@@ -1891,7 +1891,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                 <VStack gap="space-12">
                   {deployment.github_pr_data.commits.map((commit) => (
                     <HStack key={commit.sha} gap="space-12" align="start">
-                      {commit.author.avatar_url && (
+                      {commit.author?.avatar_url && (
                         <img
                           src={commit.author.avatar_url}
                           alt={getUserDisplay(commit.author.username) ?? ''}
@@ -1914,7 +1914,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                             {commit.sha.substring(0, 7)}
                           </a>
                           <span style={{ color: 'var(--ax-text-neutral-subtle)' }}>
-                            {getUserDisplay(commit.author.username)}
+                            {getUserDisplay(commit.author?.username)}
                           </span>
                           <span style={{ color: 'var(--ax-text-neutral-subtle)' }}>
                             {new Date(commit.date).toLocaleString('no-NO', {

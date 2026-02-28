@@ -266,7 +266,7 @@ function DebugResultView({ result }: { result: DebugVerificationResult }) {
               <>
                 <DataRow label="PR nummer" value={`#${fetchedData.deployedPr.number}`} />
                 <DataRow label="Tittel" value={fetchedData.deployedPr.metadata.title} />
-                <DataRow label="Forfatter" value={fetchedData.deployedPr.metadata.author.username} />
+                <DataRow label="Forfatter" value={fetchedData.deployedPr.metadata.author?.username || 'ukjent'} />
                 <DataRow label="Merged by" value={fetchedData.deployedPr.metadata.mergedBy?.username || 'null'} />
                 <DataRow label="Reviews" value={fetchedData.deployedPr.reviews.length.toString()} />
                 <DataRow label="Commits" value={fetchedData.deployedPr.commits.length.toString()} />
