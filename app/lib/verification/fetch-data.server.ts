@@ -744,34 +744,3 @@ export async function fetchVerificationDataForAllDeployments(
 
   return result
 }
-
-/**
- * Check if we have current schema version data for a deployment
- */
-async function hasCurrentSchemaData(
-  owner: string,
-  repo: string,
-  deploymentId: number,
-  commitSha: string,
-  environmentName: string,
-  auditStartYear: number | null,
-): Promise<boolean> {
-  // Get previous deployment to check compare data
-  const previousDeployment = await getPreviousDeployment(deploymentId, owner, repo, environmentName, auditStartYear)
-
-  // Check if we have PR data for this commit
-  const prSnapshot = await getLatestCommitSnapshot(owner, repo, commitSha, 'prs')
-  if (!prSnapshot) {
-    return false
-  }
-
-  // If there's a previous deployment, check if we have compare data
-  if (previousDeployment) {
-    const compareSnapshot = await getLatestCompareSnapshot(owner, repo, previousDeployment.commitSha, commitSha)
-    if (!compareSnapshot) {
-      return false
-    }
-  }
-
-  return true
-}
