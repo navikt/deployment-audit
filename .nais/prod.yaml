@@ -67,6 +67,15 @@ spec:
           age: 365
           withState: ANY
 
+  observability:
+    autoInstrumentation:
+      enabled: true
+      runtime: nodejs
+    logging:
+      destinations:
+        - id: elastic
+        - id: loki
+
   env:
     - name: NODE_ENV
       value: production
