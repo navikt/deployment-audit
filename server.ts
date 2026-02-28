@@ -58,6 +58,17 @@ app.use(accessLogMiddleware)
 const build = await import(url.pathToFileURL(buildPath).href)
 app.all('*', createRequestHandler({ build, mode: process.env.NODE_ENV }))
 
+// Express error handler — structured logging with stack_trace
+app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  accessLogger.error('Unhandled server error', {
+    error: err.message,
+    stack_trace: err.stack,
+  })
+  if (!res.headersSent) {
+    res.status(500).send('Internal Server Error')
+  }
+})
+
 const port = Number(process.env.PORT) || 3000
 const host = process.env.HOST || '0.0.0.0'
 
