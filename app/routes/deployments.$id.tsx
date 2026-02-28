@@ -66,10 +66,9 @@ import {
 import { lookupLegacyByCommit, lookupLegacyByPR } from '~/lib/github.server'
 import { logger } from '~/lib/logger.server'
 import { notifyDeploymentIfNeeded, sendDeviationNotification } from '~/lib/slack.server'
-import { verifyDeploymentFourEyes } from '~/lib/sync.server'
 import { getDateRangeForPeriod, type TimePeriod } from '~/lib/time-periods'
 import { getUserDisplayName, serializeUserMappings } from '~/lib/user-display'
-import { isVerificationDebugMode } from '~/lib/verification'
+import { isVerificationDebugMode, runVerification } from '~/lib/verification'
 import type { Route } from './+types/deployments.$id'
 
 export async function loader({ params, request }: Route.LoaderArgs) {
@@ -521,15 +520,14 @@ export async function action({ request, params }: Route.ActionArgs) {
       if (updatedDeployment && commitSha) {
         logger.info(`🔄 Running full GitHub verification for legacy deployment ${deploymentId}`)
         const repository = `${updatedDeployment.detected_github_owner}/${updatedDeployment.detected_github_repo_name}`
-        await verifyDeploymentFourEyes(
-          deploymentId,
+        await runVerification(deploymentId, {
           commitSha,
           repository,
-          updatedDeployment.environment_name,
-          undefined,
-          updatedDeployment.default_branch || 'main',
-          updatedDeployment.monitored_app_id,
-        )
+          environmentName: updatedDeployment.environment_name,
+          baseBranch: updatedDeployment.default_branch || 'main',
+          monitoredAppId: updatedDeployment.monitored_app_id,
+          forceRefresh: true,
+        })
 
         // Reload deployment to get the updated PR data from verification
         updatedDeployment = await getDeploymentById(deploymentId)
@@ -722,18 +720,16 @@ export async function action({ request, params }: Route.ActionArgs) {
     try {
       logger.info(`🔍 Manually verifying deployment ${deployment.nais_deployment_id}...`)
 
-      const success = await verifyDeploymentFourEyes(
-        deployment.id,
-        deployment.commit_sha,
-        `${deployment.detected_github_owner}/${deployment.detected_github_repo_name}`,
-        deployment.environment_name,
-        deployment.trigger_url,
-        deployment.default_branch || 'main',
-        deployment.monitored_app_id,
-        true, // forceRecheck: bypass stale DB cache for manual re-verification
-      )
+      const result = await runVerification(deployment.id, {
+        commitSha: deployment.commit_sha,
+        repository: `${deployment.detected_github_owner}/${deployment.detected_github_repo_name}`,
+        environmentName: deployment.environment_name,
+        baseBranch: deployment.default_branch || 'main',
+        monitoredAppId: deployment.monitored_app_id,
+        forceRefresh: true, // Fetch fresh data from GitHub for manual re-verification
+      })
 
-      if (success) {
+      if (result.status !== 'error') {
         return { success: 'Four-eyes status verifisert og oppdatert' }
       } else {
         return { error: 'Verifisering feilet - se logger for detaljer' }

@@ -16,7 +16,7 @@
  * Current schema version for GitHub data snapshots.
  * Increment this when the data structure changes and re-fetching is needed.
  */
-export const CURRENT_SCHEMA_VERSION = 1
+export const CURRENT_SCHEMA_VERSION = 2
 
 // =============================================================================
 // Exhaustive Check Helper
@@ -251,6 +251,40 @@ export interface PrMetadata {
   changedFiles: number
   additions: number
   deletions: number
+  // Extended fields (schema version 2+)
+  commentsCount?: number
+  reviewCommentsCount?: number
+  locked?: boolean
+  mergeable?: boolean | null
+  mergeableState?: string | null
+  rebaseable?: boolean | null
+  maintainerCanModify?: boolean
+  autoMerge?: {
+    enabledBy: string
+    mergeMethod: string
+  } | null
+  merger?: {
+    username: string
+    avatarUrl?: string
+  } | null
+  assignees?: Array<{
+    username: string
+    avatarUrl?: string
+  }>
+  requestedReviewers?: Array<{
+    username: string
+    avatarUrl?: string
+  }>
+  requestedTeams?: Array<{
+    name: string
+    slug: string
+  }>
+  milestone?: {
+    title: string
+    number: number
+    state: string
+  } | null
+  checksPassed?: boolean | null
 }
 
 /**

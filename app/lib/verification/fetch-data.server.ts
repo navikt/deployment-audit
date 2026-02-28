@@ -28,6 +28,8 @@ import {
   type CompareData,
   CURRENT_SCHEMA_VERSION,
   type ImplicitApprovalSettings,
+  type PrChecks,
+  type PrComment,
   type PrCommit,
   type PrMetadata,
   type PrReview,
@@ -222,24 +224,31 @@ async function fetchDeployedPrData(
       const reviews = cachedData.get('reviews')?.data as PrReview[]
       const commits = cachedData.get('commits')?.data as PrCommit[]
 
-      return {
-        number: prNumber,
-        url: `https://github.com/${owner}/${repo}/pull/${prNumber}`,
-        metadata,
-        reviews,
-        commits,
+      // If checks/comments are missing (schema v1 data), fetch fresh data
+      if (!cachedData.has('checks') || !cachedData.has('comments')) {
+        // Fall through to GitHub fetch to get complete data
+      } else {
+        return {
+          number: prNumber,
+          url: `https://github.com/${owner}/${repo}/pull/${prNumber}`,
+          metadata,
+          reviews,
+          commits,
+        }
       }
     }
   }
 
   // Fetch from GitHub
-  const { metadata, reviews, commits } = await fetchPrFromGitHub(owner, repo, prNumber)
+  const { metadata, reviews, commits, checks, comments } = await fetchPrFromGitHub(owner, repo, prNumber)
 
   // Store to database
   await savePrSnapshotsBatch(owner, repo, prNumber, [
     { dataType: 'metadata', data: metadata },
     { dataType: 'reviews', data: reviews },
     { dataType: 'commits', data: commits },
+    { dataType: 'checks', data: checks },
+    { dataType: 'comments', data: comments },
   ])
 
   return {
@@ -298,6 +307,8 @@ async function fetchPrFromGitHub(
   metadata: PrMetadata
   reviews: PrReview[]
   commits: PrCommit[]
+  checks: PrChecks
+  comments: PrComment[]
 }> {
   const prData = await getDetailedPullRequestInfo(owner, repo, prNumber)
 
@@ -337,6 +348,40 @@ async function fetchPrFromGitHub(
     changedFiles: prData.changed_files,
     additions: prData.additions,
     deletions: prData.deletions,
+    // Extended fields (schema version 2+)
+    commentsCount: prData.comments_count,
+    reviewCommentsCount: prData.review_comments_count,
+    locked: prData.locked,
+    mergeable: prData.mergeable,
+    mergeableState: prData.mergeable_state,
+    rebaseable: prData.rebaseable,
+    maintainerCanModify: prData.maintainer_can_modify,
+    autoMerge: prData.auto_merge
+      ? {
+          enabledBy: prData.auto_merge.enabled_by,
+          mergeMethod: prData.auto_merge.merge_method,
+        }
+      : null,
+    merger: prData.merger
+      ? {
+          username: prData.merger.username,
+          avatarUrl: prData.merger.avatar_url,
+        }
+      : null,
+    assignees: prData.assignees.map((a) => ({
+      username: a.username,
+      avatarUrl: a.avatar_url,
+    })),
+    requestedReviewers: prData.requested_reviewers.map((r) => ({
+      username: r.username,
+      avatarUrl: r.avatar_url,
+    })),
+    requestedTeams: prData.requested_teams.map((t) => ({
+      name: t.name,
+      slug: t.slug,
+    })),
+    milestone: prData.milestone,
+    checksPassed: prData.checks_passed,
   }
 
   const reviews: PrReview[] = prData.reviewers.map((r, index) => ({
@@ -357,7 +402,42 @@ async function fetchPrFromGitHub(
     parentShas: [],
   }))
 
-  return { metadata, reviews, commits }
+  const checks: PrChecks = {
+    conclusion: prData.checks_passed === true ? 'success' : prData.checks_passed === false ? 'failure' : null,
+    checkRuns: prData.checks.map((c) => ({
+      id: c.id ?? 0,
+      name: c.name,
+      status: c.status as 'queued' | 'in_progress' | 'completed',
+      conclusion: c.conclusion,
+      startedAt: c.started_at,
+      completedAt: c.completed_at,
+      htmlUrl: c.html_url,
+      headSha: c.head_sha,
+      detailsUrl: c.details_url,
+      externalId: c.external_id,
+      checkSuiteId: c.check_suite_id,
+      app: c.app ? { name: c.app.name, slug: c.app.slug } : null,
+      output: c.output
+        ? {
+            title: c.output.title,
+            summary: c.output.summary,
+            text: c.output.text,
+            annotationsCount: c.output.annotations_count,
+          }
+        : null,
+    })),
+    statuses: [],
+  }
+
+  const comments: PrComment[] = prData.comments.map((c) => ({
+    id: c.id,
+    username: c.user.username,
+    body: c.body,
+    createdAt: c.created_at,
+    updatedAt: c.created_at,
+  }))
+
+  return { metadata, reviews, commits, checks, comments }
 }
 
 // =============================================================================
@@ -459,13 +539,21 @@ export async function buildCommitsBetweenFromCache(
     if (prNumber && !prData && !cacheOnly) {
       // Fetch from GitHub (only if not cache-only mode)
       try {
-        const { metadata, reviews, commits: prCommits } = await fetchPrFromGitHub(owner, repo, prNumber)
+        const {
+          metadata,
+          reviews,
+          commits: prCommits,
+          checks,
+          comments,
+        } = await fetchPrFromGitHub(owner, repo, prNumber)
 
         // Store to database
         await savePrSnapshotsBatch(owner, repo, prNumber, [
           { dataType: 'metadata', data: metadata },
           { dataType: 'reviews', data: reviews },
           { dataType: 'commits', data: prCommits },
+          { dataType: 'checks', data: checks },
+          { dataType: 'comments', data: comments },
         ])
 
         prData = {
@@ -511,14 +599,14 @@ export async function refreshPrData(
   prNumber: number,
   dataTypes?: ('metadata' | 'reviews' | 'commits' | 'comments' | 'checks')[],
 ): Promise<void> {
-  const typesToFetch = dataTypes ?? ['metadata', 'reviews', 'commits']
+  const typesToFetch = dataTypes ?? ['metadata', 'reviews', 'commits', 'checks', 'comments']
 
   try {
     // Fetch from GitHub
-    const { metadata, reviews, commits } = await fetchPrFromGitHub(owner, repo, prNumber)
+    const { metadata, reviews, commits, checks, comments } = await fetchPrFromGitHub(owner, repo, prNumber)
 
     // Store to database
-    const snapshots: Array<{ dataType: 'metadata' | 'reviews' | 'commits'; data: unknown }> = []
+    const snapshots: Array<{ dataType: 'metadata' | 'reviews' | 'commits' | 'checks' | 'comments'; data: unknown }> = []
 
     if (typesToFetch.includes('metadata')) {
       snapshots.push({ dataType: 'metadata', data: metadata })
@@ -528,6 +616,12 @@ export async function refreshPrData(
     }
     if (typesToFetch.includes('commits')) {
       snapshots.push({ dataType: 'commits', data: commits })
+    }
+    if (typesToFetch.includes('checks')) {
+      snapshots.push({ dataType: 'checks', data: checks })
+    }
+    if (typesToFetch.includes('comments')) {
+      snapshots.push({ dataType: 'comments', data: comments })
     }
 
     await savePrSnapshotsBatch(owner, repo, prNumber, snapshots)

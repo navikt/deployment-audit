@@ -137,7 +137,10 @@ export async function runVerification(
     commitSnapshotIds: [], // Would be populated by fetch-data
   }
 
-  const { verificationRunId } = await storeVerificationResult(deploymentId, result, snapshotIds)
+  const { verificationRunId } = await storeVerificationResult(deploymentId, result, snapshotIds, undefined, {
+    repository: options.repository,
+    commitsBetween: input.commitsBetween,
+  })
 
   logger.info(`   ✅ Stored as verification run #${verificationRunId}`)
   logger.info(`🎉 Verification complete for deployment ${deploymentId}`)
