@@ -105,7 +105,8 @@ async function updateDeploymentVerification(
        has_four_eyes = COALESCE($1, has_four_eyes),
        four_eyes_status = $2,
        github_pr_number = COALESCE($3, github_pr_number),
-       github_pr_data = COALESCE($4::jsonb, github_pr_data)
+       github_pr_data = COALESCE($4::jsonb, github_pr_data),
+       unverified_commits = $6::jsonb
      WHERE id = $5
        AND four_eyes_status NOT IN ('manually_approved', 'legacy')`,
     [
@@ -114,6 +115,19 @@ async function updateDeploymentVerification(
       result.deployedPr?.number || null,
       githubPrData ? JSON.stringify(githubPrData) : null,
       deploymentId,
+      result.unverifiedCommits.length > 0
+        ? JSON.stringify(
+            result.unverifiedCommits.map((c) => ({
+              sha: c.sha,
+              message: c.message,
+              author: c.author,
+              date: c.date,
+              html_url: c.htmlUrl,
+              pr_number: c.prNumber,
+              reason: c.reason,
+            })),
+          )
+        : null,
     ],
   )
 
