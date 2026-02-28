@@ -1,9 +1,11 @@
-import { Alert, Button, Heading, HStack, VStack } from '@navikt/ds-react'
+import { Alert, Button, Heading, HStack, Tag, VStack } from '@navikt/ds-react'
 import { Link, useRouteLoaderData } from 'react-router'
 import { AppCard, type AppCardData } from '~/components/AppCard'
 import { getAllActiveRepositories } from '~/db/application-repositories.server'
+import { getTeamSlugsForSections } from '~/db/sections.server'
 import { getAppDeploymentStatsBatch } from '../db/deployments.server'
 import { getAllAlertCounts, getAllMonitoredApplications } from '../db/monitored-applications.server'
+import { getUserSections, requireUser } from '../lib/auth.server'
 import type { Route } from './+types/home'
 import type { loader as layoutLoader } from './layout'
 
@@ -14,8 +16,18 @@ export function meta(_args: Route.MetaArgs) {
   ]
 }
 
-export async function loader(_args: Route.LoaderArgs) {
+export async function loader({ request }: Route.LoaderArgs) {
   try {
+    const identity = await requireUser(request)
+    const sections = await getUserSections(identity.entraGroups)
+    const isGlobalAdmin = identity.role === 'admin'
+
+    // Resolve which team_slugs the user can see
+    let allowedTeamSlugs: string[] | null = null // null = show all (global admin)
+    if (!isGlobalAdmin && sections.length > 0) {
+      allowedTeamSlugs = await getTeamSlugsForSections(sections.map((s) => s.id))
+    }
+
     // Fetch all data in parallel (3 queries instead of 2N+1)
     const [apps, alertCounts, activeReposByApp] = await Promise.all([
       getAllMonitoredApplications(),
@@ -23,17 +35,20 @@ export async function loader(_args: Route.LoaderArgs) {
       getAllActiveRepositories(),
     ])
 
-    if (apps.length === 0) {
-      return { apps: [] }
+    // Filter apps by allowed teams (unless global admin)
+    const filteredApps = allowedTeamSlugs ? apps.filter((app) => allowedTeamSlugs.includes(app.team_slug)) : apps
+
+    if (filteredApps.length === 0) {
+      return { apps: [], sectionNames: sections.map((s) => s.name), totalApps: apps.length }
     }
 
     // Get stats (depends on apps data for audit_start_year)
     const statsByApp = await getAppDeploymentStatsBatch(
-      apps.map((a) => ({ id: a.id, audit_start_year: a.audit_start_year })),
+      filteredApps.map((a) => ({ id: a.id, audit_start_year: a.audit_start_year })),
     )
 
     // Combine data
-    const appsWithData = apps.map((app) => ({
+    const appsWithData = filteredApps.map((app) => ({
       ...app,
       active_repo: activeReposByApp.get(app.id) || null,
       stats: statsByApp.get(app.id) || {
@@ -48,14 +63,14 @@ export async function loader(_args: Route.LoaderArgs) {
       alertCount: alertCounts.get(app.id) || 0,
     }))
 
-    return { apps: appsWithData }
+    return { apps: appsWithData, sectionNames: sections.map((s) => s.name), totalApps: apps.length }
   } catch (_error) {
-    return { apps: [] }
+    return { apps: [], sectionNames: [], totalApps: 0 }
   }
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { apps } = loaderData
+  const { apps, sectionNames, totalApps } = loaderData
   const layoutData = useRouteLoaderData<typeof layoutLoader>('routes/layout')
   const isAdmin = layoutData?.user?.role === 'admin'
 
@@ -80,7 +95,23 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       )}
 
       {/* Empty state */}
-      {apps.length === 0 && <Alert variant="info">Ingen applikasjoner overvåkes ennå.</Alert>}
+      {apps.length === 0 && totalApps > 0 && (
+        <Alert variant="info">
+          Ingen applikasjoner er tilgjengelig for dine seksjoner ({sectionNames.join(', ') || 'ingen seksjoner'}).
+        </Alert>
+      )}
+      {apps.length === 0 && totalApps === 0 && <Alert variant="info">Ingen applikasjoner overvåkes ennå.</Alert>}
+
+      {/* Section info */}
+      {sectionNames.length > 0 && apps.length > 0 && (
+        <HStack gap="space-8" align="center">
+          {sectionNames.map((name) => (
+            <Tag key={name} variant="info" size="small">
+              {name}
+            </Tag>
+          ))}
+        </HStack>
+      )}
 
       {/* App list grouped by team */}
       {Object.entries(appsByTeam).map(([teamSlug, teamApps]) => (

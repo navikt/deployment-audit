@@ -60,6 +60,7 @@ export default [
     route('admin/audit-reports/:id/view', 'routes/admin.audit-reports.$id.view.ts'),
     route('admin/global-settings', 'routes/admin.global-settings.tsx'),
     route('admin/env', 'routes/admin.environment.tsx'),
+    route('admin/sections', 'routes/admin.sections.tsx'),
     route('team/:team/env/:env/app/:app/admin/deviations', 'routes/team.$team.env.$env.app.$app.admin.deviations.tsx'),
   ]),
 ] satisfies RouteConfig

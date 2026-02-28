@@ -18,15 +18,18 @@ import { Breadcrumbs } from '~/components/Breadcrumbs'
 import { SearchDialog } from '~/components/SearchDialog'
 import { getUserMappingByNavIdent } from '~/db/user-mappings.server'
 import { useTheme } from '~/hooks/useTheme'
-import { requireUser } from '~/lib/auth.server'
+import { getUserSections, requireUser } from '~/lib/auth.server'
 import styles from '../styles/common.module.css'
 import type { Route } from './+types/layout'
 
 export async function loader({ request }: Route.LoaderArgs) {
   const identity = await requireUser(request)
 
-  // Try to get display name from user mappings
-  const userMapping = await getUserMappingByNavIdent(identity.navIdent)
+  // Resolve user's display name and section memberships in parallel
+  const [userMapping, sections] = await Promise.all([
+    getUserMappingByNavIdent(identity.navIdent),
+    getUserSections(identity.entraGroups),
+  ])
 
   return {
     user: {
@@ -34,6 +37,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       displayName: userMapping?.display_name || identity.name || identity.navIdent,
       email: userMapping?.nav_email || identity.email || null,
       role: identity.role,
+      sections,
     },
   }
 }
@@ -150,6 +154,23 @@ export default function Layout({ loaderData }: Route.ComponentProps) {
                 </dl>
               </ActionMenu.Label>
               <ActionMenu.Divider />
+              {user.sections.length > 0 && (
+                <>
+                  <ActionMenu.Group label="Seksjoner">
+                    {user.sections.map((section) => (
+                      <ActionMenu.Item key={section.slug} onSelect={() => navigate(`/?section=${section.slug}`)}>
+                        {section.name}
+                        {section.role === 'admin' && (
+                          <Detail as="span" textColor="subtle" style={{ marginLeft: 'var(--ax-space-8)' }}>
+                            admin
+                          </Detail>
+                        )}
+                      </ActionMenu.Item>
+                    ))}
+                  </ActionMenu.Group>
+                  <ActionMenu.Divider />
+                </>
+              )}
               <ActionMenu.Group label="Tema">
                 <ActionMenu.Item
                   onSelect={() => setTheme('light')}

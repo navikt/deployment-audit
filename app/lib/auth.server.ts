@@ -4,16 +4,26 @@
  * In production (Nais), Wonderwall login proxy adds Bearer tokens with NAV-ident claims.
  * Tokens are validated using JWKS from Azure AD for cryptographic verification.
  * In development, we fall back to a mock identity from environment variables.
+ *
+ * Role and section membership is resolved from Entra ID groups stored in the sections table.
  */
 
+import { getSectionsForEntraGroups } from '~/db/sections.server'
 import { isJwtValidationConfigured, validateToken } from './jwt-validation.server'
 import { logger } from './logger.server'
 
-// Entra ID group IDs
-const GROUP_ADMIN = '1e97cbc6-0687-4d23-aebd-c611035279c1' // pensjon-revisjon
-const GROUP_USER = '415d3817-c83d-44c9-a52b-5116757f8fa8' // teampensjon
+// Fallback hardcoded group IDs — used ONLY if no sections are configured in the DB
+const FALLBACK_GROUP_ADMIN = '1e97cbc6-0687-4d23-aebd-c611035279c1' // pensjon-revisjon
+const FALLBACK_GROUP_USER = '415d3817-c83d-44c9-a52b-5116757f8fa8' // teampensjon
 
 export type UserRole = 'admin' | 'user'
+
+export interface UserSection {
+  id: number
+  slug: string
+  name: string
+  role: UserRole
+}
 
 function isDevelopment(): boolean {
   return process.env.NODE_ENV === 'development'
@@ -28,17 +38,52 @@ export interface UserIdentity {
   name?: string
   email?: string
   role: UserRole
+  /** The user's Entra ID group IDs from the JWT token */
+  entraGroups: string[]
 }
 
 /**
  * Determine user role from group memberships.
- * Admin takes precedence if user is in both groups.
+ * First checks sections in DB, then falls back to hardcoded groups.
  */
-function getRoleFromGroups(groups: string[] | undefined): UserRole | null {
+async function getRoleFromGroups(groups: string[] | undefined): Promise<UserRole | null> {
   if (!groups || groups.length === 0) return null
-  if (groups.includes(GROUP_ADMIN)) return 'admin'
-  if (groups.includes(GROUP_USER)) return 'user'
+
+  // Try DB-based section groups first
+  try {
+    const sections = await getSectionsForEntraGroups(groups)
+    if (sections.length > 0) {
+      // User is admin if they're admin in any section
+      return sections.some((s) => s.role === 'admin') ? 'admin' : 'user'
+    }
+  } catch (error) {
+    logger.warn(`Could not resolve sections from DB, falling back to hardcoded groups: ${error}`)
+  }
+
+  // Fallback to hardcoded groups (for backwards compatibility)
+  if (groups.includes(FALLBACK_GROUP_ADMIN)) return 'admin'
+  if (groups.includes(FALLBACK_GROUP_USER)) return 'user'
   return null
+}
+
+/**
+ * Resolve user's section memberships from their Entra ID groups.
+ */
+export async function getUserSections(entraGroups: string[]): Promise<UserSection[]> {
+  if (entraGroups.length === 0) return []
+
+  try {
+    const sections = await getSectionsForEntraGroups(entraGroups)
+    return sections.map((s) => ({
+      id: s.id,
+      slug: s.slug,
+      name: s.name,
+      role: s.role,
+    }))
+  } catch (error) {
+    logger.warn(`Could not resolve user sections: ${error}`)
+    return []
+  }
 }
 
 /**
@@ -61,7 +106,8 @@ export async function getUserIdentity(request: Request): Promise<UserIdentity | 
       const result = await validateToken(token)
 
       if (result.success) {
-        const role = getRoleFromGroups(result.payload.groups)
+        const groups = result.payload.groups ?? []
+        const role = await getRoleFromGroups(groups)
 
         if (role) {
           return {
@@ -69,6 +115,7 @@ export async function getUserIdentity(request: Request): Promise<UserIdentity | 
             name: result.payload.name,
             email: result.payload.email,
             role,
+            entraGroups: groups,
           }
         }
         // User has valid token but not in authorized groups
@@ -96,6 +143,7 @@ export async function getUserIdentity(request: Request): Promise<UserIdentity | 
         navIdent: devIdent,
         name: 'Development User',
         role: devRole,
+        entraGroups: [],
       }
     }
   }

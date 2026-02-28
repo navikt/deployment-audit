@@ -1,5 +1,6 @@
 import {
   ArrowsCirclepathIcon,
+  Buildings3Icon,
   ChatIcon,
   CheckmarkCircleIcon,
   CogIcon,
@@ -199,6 +200,28 @@ export default function AdminIndex() {
                   Miljøvariabler
                 </Heading>
                 <BodyShort textColor="subtle">Se alle miljøvariabler tilgjengelig for appen.</BodyShort>
+              </div>
+            </VStack>
+          </Box>
+        </Link>
+
+        <Link to="/admin/sections" style={{ textDecoration: 'none', height: '100%' }}>
+          <Box
+            padding="space-24"
+            borderRadius="8"
+            background="raised"
+            borderColor="neutral-subtle"
+            borderWidth="1"
+            className="admin-card"
+            style={{ height: '100%' }}
+          >
+            <VStack gap="space-12">
+              <Buildings3Icon fontSize="2rem" aria-hidden />
+              <div>
+                <Heading level="2" size="small" spacing>
+                  Seksjoner
+                </Heading>
+                <BodyShort textColor="subtle">Administrer seksjoner, team-tilknytninger og Entra ID-grupper.</BodyShort>
               </div>
             </VStack>
           </Box>
