@@ -78,9 +78,12 @@ export const logger = {
         error: errorOrDetails.message,
         stack_trace: errorOrDetails.stack,
       })
+    } else if (errorOrDetails && typeof errorOrDetails === 'object') {
+      winstonLogger.error(message, errorOrDetails as Record<string, unknown>)
+      logToDb('error', message, errorOrDetails as Record<string, unknown>)
     } else {
       winstonLogger.error(message)
-      logToDb('error', message, errorOrDetails as Record<string, unknown>)
+      logToDb('error', message)
     }
   },
   debug(message: string, details?: Record<string, unknown>) {

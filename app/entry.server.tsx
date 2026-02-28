@@ -8,10 +8,53 @@ import { ServerRouter } from 'react-router'
 import { initializeServer } from './init.server'
 import { logger } from './lib/logger.server'
 
+// Override console.error to produce structured logs instead of multi-line stderr.
+// React DOM's SSR calls console.error internally for rendering errors, which creates
+// separate log entries per stack frame in containerized environments.
+const originalConsoleError = console.error.bind(console)
+console.error = (...args: unknown[]) => {
+  const error = args.find((arg): arg is Error => arg instanceof Error)
+  if (error) {
+    const prefixParts = args.filter((arg) => arg !== error && typeof arg === 'string')
+    const message = prefixParts.length > 0 ? prefixParts.join(' ') : error.message
+    logger.error(message, error)
+    return
+  }
+
+  // Join all args into a single line to prevent line-splitting in container logs
+  const message = args.map((arg) => (typeof arg === 'string' ? arg : String(arg))).join(' ')
+  if (message.trim()) {
+    originalConsoleError(message)
+  }
+}
+
 // Initialize server-side services once at startup
 initializeServer()
 
 export const streamTimeout = 5_000
+
+/**
+ * Handle errors from loaders, actions, and SSR rendering.
+ * Replaces React Router's default behavior of calling console.error.
+ */
+export function handleError(error: unknown, { request }: { request: Request }) {
+  // Ignore aborted requests (user navigated away)
+  if (error instanceof Error && /aborted/i.test(error.message)) return
+
+  const url = new URL(request.url)
+  if (error instanceof Error) {
+    logger.error(`Request error: ${error.message}`, {
+      stack_trace: error.stack,
+      url: url.pathname,
+      method: request.method,
+    })
+  } else {
+    logger.error(`Request error: ${String(error)}`, {
+      url: url.pathname,
+      method: request.method,
+    })
+  }
+}
 
 export default function handleRequest(
   request: Request,
