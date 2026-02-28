@@ -89,6 +89,8 @@ spec:
       value: "prod-fss,prod-gcp"
     - name: VERIFICATION_DEBUG
       value: "true"
+    - name: BUCKET_NAME_PENSJON_DEPLOYMENT_AUDIT_LOGS
+      value: pensjon-deployment-audit-logs
 
   envFrom:
     - secret: nais-deployment-audit
