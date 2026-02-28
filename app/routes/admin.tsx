@@ -4,6 +4,7 @@ import {
   CheckmarkCircleIcon,
   CogIcon,
   FileTextIcon,
+  LaptopIcon,
   PersonGroupIcon,
 } from '@navikt/aksel-icons'
 import { BodyShort, Box, Heading, HGrid, VStack } from '@navikt/ds-react'
@@ -176,6 +177,28 @@ export default function AdminIndex() {
                   Globale innstillinger
                 </Heading>
                 <BodyShort textColor="subtle">Konfigurer globale innstillinger som avvikskanal i Slack.</BodyShort>
+              </div>
+            </VStack>
+          </Box>
+        </Link>
+
+        <Link to="/admin/environment" style={{ textDecoration: 'none', height: '100%' }}>
+          <Box
+            padding="space-24"
+            borderRadius="8"
+            background="raised"
+            borderColor="neutral-subtle"
+            borderWidth="1"
+            className="admin-card"
+            style={{ height: '100%' }}
+          >
+            <VStack gap="space-12">
+              <LaptopIcon fontSize="2rem" aria-hidden />
+              <div>
+                <Heading level="2" size="small" spacing>
+                  Miljøvariabler
+                </Heading>
+                <BodyShort textColor="subtle">Se alle miljøvariabler tilgjengelig for appen.</BodyShort>
               </div>
             </VStack>
           </Box>
