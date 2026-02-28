@@ -5,6 +5,7 @@ import {
   CheckmarkIcon,
   CircleIcon,
   ClockIcon,
+  DownloadIcon,
   ExclamationmarkTriangleIcon,
   MinusCircleIcon,
   TrashIcon,
@@ -819,7 +820,7 @@ export function meta({ data }: Route.MetaArgs) {
 }
 
 function CheckLogViewer({ owner, repo, jobId }: { owner: string; repo: string; jobId: number }) {
-  const fetcher = useFetcher<{ logs?: string; error?: string }>()
+  const fetcher = useFetcher<{ logs?: string; error?: string; source?: string }>()
   const [showLogs, setShowLogs] = useState(false)
 
   const loadLogs = () => {
@@ -827,6 +828,17 @@ function CheckLogViewer({ owner, repo, jobId }: { owner: string; repo: string; j
     if (fetcher.state === 'idle' && !fetcher.data) {
       fetcher.load(`/api/checks/logs?owner=${owner}&repo=${repo}&job_id=${jobId}`)
     }
+  }
+
+  const downloadLogs = () => {
+    if (!fetcher.data?.logs) return
+    const blob = new Blob([fetcher.data.logs], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${owner}-${repo}-${jobId}.log`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   if (!showLogs) {
@@ -844,6 +856,11 @@ function CheckLogViewer({ owner, repo, jobId }: { owner: string; repo: string; j
         <Button variant="tertiary" size="xsmall" onClick={() => setShowLogs(false)}>
           Skjul
         </Button>
+        {fetcher.data?.logs && (
+          <Button variant="tertiary" size="xsmall" icon={<DownloadIcon aria-hidden />} onClick={downloadLogs}>
+            Last ned
+          </Button>
+        )}
       </HStack>
       {fetcher.state === 'loading' && <Loader size="small" />}
       {fetcher.data?.error && (
@@ -1662,6 +1679,12 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                             <a href={check.details_url} target="_blank" rel="noopener noreferrer">
                               <Detail textColor="subtle">detaljer</Detail>
                             </a>
+                          )}
+
+                          {check.log_cached && (
+                            <Tag variant="info" size="small">
+                              Logg lagret
+                            </Tag>
                           )}
                         </HStack>
 
