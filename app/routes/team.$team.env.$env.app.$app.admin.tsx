@@ -50,6 +50,7 @@ import { requireAdmin } from '~/lib/auth.server'
 import { logger, runWithJobContext } from '~/lib/logger.server'
 import { getCompletedPeriods, REPORT_PERIOD_TYPE_LABELS, type ReportPeriodType } from '~/lib/report-periods'
 import { fetchVerificationDataForAllDeployments } from '~/lib/verification'
+import { computeVerificationDiffs } from '~/lib/verification/compute-diffs.server'
 import type { Route } from './+types/team.$team.env.$env.app.$app.admin'
 
 // Async function to process data fetch job in background
@@ -69,6 +70,25 @@ async function processFetchDataJobAsync(jobId: number, appId: number) {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error'
       // Don't overwrite cancelled status
+      const job = await getSyncJobById(jobId)
+      if (job?.status !== 'cancelled') {
+        await releaseSyncLock(jobId, 'failed', undefined, errorMessage)
+      }
+      throw err
+    }
+  })
+}
+
+// Async function to compute verification diffs in background
+async function processComputeDiffsJobAsync(jobId: number, appId: number) {
+  await runWithJobContext(jobId, false, async () => {
+    try {
+      const result = await computeVerificationDiffs(appId, { jobId })
+      const job = await getSyncJobById(jobId)
+      if (job?.status === 'cancelled') return
+      await releaseSyncLock(jobId, 'completed', result as unknown as Record<string, unknown>)
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error'
       const job = await getSyncJobById(jobId)
       if (job?.status !== 'cancelled') {
         await releaseSyncLock(jobId, 'failed', undefined, errorMessage)
@@ -348,6 +368,26 @@ export async function action({ request }: Route.ActionArgs) {
       return { error: 'Kunne ikke frigjøre jobben' }
     }
     return { success: 'Jobben ble tvangsfrigjort' }
+  }
+
+  if (action === 'compute_diffs') {
+    const jobId = await acquireSyncLock('reverify_app', appId, 10)
+    if (!jobId) {
+      return { error: 'En avviksberegning kjører allerede for denne appen' }
+    }
+    processComputeDiffsJobAsync(jobId, appId).catch((err) => {
+      logger.error(`Compute diffs job ${jobId} failed:`, err)
+    })
+    return { computeDiffsJobStarted: jobId }
+  }
+
+  if (action === 'check_compute_diffs_status') {
+    const jobId = parseInt(formData.get('job_id') as string, 10)
+    if (!jobId) {
+      return { error: 'Mangler job_id' }
+    }
+    const job = await getSyncJobById(jobId)
+    return { computeDiffsJobStatus: job }
   }
 
   if (action === 'update_slack_config') {

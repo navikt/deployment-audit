@@ -1,28 +1,32 @@
 /**
  * Verification Diff Page (App-specific)
  *
- * Shows deployments where old and new verification results differ.
- * Only considers deployments with:
- * - Valid SHA (not refs/*, length >= 7)
- * - Created on or after audit_start_year
- * - Has downloaded GitHub data (compare snapshots exist)
+ * Shows pre-computed differences between stored verification status and
+ * what V2 verification would produce. Diffs are computed by the
+ * reverify_app sync job and stored in the verification_diffs table.
  */
 
-import { Link as AkselLink, BodyShort, Box, Button, Heading, Table, Tag, VStack } from '@navikt/ds-react'
-import { Form, Link, useLoaderData, useNavigation } from 'react-router'
-import { getMonitoredApplicationByIdentity } from '~/db/monitored-applications.server'
 import {
-  getCompareSnapshotForCommit,
-  getDeploymentsWithCompareData,
-  getPreviousDeploymentForDiff,
-  getPrSnapshotsForDiff,
-} from '~/db/verification-diff.server'
+  Link as AkselLink,
+  BodyShort,
+  Box,
+  Button,
+  Detail,
+  Heading,
+  HStack,
+  Loader,
+  Table,
+  Tag,
+  VStack,
+} from '@navikt/ds-react'
+import { useEffect, useRef, useState } from 'react'
+import { Form, Link, useFetcher, useLoaderData, useNavigation, useRevalidator } from 'react-router'
+import { pool } from '~/db/connection.server'
+import { getMonitoredApplicationByIdentity } from '~/db/monitored-applications.server'
+import { getLatestSyncJob, getSyncJobById } from '~/db/sync-jobs.server'
 import { requireAdmin } from '~/lib/auth.server'
 import { logger } from '~/lib/logger.server'
 import { reverifyDeployment } from '~/lib/verification'
-import { buildCommitsBetweenFromCache } from '~/lib/verification/fetch-data.server'
-import type { CompareData, PrCommit, PrMetadata, PrReview, VerificationInput } from '~/lib/verification/types'
-import { verifyDeployment } from '~/lib/verification/verify'
 import type { Route } from './+types/team.$team.env.$env.app.$app.admin.verification-diff'
 
 interface DeploymentDiff {
@@ -41,120 +45,47 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const { team, env, app } = params
 
-  // Get the monitored app
   const monitoredApp = await getMonitoredApplicationByIdentity(team, env, app)
   if (!monitoredApp) {
-    return { diffs: [], appContext: null }
+    return { diffs: [], appContext: null, lastComputed: null, latestJob: null }
   }
 
   const appContext = {
     teamSlug: monitoredApp.team_slug,
     environmentName: monitoredApp.environment_name,
     appName: monitoredApp.app_name,
+    monitoredAppId: monitoredApp.id,
   }
 
-  // Find deployments for this app that have compare snapshots
-  const deployments = await getDeploymentsWithCompareData(monitoredApp.id)
+  // Read pre-computed diffs from database
+  const result = await pool.query(
+    `SELECT vd.deployment_id, vd.old_status, vd.new_status,
+            vd.old_has_four_eyes, vd.new_has_four_eyes, vd.computed_at,
+            d.commit_sha, d.environment_name, d.created_at
+     FROM verification_diffs vd
+     JOIN deployments d ON vd.deployment_id = d.id
+     WHERE vd.monitored_app_id = $1
+     ORDER BY d.created_at DESC`,
+    [monitoredApp.id],
+  )
 
-  const diffs: DeploymentDiff[] = []
+  const diffs: DeploymentDiff[] = result.rows.map((row) => ({
+    id: row.deployment_id,
+    commitSha: row.commit_sha,
+    environmentName: row.environment_name,
+    createdAt: row.created_at.toISOString(),
+    oldStatus: row.old_status,
+    newStatus: row.new_status,
+    oldHasFourEyes: row.old_has_four_eyes,
+    newHasFourEyes: row.new_has_four_eyes,
+  }))
 
-  for (const row of deployments) {
-    const prevRow = await getPreviousDeploymentForDiff(row.id, row.environment_name)
+  const lastComputed = result.rows.length > 0 ? result.rows[0].computed_at?.toISOString() : null
 
-    const previousDeployment = prevRow
-      ? {
-          id: prevRow.id,
-          commitSha: prevRow.commit_sha,
-          createdAt: prevRow.created_at.toISOString(),
-        }
-      : null
+  // Get latest reverify_app job for this app
+  const latestJob = await getLatestSyncJob(monitoredApp.id, 'reverify_app')
 
-    const compareSnapshot = await getCompareSnapshotForCommit(row.commit_sha)
-    if (!compareSnapshot) continue
-
-    const compareData = compareSnapshot.data as CompareData
-    const owner = row.detected_github_owner as string
-    const repo = row.detected_github_repo_name as string
-    const baseBranch = row.default_branch || 'main'
-
-    // Build commits with PR data from cache only (no GitHub calls)
-    const commitsBetween = await buildCommitsBetweenFromCache(owner, repo, baseBranch, compareData, { cacheOnly: true })
-
-    // Get PR snapshots if available
-    let deployedPr: VerificationInput['deployedPr'] = null
-    if (row.github_pr_number) {
-      const snapshotMap = await getPrSnapshotsForDiff(row.github_pr_number)
-
-      if (snapshotMap.has('metadata') && snapshotMap.has('reviews') && snapshotMap.has('commits')) {
-        const metadata = snapshotMap.get('metadata') as PrMetadata
-        deployedPr = {
-          number: row.github_pr_number,
-          url: `https://github.com/${owner}/${repo}/pull/${row.github_pr_number}`,
-          metadata,
-          reviews: snapshotMap.get('reviews') as PrReview[],
-          commits: snapshotMap.get('commits') as PrCommit[],
-        }
-      }
-    }
-
-    // Build verification input
-    const input: VerificationInput = {
-      deploymentId: row.id,
-      commitSha: row.commit_sha,
-      repository: `${owner}/${repo}`,
-      environmentName: row.environment_name,
-      baseBranch,
-      auditStartYear: row.audit_start_year,
-      implicitApprovalSettings: { mode: 'off' },
-      previousDeployment,
-      deployedPr,
-      commitsBetween,
-      dataFreshness: {
-        deployedPrFetchedAt: null,
-        commitsFetchedAt: null,
-        schemaVersion: 1,
-      },
-    }
-
-    // Run verification
-    const newResult = verifyDeployment(input)
-
-    // Normalize statuses for comparison
-    const normalizeStatus = (status: string | null): string | null => {
-      if (!status) return status
-      const equivalentStatuses: Record<string, string> = {
-        approved_pr: 'approved',
-        pending_approval: 'pending',
-      }
-      return equivalentStatuses[status] || status
-    }
-
-    const normalizedOldStatus = normalizeStatus(row.four_eyes_status)
-    const normalizedNewStatus = normalizeStatus(newResult.status)
-
-    // Skip manually approved deployments — they were approved by a human
-    // precisely because automated verification found unverified commits
-    if (normalizedOldStatus === 'manually_approved') continue
-
-    // Check for real differences
-    const statusDifferent = normalizedOldStatus !== normalizedNewStatus
-    const fourEyesDifferent = row.has_four_eyes !== newResult.hasFourEyes
-
-    if (statusDifferent || fourEyesDifferent) {
-      diffs.push({
-        id: row.id,
-        commitSha: row.commit_sha,
-        environmentName: row.environment_name,
-        createdAt: row.created_at.toISOString(),
-        oldStatus: row.four_eyes_status,
-        newStatus: newResult.status,
-        oldHasFourEyes: row.has_four_eyes,
-        newHasFourEyes: newResult.hasFourEyes,
-      })
-    }
-  }
-
-  return { diffs, appContext }
+  return { diffs, appContext, lastComputed, latestJob }
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -171,6 +102,8 @@ export async function action({ request }: Route.ActionArgs) {
         return { error: `Deployment ${deploymentId} ble hoppet over (manuelt godkjent, legacy, eller mangler data)` }
       }
       if (result.changed) {
+        // Remove the diff row since we've applied the change
+        await pool.query('DELETE FROM verification_diffs WHERE deployment_id = $1', [deploymentId])
         return {
           applied: deploymentId,
           message: `Oppdatert: ${result.oldStatus} → ${result.newStatus}`,
@@ -198,6 +131,7 @@ export async function action({ request }: Route.ActionArgs) {
       try {
         const result = await reverifyDeployment(id)
         if (result?.changed) {
+          await pool.query('DELETE FROM verification_diffs WHERE deployment_id = $1', [id])
           applied++
         } else {
           skipped++
@@ -211,6 +145,13 @@ export async function action({ request }: Route.ActionArgs) {
     return { appliedAll: true, applied, skipped, errors }
   }
 
+  if (actionType === 'check_compute_status') {
+    const jobId = parseInt(formData.get('job_id') as string, 10)
+    if (!jobId) return { error: 'Mangler job_id' }
+    const job = await getSyncJobById(jobId)
+    return { computeJobStatus: job }
+  }
+
   return null
 }
 
@@ -219,10 +160,59 @@ export function meta(_args: Route.MetaArgs) {
 }
 
 export default function VerificationDiffPage() {
-  const { diffs, appContext } = useLoaderData<typeof loader>()
+  const { diffs, appContext, lastComputed, latestJob } = useLoaderData<typeof loader>()
   const navigation = useNavigation()
+  const revalidator = useRevalidator()
   const submittingId = navigation.state === 'submitting' ? navigation.formData?.get('deployment_id')?.toString() : null
   const isApplyingAll = navigation.state === 'submitting' && navigation.formData?.get('action') === 'apply_all'
+
+  // Job polling state
+  const computeFetcher = useFetcher()
+  const [activeJobId, setActiveJobId] = useState<number | null>(latestJob?.status === 'running' ? latestJob.id : null)
+  const pollInterval = useRef<ReturnType<typeof setInterval> | null>(null)
+  const computeFetcherRef = useRef(computeFetcher)
+  computeFetcherRef.current = computeFetcher
+  const revalidatorRef = useRef(revalidator)
+  revalidatorRef.current = revalidator
+
+  // Start polling when job becomes active
+  useEffect(() => {
+    if (activeJobId) {
+      pollInterval.current = setInterval(() => {
+        computeFetcherRef.current.submit(
+          { action: 'check_compute_status', job_id: String(activeJobId) },
+          { method: 'post' },
+        )
+      }, 2000)
+    }
+    return () => {
+      if (pollInterval.current) clearInterval(pollInterval.current)
+    }
+  }, [activeJobId])
+
+  // Handle poll responses
+  useEffect(() => {
+    const data = computeFetcher.data as { computeJobStatus?: { status: string } } | undefined
+    if (data?.computeJobStatus) {
+      const status = data.computeJobStatus.status
+      if (status === 'completed' || status === 'failed' || status === 'cancelled') {
+        setActiveJobId(null)
+        if (pollInterval.current) clearInterval(pollInterval.current)
+        revalidatorRef.current.revalidate()
+      }
+    }
+  }, [computeFetcher.data])
+
+  // Handle compute_diffs trigger response from admin page
+  const triggerFetcher = useFetcher()
+  useEffect(() => {
+    const data = triggerFetcher.data as { computeDiffsJobStarted?: number; error?: string } | undefined
+    if (data?.computeDiffsJobStarted) {
+      setActiveJobId(data.computeDiffsJobStarted)
+    }
+  }, [triggerFetcher.data])
+
+  const isComputing = !!activeJobId
 
   return (
     <Box paddingBlock="space-8" paddingInline={{ xs: 'space-4', md: 'space-8' }}>
@@ -232,15 +222,45 @@ export default function VerificationDiffPage() {
             Verifiseringsavvik
           </Heading>
           <BodyShort textColor="subtle">
-            Deployments hvor gammel og ny verifisering gir forskjellig resultat. Klikk på en deployment for detaljer.
+            Deployments hvor lagret og ny verifisering gir forskjellig resultat. Klikk på en deployment for detaljer.
           </BodyShort>
         </VStack>
 
-        {diffs.length === 0 ? (
+        {/* Compute trigger and status */}
+        <Box background="neutral-soft" padding="space-4" borderRadius="8">
+          <HStack gap="space-4" align="center" justify="space-between">
+            <VStack gap="space-1">
+              {lastComputed ? (
+                <Detail>Sist beregnet: {new Date(lastComputed).toLocaleString('no-NO')}</Detail>
+              ) : (
+                <Detail>Avvik er ikke beregnet ennå. Klikk «Beregn avvik» for å starte.</Detail>
+              )}
+            </VStack>
+            {appContext && (
+              <triggerFetcher.Form
+                method="post"
+                action={`/team/${appContext.teamSlug}/env/${appContext.environmentName}/app/${appContext.appName}/admin`}
+              >
+                <input type="hidden" name="action" value="compute_diffs" />
+                <Button type="submit" size="small" variant="secondary" loading={isComputing}>
+                  {isComputing ? 'Beregner…' : 'Beregn avvik'}
+                </Button>
+              </triggerFetcher.Form>
+            )}
+          </HStack>
+          {isComputing && (
+            <HStack gap="space-2" align="center">
+              <Loader size="xsmall" />
+              <Detail>Beregner avvik i bakgrunnen…</Detail>
+            </HStack>
+          )}
+        </Box>
+
+        {diffs.length === 0 && lastComputed ? (
           <Box background="success-soft" padding="space-4" borderRadius="8">
             <BodyShort>✅ Ingen avvik funnet blant deployments med nedlastet GitHub-data.</BodyShort>
           </Box>
-        ) : (
+        ) : diffs.length === 0 && !lastComputed ? null : (
           <Box background="warning-soft" padding="space-4" borderRadius="8">
             <BodyShort>⚠️ {diffs.length} deployment(s) med avvik mellom gammel og ny verifisering.</BodyShort>
           </Box>
