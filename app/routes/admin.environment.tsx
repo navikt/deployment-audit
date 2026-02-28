@@ -25,7 +25,6 @@ export async function loader({ request }: Route.LoaderArgs) {
       return {
         name,
         hasValue: value.length > 0,
-        length: value.length,
       }
     })
 
@@ -65,7 +64,6 @@ export default function EnvVarsPage() {
             <Table.Row>
               <Table.HeaderCell>Navn</Table.HeaderCell>
               <Table.HeaderCell>Status</Table.HeaderCell>
-              <Table.HeaderCell align="right">Lengde</Table.HeaderCell>
             </Table.Row>
           </Table.Header>
           <Table.Body>
@@ -85,7 +83,6 @@ export default function EnvVarsPage() {
                     </Tag>
                   )}
                 </Table.DataCell>
-                <Table.DataCell align="right">{v.length}</Table.DataCell>
               </Table.Row>
             ))}
           </Table.Body>

@@ -182,7 +182,7 @@ export default function AdminIndex() {
           </Box>
         </Link>
 
-        <Link to="/admin/environment" style={{ textDecoration: 'none', height: '100%' }}>
+        <Link to="/admin/env" style={{ textDecoration: 'none', height: '100%' }}>
           <Box
             padding="space-24"
             borderRadius="8"
