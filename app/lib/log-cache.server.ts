@@ -59,7 +59,7 @@ async function getUncachedChecks(monitoredAppId: number): Promise<{
       COUNT(*) as total_deployments,
       COUNT(CASE WHEN d.github_pr_data IS NOT NULL THEN 1 END) as with_pr_data,
       COUNT(CASE WHEN d.github_pr_data->'checks' IS NOT NULL THEN 1 END) as with_checks,
-      COUNT(CASE WHEN ar.full_name IS NOT NULL THEN 1 END) as with_repo
+      COUNT(CASE WHEN ar.github_repo_name IS NOT NULL THEN 1 END) as with_repo
     FROM deployments d
     JOIN monitored_applications ma ON d.monitored_app_id = ma.id
     LEFT JOIN application_repositories ar ON ar.monitored_app_id = ma.id
@@ -93,7 +93,7 @@ async function getUncachedChecks(monitoredAppId: number): Promise<{
   }>(
     `
     SELECT d.id, d.github_pr_data,
-           ar.full_name as repository_full_name
+           ar.github_owner || '/' || ar.github_repo_name as repository_full_name
     FROM deployments d
     JOIN monitored_applications ma ON d.monitored_app_id = ma.id
     LEFT JOIN application_repositories ar ON ar.monitored_app_id = ma.id
