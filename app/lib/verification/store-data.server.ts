@@ -105,8 +105,7 @@ async function updateDeploymentVerification(
        has_four_eyes = COALESCE($1, has_four_eyes),
        four_eyes_status = $2,
        github_pr_number = COALESCE($3, github_pr_number),
-       github_pr_data = COALESCE($4::jsonb, github_pr_data),
-       updated_at = NOW()
+       github_pr_data = COALESCE($4::jsonb, github_pr_data)
      WHERE id = $5
        AND four_eyes_status NOT IN ('manually_approved', 'legacy')`,
     [
