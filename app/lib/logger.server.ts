@@ -31,8 +31,11 @@ function getJobContext(): JobContext | undefined {
 
 const isProd = process.env.NODE_ENV === 'production'
 
+const applicationVersion = typeof __BUILD_VERSION__ !== 'undefined' ? __BUILD_VERSION__ : 'unknown'
+
 const winstonLogger = winston.createLogger({
   level: 'debug',
+  defaultMeta: { applicationVersion },
   format: isProd
     ? winston.format.combine(winston.format.timestamp(), winston.format.json())
     : winston.format.combine(winston.format.colorize(), winston.format.simple()),
