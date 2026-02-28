@@ -582,17 +582,26 @@ export async function fetchVerificationDataForAllDeployments(
     durationMs: Math.round(performance.now() - settingsStart),
   })
 
-  // Build query with audit_start_year filter if set
-  let query = `SELECT d.id, d.commit_sha, d.detected_github_owner, d.detected_github_repo_name,
-          d.environment_name, ma.default_branch, d.created_at
-   FROM deployments d
-   JOIN monitored_applications ma ON d.monitored_app_id = ma.id
-   WHERE d.monitored_app_id = $1
-     AND d.commit_sha IS NOT NULL
-     AND d.detected_github_owner IS NOT NULL
-     AND d.detected_github_repo_name IS NOT NULL
-     AND d.commit_sha !~ '^refs/'
-     AND LENGTH(d.commit_sha) >= 7`
+  // Build query that pre-computes which deployments already have data,
+  // avoiding N individual hasCurrentSchemaData calls (2-3 queries each).
+  // Uses window function LAG() to find previous deployment's commit_sha,
+  // then LEFT JOINs to check for existing PR and compare snapshots.
+  let query = `
+    WITH ordered_deployments AS (
+      SELECT d.id, d.commit_sha, d.detected_github_owner, d.detected_github_repo_name,
+             d.environment_name, ma.default_branch, d.created_at,
+             LAG(d.commit_sha) OVER (
+               PARTITION BY d.environment_name, d.detected_github_owner, d.detected_github_repo_name
+               ORDER BY d.created_at ASC
+             ) AS prev_commit_sha
+      FROM deployments d
+      JOIN monitored_applications ma ON d.monitored_app_id = ma.id
+      WHERE d.monitored_app_id = $1
+        AND d.commit_sha IS NOT NULL
+        AND d.detected_github_owner IS NOT NULL
+        AND d.detected_github_repo_name IS NOT NULL
+        AND d.commit_sha !~ '^refs/'
+        AND LENGTH(d.commit_sha) >= 7`
 
   const params: (number | string)[] = [monitoredAppId]
 
@@ -601,7 +610,31 @@ export async function fetchVerificationDataForAllDeployments(
     params.push(`${appSettings.auditStartYear}-01-01`)
   }
 
-  query += ` ORDER BY d.created_at DESC`
+  query += `
+    )
+    SELECT od.*,
+           (pr_snap.id IS NOT NULL) AS has_pr_snapshot,
+           (od.prev_commit_sha IS NULL OR cmp_snap.id IS NOT NULL) AS has_compare_snapshot
+    FROM ordered_deployments od
+    LEFT JOIN LATERAL (
+      SELECT id FROM github_commit_snapshots gcs
+      WHERE gcs.owner = od.detected_github_owner
+        AND gcs.repo = od.detected_github_repo_name
+        AND gcs.sha = od.commit_sha
+        AND gcs.data_type = 'prs'
+        AND gcs.schema_version = ${CURRENT_SCHEMA_VERSION}
+      ORDER BY gcs.fetched_at DESC LIMIT 1
+    ) pr_snap ON true
+    LEFT JOIN LATERAL (
+      SELECT id FROM github_compare_snapshots gcs
+      WHERE gcs.owner = od.detected_github_owner
+        AND gcs.repo = od.detected_github_repo_name
+        AND gcs.base_sha = od.prev_commit_sha
+        AND gcs.head_sha = od.commit_sha
+        AND gcs.schema_version = ${CURRENT_SCHEMA_VERSION}
+      ORDER BY gcs.fetched_at DESC LIMIT 1
+    ) cmp_snap ON od.prev_commit_sha IS NOT NULL
+    ORDER BY od.created_at DESC`
 
   const queryStart = performance.now()
   const deploymentsResult = await pool.query(query, params)
@@ -637,24 +670,14 @@ export async function fetchVerificationDataForAllDeployments(
       const commitSha = deployment.commit_sha
       const baseBranch = deployment.default_branch || 'main'
 
-      // Check if we already have current schema data for this deployment
-      const checkStart = performance.now()
-      const hasCurrentData = await hasCurrentSchemaData(
-        owner,
-        repo,
-        deployment.id,
-        commitSha,
-        deployment.environment_name,
-        appSettings.auditStartYear,
-      )
-      const checkDuration = Math.round(performance.now() - checkStart)
+      // Use pre-computed snapshot existence from the query
+      const hasCurrentData = deployment.has_pr_snapshot && deployment.has_compare_snapshot
 
       if (hasCurrentData) {
         result.skipped++
         logger.debug(`Hoppet over deployment ${deployment.id} (data finnes)`, {
           commitSha: commitSha.substring(0, 7),
           repo: `${owner}/${repo}`,
-          checkMs: checkDuration,
         })
       } else {
         // Fetch data (this will store to database)
@@ -679,7 +702,6 @@ export async function fetchVerificationDataForAllDeployments(
         logger.debug(`Hentet data for deployment ${deployment.id}`, {
           commitSha: commitSha.substring(0, 7),
           repo: `${owner}/${repo}`,
-          checkMs: checkDuration,
           fetchMs: fetchDuration,
         })
       }
