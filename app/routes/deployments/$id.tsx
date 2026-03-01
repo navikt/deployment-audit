@@ -36,6 +36,7 @@ import {
 } from '@navikt/ds-react'
 import { useRef, useState } from 'react'
 import { Form, Link, useFetcher, useSearchParams } from 'react-router'
+import { ActionAlert } from '~/components/ActionAlert'
 import {
   createComment,
   deleteComment,
@@ -1355,8 +1356,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           )}
         </BodyShort>
       </div>
-      {actionData?.success && <Alert variant="success">{actionData.success}</Alert>}
-      {actionData?.error && <Alert variant="error">{actionData.error}</Alert>}
+      <ActionAlert data={actionData} />
       {/* Four-eyes Alert - only shown for non-OK states */}
       {deployment.four_eyes_status !== 'approved' &&
         deployment.four_eyes_status !== 'manually_approved' &&

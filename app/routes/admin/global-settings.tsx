@@ -6,6 +6,7 @@
 
 import { Alert, BodyShort, Box, Button, Heading, TextField, VStack } from '@navikt/ds-react'
 import { Form, useActionData, useLoaderData } from 'react-router'
+import { ActionAlert } from '~/components/ActionAlert'
 import { getDeviationSlackChannel, updateDeviationSlackChannel } from '~/db/global-settings.server'
 import { requireAdmin } from '~/lib/auth.server'
 import type { Route } from './+types/global-settings'
@@ -49,8 +50,7 @@ export default function GlobalSettingsPage() {
           Globale innstillinger
         </Heading>
 
-        {actionData?.success && <Alert variant="success">{actionData.success}</Alert>}
-        {actionData?.error && <Alert variant="error">{actionData.error}</Alert>}
+        <ActionAlert data={actionData} />
 
         <Box background="neutral-soft" padding="space-24" borderRadius="8">
           <VStack gap="space-16">

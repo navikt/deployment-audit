@@ -14,6 +14,7 @@ import {
 } from '@navikt/ds-react'
 import { useEffect, useRef, useState } from 'react'
 import { Form, Link, useActionData, useLoaderData, useNavigation } from 'react-router'
+import { ActionAlert } from '~/components/ActionAlert'
 import {
   deleteUserMapping,
   getAllUserMappings,
@@ -224,8 +225,7 @@ export default function AdminUsers() {
           </Alert>
         )}
 
-        {/* Error message */}
-        {actionData?.error && <Alert variant="error">{actionData.error}</Alert>}
+        <ActionAlert data={actionData} />
 
         {/* Warning alert for unmapped users */}
         {unmappedUsers.length > 0 && (

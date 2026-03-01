@@ -1,6 +1,7 @@
 import { PlusIcon } from '@navikt/aksel-icons'
 import { Alert, BodyShort, Box, Button, Detail, Heading, HStack, Tag, TextField, VStack } from '@navikt/ds-react'
 import { Form, useNavigation } from 'react-router'
+import { ActionAlert } from '~/components/ActionAlert'
 import { upsertApplicationRepository } from '../db/application-repositories.server'
 import { createMonitoredApplication, getAllMonitoredApplications } from '../db/monitored-applications.server'
 import { requireAdmin } from '../lib/auth.server'
@@ -149,7 +150,7 @@ export default function AppsDiscover({ loaderData, actionData }: Route.Component
         </Alert>
       )}
 
-      {actionData?.error && <Alert variant="error">{actionData.error}</Alert>}
+      <ActionAlert data={actionData} />
       {loaderData.error && <Alert variant="error">{loaderData.error}</Alert>}
 
       {!loaderData.error && (

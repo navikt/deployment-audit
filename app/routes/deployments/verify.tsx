@@ -2,6 +2,7 @@ import { CheckmarkCircleIcon } from '@navikt/aksel-icons'
 import { Alert, BodyShort, Box, Button, Heading, HGrid, ProgressBar, TextField, VStack } from '@navikt/ds-react'
 import { useEffect, useState } from 'react'
 import { Form, useNavigation } from 'react-router'
+import { ActionAlert } from '~/components/ActionAlert'
 import { getVerificationStats } from '~/db/deployments.server'
 import { getAllMonitoredApplications } from '~/db/monitored-applications.server'
 import { logger } from '~/lib/logger.server'
@@ -153,7 +154,7 @@ export default function DeploymentsVerify({ loaderData, actionData }: Route.Comp
         </Alert>
       )}
 
-      {actionData?.error && <Alert variant="error">{actionData.error}</Alert>}
+      <ActionAlert data={actionData} />
 
       <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
         <VStack gap="space-16">

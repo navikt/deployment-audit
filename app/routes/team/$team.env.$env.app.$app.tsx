@@ -29,6 +29,7 @@ import {
 } from '@navikt/ds-react'
 import { useState } from 'react'
 import { Form, Link, useActionData, useLoaderData, useRouteLoaderData, useSearchParams } from 'react-router'
+import { ActionAlert } from '~/components/ActionAlert'
 import { StatCard } from '~/components/StatCard'
 import { getUnresolvedAlertsByApp, resolveRepositoryAlert } from '~/db/alerts.server'
 import { updateImplicitApprovalSettings } from '~/db/app-settings.server'
@@ -240,8 +241,7 @@ export default function AppDetail() {
         )}
       </HStack>
 
-      {actionData?.success && <Alert variant="success">{actionData.success}</Alert>}
-      {actionData?.error && <Alert variant="error">{actionData.error}</Alert>}
+      <ActionAlert data={actionData} />
 
       {/* Statistics Section */}
       <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
