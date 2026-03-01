@@ -86,6 +86,32 @@ Submodules extracted from the main deployments file:
 
 All re-exported from `app/db/deployments.server.ts` (barrel file).
 
+### Slack (`app/lib/slack/`)
+
+Slack integration grouped into focused modules:
+
+- `client.server.ts` — Slack Bolt app, connection, message sending, notifications
+- `blocks.ts` — Block Kit message builders (deployments, deviations, reminders, home tab)
+- `block-kit-url.ts` — Block Kit Builder URL generation for previewing messages
+- `index.ts` — Re-exports all public API
+
+### Sync (`app/lib/sync/`)
+
+Background sync job infrastructure:
+
+- `scheduler.server.ts` — Cron-based job scheduling
+- `log-cache.server.ts` — GitHub check log caching
+- `log-cache-job.server.ts` — Locking wrapper for log cache operations
+- `index.ts` — Re-exports
+
+### Verification (`app/lib/verification/`)
+
+Business logic for four-eyes verification:
+
+- `verify.ts` — Main verification engine including `checkImplicitApproval`
+- `fetch-data.server.ts` — GitHub data fetching for verification
+- `types.ts` — Shared types and constants
+
 ### Route Action Extraction Pattern
 
 Large route files split their action handlers into `*.actions.server.ts` files:

@@ -1,6 +1,6 @@
 import { acquireSyncLock, logSyncJobMessage, releaseSyncLock } from '~/db/sync-jobs.server'
-import { cacheCheckLogs } from './log-cache.server'
 import { runWithJobContext } from '~/lib/logger.server'
+import { cacheCheckLogs } from './log-cache.server'
 
 /**
  * Cache check logs with distributed locking.
