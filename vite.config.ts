@@ -1,7 +1,7 @@
 import { execSync } from 'node:child_process';
 import { reactRouter } from '@react-router/dev/vite';
-import { defineConfig } from 'vite';
 import tsconfigPaths from 'vite-tsconfig-paths';
+import { defineConfig } from 'vitest/config';
 
 function getBuildVersion(): string {
   const now = new Date();

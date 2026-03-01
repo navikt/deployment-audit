@@ -1,3 +1,4 @@
+import type { SyncJobType } from '~/db/sync-job-types'
 import { acquireSyncLock, logSyncJobMessage, releaseSyncLock } from '~/db/sync-jobs.server'
 import { runWithJobContext } from '~/lib/logger.server'
 
@@ -15,7 +16,7 @@ import { runWithJobContext } from '~/lib/logger.server'
  * @param fn - The async function to run under the lock
  */
 export async function withSyncLock<T>(
-  jobType: string,
+  jobType: SyncJobType,
   monitoredAppId: number,
   options: {
     timeoutMinutes?: number
@@ -36,7 +37,7 @@ export async function withSyncLock<T>(
     const result = await runWithJobContext(lockId, false, fn)
     const resultContext = options.buildResultContext?.(result)
     await logSyncJobMessage(lockId, 'info', options.resultMessage, resultContext)
-    await releaseSyncLock(lockId, 'completed', result)
+    await releaseSyncLock(lockId, 'completed', result as Record<string, unknown>)
     return { success: true, result }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
