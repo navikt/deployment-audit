@@ -104,6 +104,9 @@ async function updateDeploymentVerification(
     case 'unauthorized_repository':
       fourEyesValue = false
       break
+    case 'unauthorized_branch':
+      fourEyesValue = false
+      break
   }
 
   // Build github_pr_data from snapshots if a PR was found

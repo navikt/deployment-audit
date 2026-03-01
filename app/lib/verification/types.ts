@@ -84,6 +84,7 @@ export const VERIFICATION_STATUSES = [
   'no_changes',
   'manually_approved',
   'unauthorized_repository',
+  'unauthorized_branch',
   'legacy',
   'error',
 ] as const
@@ -100,6 +101,7 @@ export const VERIFICATION_STATUS_LABELS: Record<VerificationStatus, string> = {
   no_changes: 'Ingen endringer',
   manually_approved: 'Manuelt godkjent',
   unauthorized_repository: 'Ikke godkjent repo',
+  unauthorized_branch: 'Ikke på godkjent branch',
   legacy: 'Legacy',
   error: 'Feil',
 }
@@ -439,6 +441,9 @@ export interface VerificationInput {
 
   // Repository status (active, historical, pending_approval, unknown)
   repositoryStatus: RepositoryStatus
+
+  // Whether the deployed commit is on the base branch (null = unknown/API error)
+  commitOnBaseBranch: boolean | null
 
   // App settings
   auditStartYear: number | null

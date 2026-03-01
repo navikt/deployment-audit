@@ -66,7 +66,10 @@ flowchart TD
 
     C0 -- Nei --> R0[🔴 Ikke godkjent repo\nRepo er pending/historisk/ukjent]
 
-    C0 -- Ja --> C1{Finnes forrige\ndeployment?}
+    C0 -- Ja --> C0b{Er commit på\ngodkjent branch?}
+
+    C0b -- Nei --> R0b[🔴 Ikke på godkjent branch\nCommit er ikke på base branch]
+    C0b -- Ja/Ukjent --> C1{Finnes forrige\ndeployment?}
 
     C1 -- Nei --> R1[🟡 Første deployment\nIngen baseline å sammenligne mot]
 
@@ -95,6 +98,7 @@ flowchart TD
     C7 -- Nei --> R7[🔴 Uverifiserte commits]
 
     style R0 fill:#f8d7da,stroke:#721c24
+    style R0b fill:#f8d7da,stroke:#721c24
     style R1 fill:#fff3cd,stroke:#856404
     style R2 fill:#d4edda,stroke:#155724
     style R3 fill:#d4edda,stroke:#155724
@@ -110,6 +114,14 @@ flowchart TD
 Før noen annen verifisering sjekkes om deploymentets repository er registrert og godkjent (`active`) for applikasjonen. Hvis repositoryet har status `pending_approval`, `historical`, eller ikke er registrert i det hele tatt (`unknown`), avvises verifiseringen umiddelbart med status **`unauthorized_repository`**. Dette forhindrer at deployments fra uautoriserte kilder kan bli markert som godkjent.
 
 > 📁 Se `handleUnauthorizedRepository` i [`verify.ts`](../app/lib/verification/verify.ts) og `findRepositoryForApp` i [`application-repositories.server.ts`](../app/db/application-repositories.server.ts)
+
+#### Steg 0b: Er commit på godkjent branch?
+
+Systemet bruker GitHub Compare API til å sjekke om den deployede commit-SHAen befinner seg på applikasjonens konfigurerte base-branch (f.eks. `main`). Hvis committen **ikke** er på base-branchen, betyr det at noen har deployet fra en feature-branch eller annen uautorisert branch. Status: **`unauthorized_branch`**.
+
+Hvis API-kallet feiler (f.eks. midlertidig nettverksproblem), fortsetter verifiseringen normalt (**fail-open**) — det er bedre å sjekke fire-øyne enn å blokkere alt.
+
+> 📁 Se `handleUnauthorizedBranch` i [`verify.ts`](../app/lib/verification/verify.ts) og `isCommitOnBranch` i [`github.server.ts`](../app/lib/github.server.ts)
 
 #### Steg 1: Finnes forrige deployment?
 
@@ -165,6 +177,7 @@ Hvert deployment får én av følgende statuser etter verifisering:
 | `pending_baseline` | Første deployment | ⚠️ Nei | Første deployment — brukes som referansepunkt |
 | `unverified_commits` | Uverifiserte commits | ❌ Nei | Én eller flere commits mangler godkjent PR-review |
 | `unauthorized_repository` | Ikke godkjent repo | ❌ Nei | Deploymentets repo er ikke godkjent for applikasjonen |
+| `unauthorized_branch` | Ikke på godkjent branch | ❌ Nei | Deployet commit er ikke på konfigurert base-branch |
 | `manually_approved` | Manuelt godkjent | ✅ Ja | Manuelt godkjent av administrator i applikasjonen |
 | `legacy` | Legacy | ⚠️ N/A | Deployment fra før audit-systemet ble aktivert |
 | `error` | Feil | ❌ Nei | Teknisk feil under verifisering |
@@ -325,6 +338,20 @@ Ved konfliktløsning i merge-commits kan utviklere legge inn vilkårlige kodeend
 Git tillater at forfattere setter vilkårlig `authorDate` på commits. En ondsinnet utvikler kan backdatere en commit til å se ut som den ble laget *før* en PR-godkjenning. Systemet motvirker dette ved å bruke **den seneste av `authorDate` og `committerDate`**. `committerDate` settes av git-serveren ved push/rebase og er vanskeligere å manipulere.
 
 > 📁 Se `latestCommitDate` og `verifyFourEyesFromPrData` i [`verify.ts`](../app/lib/verification/verify.ts)
+
+### Branch-validering
+
+Systemet sjekker om den deployede commit-SHAen befinner seg på applikasjonens konfigurerte base-branch (f.eks. `main`) via GitHub Compare API. Hvis committen ikke er på base-branchen, kan det bety at noen har deployet direkte fra en feature-branch — uten at koden nødvendigvis er merget. Slike deployments markeres som **`unauthorized_branch`**.
+
+Sjekken bruker **fail-open**: hvis GitHub API-kallet feiler, fortsetter verifiseringen normalt. Dette sikrer at midlertidige nettverksproblemer ikke blokkerer all verifisering.
+
+> 📁 Se `isCommitOnBranch` i [`github.server.ts`](../app/lib/github.server.ts) og `handleUnauthorizedBranch` i [`verify.ts`](../app/lib/verification/verify.ts)
+
+### Repository-validering
+
+Før verifisering sjekkes om deploymentets repository er registrert og godkjent (`active`) for applikasjonen. Deployments fra repositorier med status `pending_approval`, `historical` eller uten registrering markeres som **`unauthorized_repository`**.
+
+> 📁 Se `handleUnauthorizedRepository` i [`verify.ts`](../app/lib/verification/verify.ts) og `findRepositoryForApp` i [`application-repositories.server.ts`](../app/db/application-repositories.server.ts)
 
 ---
 

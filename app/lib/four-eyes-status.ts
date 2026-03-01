@@ -28,6 +28,7 @@ export const FOUR_EYES_STATUSES = [
   'legacy_pending', // Legacy awaiting review
   'repository_mismatch', // Repository doesn't match monitored app
   'unauthorized_repository', // Repository not approved for this app
+  'unauthorized_branch', // Deployed commit not on approved branch
   'error', // Error during verification
   'unknown', // Not yet verified (DB default)
 ] as const
@@ -56,6 +57,7 @@ export const NOT_APPROVED_STATUSES: FourEyesStatus[] = [
   'unverified_commits',
   'approved_pr_with_unreviewed',
   'unauthorized_repository',
+  'unauthorized_branch',
 ]
 
 /**
@@ -87,6 +89,7 @@ export const FOUR_EYES_STATUS_LABELS: Record<FourEyesStatus, string> = {
   legacy_pending: 'Legacy (venter)',
   repository_mismatch: 'Repository mismatch',
   unauthorized_repository: 'Ikke godkjent repo',
+  unauthorized_branch: 'Ikke på godkjent branch',
   error: 'Feil',
   unknown: 'Ukjent',
 }

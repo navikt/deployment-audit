@@ -23,7 +23,12 @@ import {
   savePrSnapshotsBatch,
 } from '~/db/github-data.server'
 import { heartbeatSyncJob, isSyncJobCancelled, logSyncJobMessage, updateSyncJobProgress } from '~/db/sync-jobs.server'
-import { getCommitsBetween, getDetailedPullRequestInfo, getPullRequestForCommit } from '~/lib/github.server'
+import {
+  getCommitsBetween,
+  getDetailedPullRequestInfo,
+  getPullRequestForCommit,
+  isCommitOnBranch,
+} from '~/lib/github.server'
 import { logger } from '~/lib/logger.server'
 import type { RepositoryStatus } from './types'
 import {
@@ -74,6 +79,9 @@ export async function fetchVerificationData(
     ? (repoCheck.repository.status as RepositoryStatus)
     : 'unknown'
 
+  // Check if deployed commit is on the base branch
+  const commitOnBaseBranch = await isCommitOnBranch(owner, repo, commitSha, baseBranch)
+
   // Get previous deployment
   const previousDeployment = await getPreviousDeployment(
     deploymentId,
@@ -107,6 +115,7 @@ export async function fetchVerificationData(
     environmentName,
     baseBranch,
     repositoryStatus,
+    commitOnBaseBranch,
     auditStartYear: appSettings.auditStartYear,
     implicitApprovalSettings: appSettings.implicitApprovalSettings,
     previousDeployment,

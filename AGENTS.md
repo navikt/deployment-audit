@@ -48,7 +48,7 @@ The verification system checks that all deployments follow the four-eyes princip
 
 ### Key Functions in verify.ts
 
-- `verifyDeployment(input)`: Main entry point. Pure function with 8 decision steps (step 0: repo validation).
+- `verifyDeployment(input)`: Main entry point. Pure function with 9 decision steps (0a: repo, 0b: branch, 1-7: four-eyes).
 - `verifyFourEyesFromPrData()`: Checks PR reviews against commits timeline.
 - `shouldApproveWithBaseMerge()`: Detects base branch merge patterns.
 - `checkImplicitApproval()`: Evaluates implicit approval rules (off/dependabot_only/all).

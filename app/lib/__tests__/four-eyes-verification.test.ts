@@ -88,6 +88,7 @@ function makeBaseInput(overrides: Partial<VerificationInput> = {}): Verification
     environmentName: 'prod-fss',
     baseBranch: 'main',
     repositoryStatus: 'active',
+    commitOnBaseBranch: true,
     auditStartYear: 2025,
     implicitApprovalSettings: { mode: 'off' },
     previousDeployment: {

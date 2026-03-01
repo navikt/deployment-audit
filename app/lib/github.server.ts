@@ -1165,6 +1165,38 @@ export async function getCommitsBetween(
 }
 
 /**
+ * Check if a commit SHA exists on a given branch.
+ * Uses the compare API: if the branch is identical to or ahead of the commit,
+ * the commit is reachable from the branch.
+ *
+ * Returns null on API error (fail-open: caller should treat as unknown).
+ */
+export async function isCommitOnBranch(
+  owner: string,
+  repo: string,
+  commitSha: string,
+  branch: string,
+): Promise<boolean | null> {
+  try {
+    const client = getGitHubClient()
+
+    const response = await client.repos.compareCommits({
+      owner,
+      repo,
+      base: commitSha,
+      head: branch,
+    })
+
+    // If branch is identical or ahead of commit, the commit is on the branch
+    const status = response.data.status
+    return status === 'identical' || status === 'ahead'
+  } catch (error) {
+    logger.warn(`⚠️ Failed to check if ${commitSha.substring(0, 7)} is on ${branch} in ${owner}/${repo}:`, error)
+    return null
+  }
+}
+
+/**
  * Result of looking up GitHub data for a legacy deployment
  */
 export interface LegacyLookupResult {

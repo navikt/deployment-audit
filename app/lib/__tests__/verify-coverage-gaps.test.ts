@@ -77,6 +77,7 @@ function makeBaseInput(overrides: Partial<VerificationInput> = {}): Verification
     environmentName: 'prod-fss',
     baseBranch: 'main',
     repositoryStatus: 'active',
+    commitOnBaseBranch: true,
     auditStartYear: 2025,
     implicitApprovalSettings: { mode: 'off' },
     previousDeployment: {
@@ -718,6 +719,58 @@ describe('verifyDeployment - Repository status validation', () => {
     const result = verifyDeployment(input)
 
     // Should proceed to normal logic (pending_baseline since no previous deployment)
+    expect(result.status).toBe('pending_baseline')
+  })
+})
+
+// =============================================================================
+// Branch Validation
+// =============================================================================
+
+describe('verifyDeployment - Branch validation', () => {
+  it('should return unauthorized_branch when commit is not on base branch', () => {
+    const input = makeBaseInput({
+      commitOnBaseBranch: false,
+      commitsBetween: [
+        {
+          sha: 'abc123',
+          message: 'feat: new feature',
+          authorUsername: 'dev-a',
+          authorDate: '2026-02-27T12:00:00Z',
+          isMergeCommit: false,
+          parentShas: [],
+          htmlUrl: '',
+          pr: null,
+        },
+      ],
+    })
+
+    const result = verifyDeployment(input)
+
+    expect(result.status).toBe('unauthorized_branch')
+    expect(result.hasFourEyes).toBe(false)
+    expect(result.approvalDetails.reason).toContain('base branch')
+  })
+
+  it('should proceed with normal verification when commit is on base branch', () => {
+    const input = makeBaseInput({
+      commitOnBaseBranch: true,
+      previousDeployment: null,
+    })
+
+    const result = verifyDeployment(input)
+
+    expect(result.status).toBe('pending_baseline')
+  })
+
+  it('should proceed with normal verification when branch check is unknown (fail-open)', () => {
+    const input = makeBaseInput({
+      commitOnBaseBranch: null,
+      previousDeployment: null,
+    })
+
+    const result = verifyDeployment(input)
+
     expect(result.status).toBe('pending_baseline')
   })
 })

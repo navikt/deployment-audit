@@ -28,7 +28,8 @@ import {
  * This is a pure function - no side effects, no database/API calls.
  *
  * Decision steps:
- * 0. Repository not active → unauthorized_repository
+ * 0a. Repository not active → unauthorized_repository
+ * 0b. Commit not on base branch → unauthorized_branch
  * 1. No previous deployment → pending_baseline
  * 2. No commits between deployments → no_changes
  * 3. Check each commit against PR data
@@ -42,6 +43,10 @@ import {
 export function verifyDeployment(input: VerificationInput): VerificationResult {
   if (input.repositoryStatus !== 'active') {
     return handleUnauthorizedRepository(input)
+  }
+
+  if (input.commitOnBaseBranch === false) {
+    return handleUnauthorizedBranch(input)
   }
 
   if (!input.previousDeployment) {
@@ -83,6 +88,18 @@ function handleUnauthorizedRepository(input: VerificationInput): VerificationRes
       method: null,
       approvers: [],
       reason: `Repository status: ${input.repositoryStatus}`,
+    },
+  })
+}
+
+function handleUnauthorizedBranch(input: VerificationInput): VerificationResult {
+  return buildResult(input, {
+    hasFourEyes: false,
+    status: 'unauthorized_branch',
+    approvalDetails: {
+      method: null,
+      approvers: [],
+      reason: `Deployed commit is not on base branch '${input.baseBranch}'`,
     },
   })
 }

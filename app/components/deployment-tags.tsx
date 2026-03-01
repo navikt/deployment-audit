@@ -89,9 +89,14 @@ export function StatusTag({
     case 'error':
     case 'repository_mismatch':
     case 'unauthorized_repository':
+    case 'unauthorized_branch':
       return (
         <Tag data-color="danger" variant="outline" size="small" icon={<XMarkIcon aria-hidden />}>
-          {four_eyes_status === 'unauthorized_repository' ? 'Ikke godkjent repo' : 'Feil'}
+          {four_eyes_status === 'unauthorized_repository'
+            ? 'Ikke godkjent repo'
+            : four_eyes_status === 'unauthorized_branch'
+              ? 'Ikke på godkjent branch'
+              : 'Feil'}
         </Tag>
       )
     default:
