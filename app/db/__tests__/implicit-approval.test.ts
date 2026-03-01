@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import {
-  checkImplicitApproval,
-  DEFAULT_IMPLICIT_APPROVAL_SETTINGS,
-  type ImplicitApprovalSettings,
-} from '../app-settings.server'
+import { checkImplicitApproval } from '../../lib/verification/verify'
+import { DEFAULT_IMPLICIT_APPROVAL_SETTINGS, type ImplicitApprovalSettings } from '../app-settings.server'
 
 /**
  * Tests for implicit approval logic.

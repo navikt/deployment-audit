@@ -1,5 +1,5 @@
 import { logger } from '~/lib/logger.server'
-import { assertNever, IMPLICIT_APPROVAL_MODES, type ImplicitApprovalMode } from '~/lib/verification/types'
+import { IMPLICIT_APPROVAL_MODES, type ImplicitApprovalMode } from '~/lib/verification/types'
 import { pool } from './connection.server'
 
 // ============================================================================
@@ -216,63 +216,5 @@ export async function getAllAppSettings(monitoredAppId: number): Promise<AppSett
   return result.rows
 }
 
-// ============================================================================
-// Helper functions for implicit approval logic
-// ============================================================================
-
-/**
- * Check if a PR qualifies for implicit approval
- * Returns { qualifies: true, reason: string } or { qualifies: false }
- *
- * Rules:
- * - mode 'off': Never qualifies
- * - mode 'dependabot_only': Only Dependabot PRs with only Dependabot commits qualify
- * - mode 'all': Any PR where merger is not creator AND not last commit author qualifies
- */
-export function checkImplicitApproval(params: {
-  settings: ImplicitApprovalSettings
-  prCreator: string
-  lastCommitAuthor: string
-  mergedBy: string
-  allCommitAuthors: string[]
-}): { qualifies: boolean; reason?: string } {
-  const { settings, prCreator, lastCommitAuthor, mergedBy, allCommitAuthors } = params
-  const { mode } = settings
-
-  const mergedByLower = mergedBy.toLowerCase()
-  const prCreatorLower = prCreator.toLowerCase()
-  const lastCommitAuthorLower = lastCommitAuthor.toLowerCase()
-
-  switch (mode) {
-    case 'off':
-      return { qualifies: false }
-
-    case 'dependabot_only': {
-      const isDependabotPR = prCreatorLower === 'dependabot[bot]'
-      const onlyDependabotCommits = allCommitAuthors.every(
-        (author) => author.toLowerCase() === 'dependabot[bot]' || author.toLowerCase() === 'dependabot',
-      )
-
-      if (isDependabotPR && onlyDependabotCommits && mergedByLower !== prCreatorLower) {
-        return {
-          qualifies: true,
-          reason: 'Dependabot-PR med kun Dependabot-commits, merget av en annen bruker',
-        }
-      }
-      return { qualifies: false }
-    }
-
-    case 'all': {
-      if (mergedByLower !== prCreatorLower && mergedByLower !== lastCommitAuthorLower) {
-        return {
-          qualifies: true,
-          reason: `Merget av ${mergedBy} som verken opprettet PR-en (${prCreator}) eller har siste commit (${lastCommitAuthor})`,
-        }
-      }
-      return { qualifies: false }
-    }
-
-    default:
-      return assertNever(mode, `Unhandled implicit approval mode: ${mode}`)
-  }
-}
+// checkImplicitApproval has been consolidated into app/lib/verification/verify.ts
+// Import from there if needed: import { checkImplicitApproval } from '~/lib/verification/verify'
