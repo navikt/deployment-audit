@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PrCommit, PrMetadata, PrReview, VerificationInput } from '../verification/types'
-import { verifyDeployment } from '../verification/verify'
+import { verifyDeployment, verifyFourEyesFromPrData } from '../verification/verify'
 
 /**
  * Tests closing coverage gaps in verifyDeployment.
@@ -508,5 +508,149 @@ describe('verifyDeployment - deployed PR approval before last commit', () => {
       expect(commit.reason).toBe('approval_before_last_commit')
       expect(commit.prNumber).toBe(400)
     }
+  })
+})
+
+// =============================================================================
+// Security: merge-commit with code changes is invisible
+// =============================================================================
+
+describe('verifyDeployment - Security: merge-commit bypass', () => {
+  it('should flag non-base-branch merge commits without a PR as unverified', () => {
+    // Scenario: Someone pushes a merge commit directly to main that contains
+    // code changes (e.g., conflict resolution with malicious code).
+    // This merge commit is NOT a base-branch merge and has no PR.
+    const input = makeBaseInput({
+      commitsBetween: [
+        {
+          sha: 'normal-commit',
+          message: 'Normal feature work',
+          authorUsername: 'developer-a',
+          authorDate: '2026-02-27T10:00:00Z',
+          isMergeCommit: false,
+          parentShas: ['p1'],
+          htmlUrl: '',
+          pr: {
+            number: 500,
+            title: 'Feature PR',
+            url: 'https://github.com/navikt/test-app/pull/500',
+            reviews: [makePrReview({ submittedAt: '2026-02-27T11:00:00Z' })],
+            commits: [makePrCommit({ sha: 'normal-commit', authorDate: '2026-02-27T10:00:00Z' })],
+            baseBranch: 'main',
+          },
+        },
+        {
+          sha: 'sneaky-merge-commit',
+          message: 'Merge feature-x into feature-y',
+          authorUsername: 'attacker',
+          authorDate: '2026-02-27T12:00:00Z',
+          isMergeCommit: true,
+          parentShas: ['p1', 'p2'],
+          htmlUrl: '',
+          pr: null, // No PR for this merge commit
+        },
+      ],
+    })
+
+    const result = verifyDeployment(input)
+
+    // This test documents the EXPECTED behavior after the fix:
+    // Non-base-branch merge commits without a PR should be flagged
+    expect(result.unverifiedCommits.some((c) => c.sha === 'sneaky-merge-commit')).toBe(true)
+    expect(result.status).toBe('unverified_commits')
+  })
+
+  it('should still skip base-branch merge commits (Merge branch main into ...)', () => {
+    const input = makeBaseInput({
+      commitsBetween: [
+        {
+          sha: 'feature-commit',
+          message: 'Feature work',
+          authorUsername: 'developer-a',
+          authorDate: '2026-02-27T10:00:00Z',
+          isMergeCommit: false,
+          parentShas: ['p1'],
+          htmlUrl: '',
+          pr: {
+            number: 600,
+            title: 'Feature',
+            url: 'https://github.com/navikt/test-app/pull/600',
+            reviews: [makePrReview({ submittedAt: '2026-02-27T11:00:00Z' })],
+            commits: [
+              makePrCommit({
+                sha: 'feature-commit',
+                authorDate: '2026-02-27T10:00:00Z',
+                committerDate: '2026-02-27T10:00:00Z',
+              }),
+            ],
+            baseBranch: 'main',
+          },
+        },
+        {
+          sha: 'base-merge-sha',
+          message: "Merge branch 'main' into feature/something",
+          authorUsername: 'developer-a',
+          authorDate: '2026-02-27T12:00:00Z',
+          isMergeCommit: true,
+          parentShas: ['p1', 'p2'],
+          htmlUrl: '',
+          pr: null,
+        },
+      ],
+    })
+
+    const result = verifyDeployment(input)
+
+    expect(result.status).toBe('approved')
+    expect(result.unverifiedCommits).toHaveLength(0)
+  })
+})
+
+// =============================================================================
+// Security: git date manipulation (backdated authorDate)
+// =============================================================================
+
+describe('verifyFourEyesFromPrData - Security: date manipulation', () => {
+  it('should reject when authorDate is backdated but committerDate reveals truth', () => {
+    // Scenario: Attacker sets authorDate to before the approval,
+    // but committerDate (set at push time) is after the approval.
+    // The approval should NOT be considered valid because the commit
+    // was actually pushed after the approval.
+    const result = verifyFourEyesFromPrData({
+      reviewers: [
+        {
+          id: 1,
+          username: 'reviewer',
+          state: 'APPROVED',
+          submittedAt: '2026-02-27T12:00:00Z', // Approval at noon
+          body: null,
+        },
+      ],
+      commits: [
+        {
+          sha: 'honest-commit',
+          message: 'Honest work',
+          authorUsername: 'developer',
+          authorDate: '2026-02-27T10:00:00Z', // Before approval
+          committerDate: '2026-02-27T10:00:00Z',
+          isMergeCommit: false,
+          parentShas: [],
+        },
+        {
+          sha: 'backdated-commit',
+          message: 'Sneaky change',
+          authorUsername: 'developer',
+          authorDate: '2026-02-27T11:00:00Z', // BACKDATED: claims to be before approval
+          committerDate: '2026-02-27T14:00:00Z', // TRUTH: actually pushed after approval
+          isMergeCommit: false,
+          parentShas: [],
+        },
+      ],
+      baseBranch: 'main',
+    })
+
+    // After fix: should detect that committerDate is after approval
+    expect(result.hasFourEyes).toBe(false)
+    expect(result.reason).toBe('approval_before_last_commit')
   })
 })

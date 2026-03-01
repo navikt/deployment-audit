@@ -306,9 +306,9 @@ describe('verifyDeployment - deployment 151 (unapproved PR + direct push)', () =
         htmlUrl: '',
         pr: null,
       },
-      // Merge commit for deployed PR (should be skipped)
+      // Merge commit for deployed PR (matched by mergeCommitSha)
       {
-        sha: 'aea7a45ab704b32d7294eb966f10a06acf2a8be1',
+        sha: 'deploy-sha-151',
         message: 'Merge pull request #18220',
         authorUsername: 'user-b',
         authorDate: '2026-01-26T11:00:00Z',
@@ -320,12 +320,12 @@ describe('verifyDeployment - deployment 151 (unapproved PR + direct push)', () =
     ],
   })
 
-  it('should find exactly 3 unverified commits', () => {
+  it('should find exactly 4 unverified commits (including non-base-branch merge)', () => {
     const result = verifyDeployment(deployment151Input)
 
     expect(result.status).toBe('unverified_commits')
     expect(result.hasFourEyes).toBe(false)
-    expect(result.unverifiedCommits).toHaveLength(3)
+    expect(result.unverifiedCommits).toHaveLength(4)
   })
 
   it('should identify commits from PR #18196 with reason "no_approved_reviews"', () => {
@@ -359,15 +359,16 @@ describe('verifyDeployment - deployment 151 (unapproved PR + direct push)', () =
     }
   })
 
-  it('should skip merge commits', () => {
+  it('should skip base-branch merge commits but flag non-base-branch merges', () => {
     const result = verifyDeployment(deployment151Input)
 
-    const mergeShas = ['f92ec18', 'aea7a45']
     const unverifiedShas = result.unverifiedCommits.map((c) => c.sha.substring(0, 7))
 
-    for (const sha of mergeShas) {
-      expect(unverifiedShas).not.toContain(sha)
-    }
+    // Non-base-branch merge "Merge branch unapproved-feature" IS now flagged
+    expect(unverifiedShas).toContain('f92ec18')
+
+    // Deployed PR merge commit (deploy-sha-151) is verified via the deployed PR
+    expect(unverifiedShas).not.toContain('deploy-s')
   })
 
   it('should include correct metadata for each unverified commit', () => {

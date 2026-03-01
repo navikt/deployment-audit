@@ -56,5 +56,9 @@ The verification system checks that all deployments follow the four-eyes princip
 ### Unit Tests
 
 - `app/lib/__tests__/four-eyes-verification.test.ts` — PR review, squash merge, Dependabot scenarios
-- `app/lib/__tests__/verify-coverage-gaps.test.ts` — All 7 decision steps in `verifyDeployment`
+- `app/lib/__tests__/verify-coverage-gaps.test.ts` — All 7 decision steps in `verifyDeployment`, security gap tests
 - `app/lib/__tests__/v1-unverified-reasons.test.ts` — Complex multi-commit scenarios
+
+### Documentation Requirement
+
+When modifying verification logic in `app/lib/verification/verify.ts`, always update [`docs/verification.md`](docs/verification.md) to reflect the changes. This documentation is used by developers, managers, and auditors to understand the verification system.

@@ -112,10 +112,11 @@ Systemet henter listen over commits mellom forrige deployment sin commit-SHA og 
 
 For hver commit mellom forrige og nåværende deployment:
 
-1. **Merge-commits** hoppes over (de er tekniske artefakter, ikke reelle kodeendringer)
-2. **Commit i deployed PR**: Hvis commiten tilhører PR-en som ble deployet, sjekkes den PR-ens godkjenningsstatus
-3. **Commit med egen PR**: Hvis commiten har en tilknyttet PR (f.eks. en squash-merge fra en annen branch), sjekkes den PR-ens godkjenningsstatus
-4. **Commit uten PR**: Commiten er pushet direkte til main uten PR — dette er en **direkte push** og kan ikke verifiseres automatisk
+1. **Base-branch merge-commits** hoppes over (`Merge branch 'main' into ...`) — disse bringer allerede verifisert kode inn i feature-branchen
+2. **Andre merge-commits** (f.eks. `Merge branch unapproved-feature`) verifiseres som vanlige commits — de kan inneholde kodeendringer fra konfliktløsning
+3. **Commit i deployed PR**: Hvis commiten tilhører PR-en som ble deployet, sjekkes den PR-ens godkjenningsstatus
+4. **Commit med egen PR**: Hvis commiten har en tilknyttet PR (f.eks. en squash-merge fra en annen branch), sjekkes den PR-ens godkjenningsstatus
+5. **Commit uten PR**: Commiten er pushet direkte til main uten PR — dette er en **direkte push** og kan ikke verifiseres automatisk
 
 #### Steg 4: Alle commits verifisert?
 
@@ -196,7 +197,7 @@ Når en commit ikke kan verifiseres, tildeles en spesifikk årsak:
 Når systemet evaluerer om en PR har fire-øyne-godkjenning, sjekkes følgende:
 
 1. **Finnes godkjente reviews?** — Minst én review med status `APPROVED`
-2. **Er godkjenningen gitt etter siste reelle commit?** — En review gitt *før* siste commit er utdatert (noen kan ha lagt til kode etter godkjenning)
+2. **Er godkjenningen gitt etter siste reelle commit?** — En review gitt *før* siste commit er utdatert (noen kan ha lagt til kode etter godkjenning). For å motvirke manipulering av git-datoer brukes **den seneste av `authorDate` og `committerDate`** — dette krever at begge datoer må manipuleres for å omgå kontrollen
 3. **Ignorering av base branch merge-commits** — Commits av typen `Merge branch 'main' into feature-x` regnes ikke som reelle kodeendringer
 
 ### Tidslinjekontroll
@@ -294,8 +295,24 @@ Implisitt godkjenning er en konfigurerbar mekanisme som lar visse typer deployme
 | Fil | Dekker |
 |-----|--------|
 | [`app/lib/__tests__/four-eyes-verification.test.ts`](../app/lib/__tests__/four-eyes-verification.test.ts) | PR-review, squash merge, Dependabot-scenarier |
-| [`app/lib/__tests__/verify-coverage-gaps.test.ts`](../app/lib/__tests__/verify-coverage-gaps.test.ts) | Alle 7 beslutningssteg i `verifyDeployment` |
+| [`app/lib/__tests__/verify-coverage-gaps.test.ts`](../app/lib/__tests__/verify-coverage-gaps.test.ts) | Alle 7 beslutningssteg i `verifyDeployment`, sikkerhetstester |
 | [`app/lib/__tests__/v1-unverified-reasons.test.ts`](../app/lib/__tests__/v1-unverified-reasons.test.ts) | Komplekse multi-commit scenarier |
+
+---
+
+## Sikkerhetshensyn
+
+### Merge-commits med kodeendringer
+
+Ved konfliktløsning i merge-commits kan utviklere legge inn vilkårlige kodeendringer som ikke er del av noen PR. Systemet håndterer dette ved å **kun hoppe over base-branch merge-commits** (f.eks. `Merge branch 'main' into feature-x`). Andre merge-commits verifiseres som vanlige commits og flagges dersom de ikke tilhører en godkjent PR.
+
+> 📁 Se `findUnverifiedCommits` i [`verify.ts`](../app/lib/verification/verify.ts) og test i [`verify-coverage-gaps.test.ts`](../app/lib/__tests__/verify-coverage-gaps.test.ts)
+
+### Beskyttelse mot dato-manipulering
+
+Git tillater at forfattere setter vilkårlig `authorDate` på commits. En ondsinnet utvikler kan backdatere en commit til å se ut som den ble laget *før* en PR-godkjenning. Systemet motvirker dette ved å bruke **den seneste av `authorDate` og `committerDate`**. `committerDate` settes av git-serveren ved push/rebase og er vanskeligere å manipulere.
+
+> 📁 Se `latestCommitDate` og `verifyFourEyesFromPrData` i [`verify.ts`](../app/lib/verification/verify.ts)
 
 ---
 

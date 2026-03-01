@@ -111,7 +111,13 @@ function findUnverifiedCommits(input: VerificationInput): UnverifiedCommit[] {
 
   for (const commit of input.commitsBetween) {
     if (commit.isMergeCommit) {
-      continue
+      // Only skip merge commits that bring base branch into feature branch
+      // (e.g., "Merge branch 'main' into feature-x") — these contain
+      // already-verified code. Other merge commits (e.g., conflict
+      // resolution) may contain unreviewed changes and must be verified.
+      if (isBaseBranchMergeCommit(commit.message, input.baseBranch)) {
+        continue
+      }
     }
 
     // Check if commit is in deployed PR (by SHA match or merge commit SHA)
@@ -316,7 +322,7 @@ export function verifyFourEyesFromPrData(prData: PrDataForVerification): {
     }
   }
 
-  const lastRealCommitDate = new Date(lastRealCommit.authorDate)
+  const lastRealCommitDate = latestCommitDate(lastRealCommit)
 
   // Find approved reviews after last real commit
   const approvedReviewsAfterLastCommit = reviewers.filter((review) => {
@@ -499,4 +505,16 @@ function mapToUnverifiedReason(reason: string): UnverifiedReason {
   if (reason === 'no_approved_reviews') return 'no_approved_reviews'
   if (reason === 'approval_before_last_commit') return 'approval_before_last_commit'
   return 'pr_not_approved'
+}
+
+/**
+ * Use the later of authorDate and committerDate for a commit.
+ * authorDate is set by the author and can be trivially backdated.
+ * committerDate is set at push/rebase time and is harder to forge.
+ * Taking the maximum prevents backdating attacks.
+ */
+function latestCommitDate(commit: PrCommit): Date {
+  const author = new Date(commit.authorDate).getTime()
+  const committer = new Date(commit.committerDate).getTime()
+  return new Date(Math.max(author, committer))
 }
