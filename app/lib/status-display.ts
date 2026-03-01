@@ -1,0 +1,123 @@
+export function getFourEyesStatus(deployment: any): {
+  text: string
+  variant: 'success' | 'warning' | 'error' | 'info'
+  description: string
+} {
+  // Check specific statuses first, before generic has_four_eyes check
+  switch (deployment.four_eyes_status) {
+    case 'approved':
+    case 'approved_pr':
+      return {
+        text: 'Godkjent',
+        variant: 'success',
+        description: 'Dette deploymentet har blitt godkjent via en approved PR.',
+      }
+    case 'baseline':
+      return {
+        text: 'Baseline',
+        variant: 'success',
+        description: 'Første deployment for dette miljøet. Brukes som utgangspunkt for verifisering.',
+      }
+    case 'pending_baseline':
+      return {
+        text: 'Foreslått baseline',
+        variant: 'warning',
+        description: 'Første deployment for dette miljøet. Må godkjennes manuelt som baseline før videre verifisering.',
+      }
+    case 'no_changes':
+      return {
+        text: 'Ingen endringer',
+        variant: 'success',
+        description: 'Samme commit som forrige deployment.',
+      }
+    case 'unverified_commits':
+      return {
+        text: 'Ikke-verifiserte commits',
+        variant: 'error',
+        description:
+          'Det finnes commits mellom forrige og dette deploymentet som ikke har godkjent PR. Se detaljer under.',
+      }
+    case 'approved_pr_with_unreviewed':
+      return {
+        text: 'Ureviewed commits i merge',
+        variant: 'error',
+        description:
+          'PR var godkjent, men det ble merget inn commits fra main som ikke har godkjenning. Se detaljer under.',
+      }
+    case 'legacy':
+    case 'legacy_pending':
+      return {
+        text: deployment.four_eyes_status === 'legacy_pending' ? 'Legacy (venter)' : 'Legacy',
+        variant: deployment.four_eyes_status === 'legacy_pending' ? 'warning' : 'success',
+        description:
+          deployment.four_eyes_status === 'legacy_pending'
+            ? 'GitHub-data hentet. Venter på godkjenning fra en annen person.'
+            : 'Dette deploymentet har ugyldig eller mangelfull data fra Nais API, som skyldes endringer i Nais sitt skjema.',
+      }
+    case 'manually_approved':
+      return {
+        text: 'Manuelt godkjent',
+        variant: 'success',
+        description: 'Dette deploymentet er manuelt godkjent med dokumentasjon i Slack.',
+      }
+    case 'implicitly_approved':
+      return {
+        text: 'Implisitt godkjent',
+        variant: 'success',
+        description:
+          'Dette deploymentet er implisitt godkjent fordi den som merget PR-en verken opprettet PR-en eller har siste commit.',
+      }
+    case 'direct_push':
+      return {
+        text: 'Direct push',
+        variant: 'warning',
+        description: 'Dette var en direct push til main. Legg til Slack-lenke som bevis på review.',
+      }
+    case 'missing':
+      return {
+        text: 'Mangler godkjenning',
+        variant: 'error',
+        description: 'PR-en var ikke godkjent etter siste commit, eller godkjenningen kom før siste commit.',
+      }
+    case 'error':
+      return {
+        text: 'Feil ved verifisering',
+        variant: 'error',
+        description: 'Det oppstod en feil ved sjekk av GitHub.',
+      }
+    case 'pending':
+      return {
+        text: 'Venter på verifisering',
+        variant: 'info',
+        description: 'Deploymentet er ikke verifisert ennå.',
+      }
+  }
+
+  // Fallback for has_four_eyes without specific status
+  if (deployment.has_four_eyes) {
+    return {
+      text: 'Godkjent',
+      variant: 'success',
+      description: 'Dette deploymentet har blitt godkjent.',
+    }
+  }
+
+  return {
+    text: 'Ukjent status',
+    variant: 'info',
+    description: `Godkjenningsstatus kunne ikke fastslås (${deployment.four_eyes_status}).`,
+  }
+}
+
+export function formatChangeSource(source: string): string {
+  const labels: Record<string, string> = {
+    verification: 'Verifisering',
+    manual_approval: 'Manuell godkjenning',
+    reverification: 'Reverifisering',
+    sync: 'Synkronisering',
+    legacy: 'Legacy',
+    baseline_approval: 'Baseline godkjent',
+    unknown: 'Ukjent',
+  }
+  return labels[source] || source
+}
