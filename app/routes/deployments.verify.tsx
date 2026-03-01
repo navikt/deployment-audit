@@ -5,7 +5,7 @@ import { Form, useNavigation } from 'react-router'
 import { getVerificationStats } from '../db/deployments.server'
 import { getAllMonitoredApplications } from '../db/monitored-applications.server'
 import { logger } from '../lib/logger.server'
-import { verifyDeploymentsWithLock } from '../lib/sync.server'
+import { verifyDeploymentsWithLock } from '../lib/sync'
 import type { Route } from './+types/deployments.verify'
 
 export function meta(_args: Route.MetaArgs) {

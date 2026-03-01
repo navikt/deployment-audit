@@ -7,7 +7,7 @@ import { logger } from './lib/logger.server'
 import { startReminderScheduler } from './lib/reminder-scheduler.server'
 import { registerShutdownHandlers } from './lib/shutdown.server'
 import { isSlackConfigured, startSlackConnection } from './lib/slack.server'
-import { startPeriodicSync } from './lib/sync.server'
+import { startPeriodicSync } from './lib/sync'
 
 let initialized = false
 
