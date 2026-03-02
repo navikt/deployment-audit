@@ -1,7 +1,7 @@
-import { PencilIcon, PlusIcon, TrashIcon } from '@navikt/aksel-icons'
+import { PencilIcon, PersonGroupIcon, PlusIcon, TrashIcon } from '@navikt/aksel-icons'
 import { Alert, BodyShort, Box, Button, Heading, HStack, Table, Tag, TextField, VStack } from '@navikt/ds-react'
 import { useState } from 'react'
-import { Form, useLoaderData } from 'react-router'
+import { Form, Link, useLoaderData } from 'react-router'
 import {
   createSection,
   getAllSectionsWithTeams,
@@ -290,6 +290,15 @@ function SectionRow({
       </Table.DataCell>
       <Table.DataCell>
         <HStack gap="space-4">
+          <Button
+            as={Link}
+            to={`/admin/sections/${section.slug}/dev-teams`}
+            variant="tertiary"
+            size="xsmall"
+            icon={<PersonGroupIcon aria-hidden />}
+          >
+            Utviklingsteam
+          </Button>
           <Button variant="tertiary" size="xsmall" icon={<PencilIcon aria-hidden />} onClick={onEdit}>
             Rediger
           </Button>
