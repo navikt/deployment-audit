@@ -62,6 +62,8 @@ export default [
     route('admin/env', 'routes/admin/environment.tsx'),
     route('admin/sections', 'routes/admin/sections.tsx'),
     route('admin/sections/:slug/dev-teams', 'routes/admin/sections.$slug.dev-teams.tsx'),
+    route('boards/:devTeamSlug', 'routes/boards.$devTeamSlug.tsx'),
+    route('boards/:devTeamSlug/:boardId', 'routes/boards.$devTeamSlug.$boardId.tsx'),
     route('team/:team/env/:env/app/:app/admin/deviations', 'routes/team/$team.env.$env.app.$app.admin.deviations.tsx'),
   ]),
 ] satisfies RouteConfig
