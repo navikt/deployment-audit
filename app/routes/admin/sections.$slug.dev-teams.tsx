@@ -1,7 +1,7 @@
-import { PencilIcon, PlusIcon, TrashIcon } from '@navikt/aksel-icons'
+import { BarChartIcon, PencilIcon, PlusIcon, TrashIcon } from '@navikt/aksel-icons'
 import { Alert, BodyShort, Box, Button, Heading, HStack, Table, Tag, TextField, VStack } from '@navikt/ds-react'
 import { useState } from 'react'
-import { Form, useLoaderData } from 'react-router'
+import { Form, Link, useLoaderData } from 'react-router'
 import {
   createDevTeam,
   type DevTeamWithNaisTeams,
@@ -102,6 +102,17 @@ export default function AdminDevTeams() {
           Administrer utviklingsteam under seksjonen. Utviklingsteam er uavhengige av Nais-team og brukes for
           mål-/commitmentstavler.
         </BodyShort>
+        <HStack gap="space-8" style={{ marginTop: 'var(--ax-space-8)' }}>
+          <Button
+            as={Link}
+            to={`/sections/${section.slug}`}
+            variant="tertiary"
+            size="small"
+            icon={<BarChartIcon aria-hidden />}
+          >
+            Seksjonsoversikt
+          </Button>
+        </HStack>
       </div>
 
       {!showCreate ? (
@@ -243,6 +254,15 @@ function DevTeamRow({
       </Table.DataCell>
       <Table.DataCell>
         <HStack gap="space-4">
+          <Button
+            as={Link}
+            to={`/boards/${team.slug}`}
+            variant="tertiary"
+            size="xsmall"
+            icon={<BarChartIcon aria-hidden />}
+          >
+            Tavler
+          </Button>
           <Button variant="tertiary" size="xsmall" icon={<PencilIcon aria-hidden />} onClick={onEdit}>
             Rediger
           </Button>

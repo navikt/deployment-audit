@@ -1,4 +1,4 @@
-import { PencilIcon, PersonGroupIcon, PlusIcon, TrashIcon } from '@navikt/aksel-icons'
+import { BarChartIcon, PencilIcon, PersonGroupIcon, PlusIcon, TrashIcon } from '@navikt/aksel-icons'
 import { Alert, BodyShort, Box, Button, Heading, HStack, Table, Tag, TextField, VStack } from '@navikt/ds-react'
 import { useState } from 'react'
 import { Form, Link, useLoaderData } from 'react-router'
@@ -290,6 +290,15 @@ function SectionRow({
       </Table.DataCell>
       <Table.DataCell>
         <HStack gap="space-4">
+          <Button
+            as={Link}
+            to={`/sections/${section.slug}`}
+            variant="tertiary"
+            size="xsmall"
+            icon={<BarChartIcon aria-hidden />}
+          >
+            Oversikt
+          </Button>
           <Button
             as={Link}
             to={`/admin/sections/${section.slug}/dev-teams`}
