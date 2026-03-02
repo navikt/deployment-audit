@@ -1,5 +1,15 @@
 import { pool } from './connection.server'
 
+export interface SectionOverallStats {
+  total_deployments: number
+  with_four_eyes: number
+  without_four_eyes: number
+  pending_verification: number
+  linked_to_goal: number
+  four_eyes_coverage: number
+  goal_coverage: number
+}
+
 export interface DevTeamDashboardStats {
   dev_team_id: number
   dev_team_name: string
@@ -23,6 +33,46 @@ export interface BoardObjectiveProgress {
     linked_deployments: number
   }[]
   total_linked_deployments: number
+}
+
+/**
+ * Get overall section stats using section_teams for the full picture.
+ * This includes ALL deployments for nais teams in the section, regardless of dev team assignment.
+ */
+export async function getSectionOverallStats(
+  sectionId: number,
+  startDate: Date,
+  endDate: Date,
+): Promise<SectionOverallStats> {
+  const result = await pool.query(
+    `SELECT
+       COUNT(d.id)::int AS total_deployments,
+       COUNT(d.id)::int FILTER (WHERE d.has_four_eyes = true) AS with_four_eyes,
+       COUNT(d.id)::int FILTER (WHERE d.four_eyes_status IN ('direct_push', 'unverified_commits', 'approved_pr_with_unreviewed', 'unauthorized_repository', 'unauthorized_branch')) AS without_four_eyes,
+       COUNT(d.id)::int FILTER (WHERE d.four_eyes_status IN ('pending', 'pending_baseline', 'pending_approval', 'unknown')) AS pending_verification,
+       COUNT(DISTINCT dgl.deployment_id)::int AS linked_to_goal
+     FROM section_teams st
+     JOIN deployments d ON d.team_slug = st.team_slug
+       AND d.created_at >= $2 AND d.created_at < $3
+     LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id
+     WHERE st.section_id = $1`,
+    [sectionId, startDate, endDate],
+  )
+
+  const row = result.rows[0]
+  const total = row?.total_deployments ?? 0
+  const withFourEyes = row?.with_four_eyes ?? 0
+  const linked = row?.linked_to_goal ?? 0
+
+  return {
+    total_deployments: total,
+    with_four_eyes: withFourEyes,
+    without_four_eyes: row?.without_four_eyes ?? 0,
+    pending_verification: row?.pending_verification ?? 0,
+    linked_to_goal: linked,
+    four_eyes_coverage: total > 0 ? withFourEyes / total : 0,
+    goal_coverage: total > 0 ? linked / total : 0,
+  }
 }
 
 /**

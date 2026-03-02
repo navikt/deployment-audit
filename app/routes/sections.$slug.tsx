@@ -14,7 +14,7 @@ import {
 } from '@navikt/ds-react'
 import { Link, useLoaderData, useSearchParams } from 'react-router'
 import type { DevTeamDashboardStats } from '~/db/dashboard-stats.server'
-import { getSectionDashboardStats } from '~/db/dashboard-stats.server'
+import { getSectionDashboardStats, getSectionOverallStats } from '~/db/dashboard-stats.server'
 import { getDevTeamsBySection } from '~/db/dev-teams.server'
 import { getSectionBySlug } from '~/db/sections.server'
 import { requireUser } from '~/lib/auth.server'
@@ -42,21 +42,20 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const endDate = new Date(selectedPeriod.end)
   endDate.setDate(endDate.getDate() + 1) // inclusive end
 
+  const overallStats = await getSectionOverallStats(section.id, startDate, endDate)
   const stats = await getSectionDashboardStats(section.id, startDate, endDate)
   const devTeams = await getDevTeamsBySection(section.id)
 
-  return { section, stats, devTeams, periods, selectedPeriod, periodType }
+  return { section, overallStats, stats, devTeams, periods, selectedPeriod, periodType }
 }
 
 export default function SectionOverview() {
-  const { section, stats, devTeams, periods, selectedPeriod, periodType } = useLoaderData<typeof loader>()
+  const { section, overallStats, stats, devTeams, periods, selectedPeriod, periodType } = useLoaderData<typeof loader>()
   const [searchParams, setSearchParams] = useSearchParams()
 
-  const totalDeployments = stats.reduce((sum, s) => sum + s.total_deployments, 0)
-  const totalWithFourEyes = stats.reduce((sum, s) => sum + s.with_four_eyes, 0)
-  const totalLinked = stats.reduce((sum, s) => sum + s.linked_to_goal, 0)
-  const overallFourEyes = totalDeployments > 0 ? totalWithFourEyes / totalDeployments : 0
-  const overallGoalCoverage = totalDeployments > 0 ? totalLinked / totalDeployments : 0
+  const totalDeployments = overallStats.total_deployments
+  const overallFourEyes = overallStats.four_eyes_coverage
+  const overallGoalCoverage = overallStats.goal_coverage
 
   return (
     <VStack gap="space-32">
