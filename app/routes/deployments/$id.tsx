@@ -22,7 +22,6 @@ import {
   Heading,
   HGrid,
   HStack,
-  Loader,
   Modal,
   Radio,
   RadioGroup,

@@ -12,7 +12,7 @@ import { notifyDeploymentIfNeeded, sendDeviationNotification } from '~/lib/slack
 import { runVerification } from '~/lib/verification'
 
 export async function action({ request, params }: { request: Request; params: Record<string, string | undefined> }) {
-  const deploymentId = parseInt(params.id!, 10)
+  const deploymentId = parseInt(params.id ?? '', 10)
   const formData = await request.formData()
   const intent = formData.get('intent')
 

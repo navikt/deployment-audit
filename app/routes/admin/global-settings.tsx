@@ -4,7 +4,7 @@
  * Configure application-wide settings like deviation Slack channel.
  */
 
-import { Alert, BodyShort, Box, Button, Heading, TextField, VStack } from '@navikt/ds-react'
+import { BodyShort, Box, Button, Heading, TextField, VStack } from '@navikt/ds-react'
 import { Form, useActionData, useLoaderData } from 'react-router'
 import { ActionAlert } from '~/components/ActionAlert'
 import { getDeviationSlackChannel, updateDeviationSlackChannel } from '~/db/global-settings.server'

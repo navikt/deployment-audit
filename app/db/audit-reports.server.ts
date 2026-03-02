@@ -659,7 +659,7 @@ export function buildReportData(rawData: Awaited<ReturnType<typeof getAuditRepor
         approved_by_display_name:
           isManuallyApproved && manualApproval ? getDisplayName(manualApproval.approved_by) : undefined,
         approved_at: isManuallyApproved && manualApproval ? manualApproval.approved_at.toISOString() : undefined,
-        commits: d.unverified_commits!,
+        commits: d.unverified_commits ?? [],
       }
     })
 
