@@ -289,6 +289,13 @@ function DevTeamRow({
   }
 
   if (isManagingApps) {
+    const appsByNaisTeam = new Map<string, typeof availableApps>()
+    for (const app of availableApps) {
+      const group = appsByNaisTeam.get(app.team_slug) ?? []
+      group.push(app)
+      appsByNaisTeam.set(app.team_slug, group)
+    }
+
     return (
       <Table.Row>
         <Table.DataCell colSpan={5}>
@@ -301,19 +308,23 @@ function DevTeamRow({
               </Heading>
               {availableApps.length === 0 ? (
                 <Alert variant="info" size="small">
-                  Ingen tilgjengelige applikasjoner. Koble Nais-team til dette utviklingsteamet først.
+                  Ingen overvåkede applikasjoner funnet.
                 </Alert>
               ) : (
-                <CheckboxGroup legend="Velg applikasjoner" size="small" hideLegend>
-                  {availableApps.map((app) => (
-                    <Checkbox key={app.id} name="app_ids" value={String(app.id)} defaultChecked={app.is_linked}>
-                      {app.app_name}{' '}
-                      <BodyShort as="span" size="small" textColor="subtle">
-                        ({app.team_slug} / {app.environment_name})
-                      </BodyShort>
-                    </Checkbox>
+                <VStack gap="space-16">
+                  {[...appsByNaisTeam.entries()].map(([naisTeam, apps]) => (
+                    <CheckboxGroup key={naisTeam} legend={naisTeam} size="small">
+                      {apps.map((app) => (
+                        <Checkbox key={app.id} name="app_ids" value={String(app.id)} defaultChecked={app.is_linked}>
+                          {app.app_name}{' '}
+                          <BodyShort as="span" size="small" textColor="subtle">
+                            ({app.environment_name})
+                          </BodyShort>
+                        </Checkbox>
+                      ))}
+                    </CheckboxGroup>
                   ))}
-                </CheckboxGroup>
+                </VStack>
               )}
               <HStack gap="space-8">
                 <Button type="submit" size="small">

@@ -155,7 +155,7 @@ export async function setDevTeamApplications(devTeamId: number, monitoredAppIds:
   }
 }
 
-/** Get available apps for linking — apps belonging to the dev team's nais teams that are not yet linked */
+/** Get all active apps with their link status for a dev team */
 export async function getAvailableAppsForDevTeam(
   devTeamId: number,
 ): Promise<{ id: number; team_slug: string; environment_name: string; app_name: string; is_linked: boolean }[]> {
@@ -163,9 +163,8 @@ export async function getAvailableAppsForDevTeam(
     `SELECT ma.id, ma.team_slug, ma.environment_name, ma.app_name,
             (dta.dev_team_id IS NOT NULL) AS is_linked
      FROM monitored_applications ma
-     JOIN dev_team_nais_teams dtn ON dtn.nais_team_slug = ma.team_slug
      LEFT JOIN dev_team_applications dta ON dta.monitored_app_id = ma.id AND dta.dev_team_id = $1
-     WHERE dtn.dev_team_id = $1 AND ma.is_active = true
+     WHERE ma.is_active = true
      ORDER BY ma.team_slug, ma.environment_name, ma.app_name`,
     [devTeamId],
   )
