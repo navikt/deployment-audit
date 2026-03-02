@@ -162,7 +162,7 @@ export function SearchDialog() {
             label="Søk"
             hideLabel
             variant="simple"
-            placeholder="Søk på navn, NAV-ident, e-post, SHA..."
+            placeholder="Søk på navn, NAV-ident, SHA, deployment ID..."
             value={query}
             onChange={setQuery}
             autoComplete="off"
@@ -259,7 +259,7 @@ export function SearchDialog() {
             <Box padding="space-24">
               <VStack gap="space-8" align="center">
                 <BodyShort style={{ color: 'var(--ax-text-neutral-subtle)' }}>
-                  Søk på navn, NAV-ident, e-post, GitHub-brukernavn, SHA eller deployment ID
+                  Søk på navn, NAV-ident, GitHub-brukernavn, SHA eller deployment ID
                 </BodyShort>
                 <HStack gap="space-8">
                   <HStack gap="space-4" align="center">
