@@ -61,6 +61,39 @@ export async function getBoardsByDevTeam(devTeamId: number): Promise<Board[]> {
   return result.rows
 }
 
+/** Lightweight board list with objectives and key results (titles/IDs only) for goal linking UI. */
+export async function getBoardsWithGoalsForDevTeam(devTeamId: number): Promise<
+  Array<{
+    id: number
+    title: string
+    period_label: string
+    objectives: Array<{ id: number; title: string; key_results: Array<{ id: number; title: string }> }>
+  }>
+> {
+  const boards = await pool.query(
+    `SELECT id, title, period_label FROM boards WHERE dev_team_id = $1 AND is_active = true ORDER BY period_start DESC`,
+    [devTeamId],
+  )
+
+  const result = []
+  for (const board of boards.rows) {
+    const objectives = await pool.query(
+      `SELECT bo.id, bo.title FROM board_objectives bo WHERE bo.board_id = $1 ORDER BY bo.sort_order, bo.id`,
+      [board.id],
+    )
+    const objectivesWithKr = []
+    for (const obj of objectives.rows) {
+      const keyResults = await pool.query(
+        `SELECT id, title FROM board_key_results WHERE objective_id = $1 ORDER BY sort_order, id`,
+        [obj.id],
+      )
+      objectivesWithKr.push({ ...obj, key_results: keyResults.rows })
+    }
+    result.push({ ...board, objectives: objectivesWithKr })
+  }
+  return result
+}
+
 export async function getBoardById(id: number): Promise<Board | null> {
   const result = await pool.query('SELECT * FROM boards WHERE id = $1', [id])
   return result.rows[0] ?? null

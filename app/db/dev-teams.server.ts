@@ -71,6 +71,21 @@ export async function getDevTeamForNaisTeam(naisTeamSlug: string): Promise<DevTe
   return result.rows[0] ?? null
 }
 
+/** Find the dev team for a monitored app (via nais team or direct app link) */
+export async function getDevTeamForApp(monitoredAppId: number, teamSlug: string): Promise<DevTeam | null> {
+  // Check direct app link first
+  const direct = await pool.query(
+    `SELECT dt.* FROM dev_teams dt
+     JOIN dev_team_applications dta ON dta.dev_team_id = dt.id
+     WHERE dta.monitored_app_id = $1 AND dt.is_active = true`,
+    [monitoredAppId],
+  )
+  if (direct.rows[0]) return direct.rows[0]
+
+  // Fall back to nais team link
+  return getDevTeamForNaisTeam(teamSlug)
+}
+
 export async function createDevTeam(sectionId: number, slug: string, name: string): Promise<DevTeam> {
   const result = await pool.query('INSERT INTO dev_teams (section_id, slug, name) VALUES ($1, $2, $3) RETURNING *', [
     sectionId,

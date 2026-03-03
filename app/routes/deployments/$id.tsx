@@ -37,6 +37,7 @@ import { ActionAlert } from '~/components/ActionAlert'
 import { CheckAnnotations } from '~/components/CheckAnnotations'
 import { CheckLogViewer } from '~/components/CheckLogViewer'
 import { GoalLinksSection } from '~/components/GoalLinksSection'
+import { getBoardsWithGoalsForDevTeam } from '~/db/boards.server'
 import { getCommentsByDeploymentId, getLegacyInfo, getManualApproval } from '~/db/comments.server'
 import { getLinksForDeployment } from '~/db/deployment-goal-links.server'
 import {
@@ -46,6 +47,7 @@ import {
   getPreviousDeploymentForNav,
   getStatusHistory,
 } from '~/db/deployments.server'
+import { getDevTeamForApp } from '~/db/dev-teams.server'
 import { getDeviationsByDeploymentId } from '~/db/deviations.server'
 import { getMonitoredApplicationById } from '~/db/monitored-applications.server'
 import { getUserMappings } from '~/db/user-mappings.server'
@@ -112,6 +114,10 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const statusHistory = await getStatusHistory(deploymentId)
   const deviations = await getDeviationsByDeploymentId(deploymentId)
   const goalLinks = await getLinksForDeployment(deploymentId)
+
+  // Get available boards/goals for goal linking UI
+  const devTeam = await getDevTeamForApp(deployment.monitored_app_id, app.team_slug)
+  const availableBoards = devTeam ? await getBoardsWithGoalsForDevTeam(devTeam.id) : []
 
   // Get previous and next deployments for navigation (respecting filters)
   const previousDeployment = await getPreviousDeploymentForNav(deploymentId, deployment.monitored_app_id, navFilters)
@@ -211,6 +217,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     statusHistory,
     deviations,
     goalLinks,
+    availableBoards,
     previousDeployment,
     nextDeployment,
     userMappings: serializeUserMappings(userMappings),
@@ -242,6 +249,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
     statusHistory,
     deviations,
     goalLinks,
+    availableBoards,
     previousDeployment,
     nextDeployment,
     userMappings,
@@ -1622,7 +1630,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
         </VStack>
       )}
       {/* Goal links / origin of change section */}
-      <GoalLinksSection goalLinks={goalLinks} />
+      <GoalLinksSection goalLinks={goalLinks} availableBoards={availableBoards} />
 
       {/* Deviations section */}
       <VStack gap="space-16">
