@@ -70,14 +70,17 @@ export async function seedDeployment(
     title?: string
     fourEyesStatus?: string
     hasFourEyes?: boolean
+    githubOwner?: string
+    githubRepo?: string
   },
 ): Promise<number> {
   const naisId = `deploy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const { rows } = await pool.query<{ id: number }>(
     `INSERT INTO deployments (
       monitored_app_id, nais_deployment_id, team_slug, app_name, environment_name,
-      commit_sha, created_at, title, has_four_eyes, four_eyes_status
-    ) VALUES ($1, $2, $3, 'test-app', $4, $5, $6, $7, $8, $9)
+      commit_sha, created_at, title, has_four_eyes, four_eyes_status,
+      detected_github_owner, detected_github_repo_name
+    ) VALUES ($1, $2, $3, 'test-app', $4, $5, $6, $7, $8, $9, $10, $11)
     RETURNING id`,
     [
       opts.monitoredAppId,
@@ -89,6 +92,8 @@ export async function seedDeployment(
       opts.title ?? null,
       opts.hasFourEyes ?? false,
       opts.fourEyesStatus ?? 'pending',
+      opts.githubOwner ?? null,
+      opts.githubRepo ?? null,
     ],
   )
   return rows[0].id
