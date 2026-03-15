@@ -492,6 +492,9 @@ export interface VerificationInput {
     commitsFetchedAt: Date | null
     schemaVersion: number
   }
+
+  // Whether the GitHub compare API failed (404, network error, etc.)
+  compareFailed?: boolean
 }
 
 /**

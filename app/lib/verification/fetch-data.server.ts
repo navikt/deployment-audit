@@ -91,8 +91,9 @@ export async function fetchVerificationData(
 
   // Get commits between deployments
   let commitsBetween: VerificationInput['commitsBetween'] = []
+  let compareFailed = false
   if (previousDeployment) {
-    commitsBetween = await fetchCommitsBetween(
+    const result = await fetchCommitsBetween(
       owner,
       repo,
       previousDeployment.commitSha,
@@ -101,6 +102,11 @@ export async function fetchVerificationData(
       previousDeployment.createdAt,
       options,
     )
+    if (result === null) {
+      compareFailed = true
+    } else {
+      commitsBetween = result
+    }
   }
 
   return {
@@ -116,6 +122,7 @@ export async function fetchVerificationData(
     previousDeployment,
     deployedPr,
     commitsBetween,
+    compareFailed,
     dataFreshness: {
       deployedPrFetchedAt: deployedPr ? new Date() : null,
       commitsFetchedAt: commitsBetween.length > 0 ? new Date() : null,
@@ -467,7 +474,7 @@ async function fetchCommitsBetween(
   baseBranch: string,
   _previousDeploymentDate: string,
   options?: FetchOptions,
-): Promise<VerificationInput['commitsBetween']> {
+): Promise<VerificationInput['commitsBetween'] | null> {
   // Check cache first
   if (!options?.forceRefresh) {
     const cachedCompare = await getLatestCompareSnapshot(owner, repo, fromSha, toSha)
@@ -483,7 +490,7 @@ async function fetchCommitsBetween(
 
   if (!commitsRaw) {
     logger.warn(`Could not fetch commits between ${fromSha} and ${toSha}`)
-    return []
+    return null
   }
 
   // Build compare data for storage

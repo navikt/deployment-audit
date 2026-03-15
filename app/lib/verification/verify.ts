@@ -56,13 +56,22 @@ export function verifyDeployment(input: VerificationInput): VerificationResult {
   }
 
   if (input.commitsBetween.length === 0) {
+    // compareFailed = GitHub API returned an error (404, timeout, etc.)
+    if (input.compareFailed) {
+      return handleCompareError(
+        input,
+        `GitHub compare API failed for ${input.repository}. Check that the GitHub App has access to this repository.`,
+      )
+    }
     // Only treat as "no changes" when the commit SHA is identical.
-    // Different SHAs with 0 commits means the GitHub compare failed,
-    // the deployment is a rollback, or the branches diverged.
+    // Different SHAs with 0 commits means a rollback or branch divergence.
     if (input.commitSha === input.previousDeployment.commitSha) {
       return handleNoChanges(input)
     }
-    return handleCompareError(input)
+    return handleCompareError(
+      input,
+      `Commit SHAs differ (${input.previousDeployment.commitSha.substring(0, 7)}→${input.commitSha.substring(0, 7)}) but GitHub compare returned 0 commits. Possible rollback or branch divergence.`,
+    )
   }
 
   const unverifiedCommits = findUnverifiedCommits(input)
@@ -136,16 +145,14 @@ function handleNoChanges(input: VerificationInput): VerificationResult {
   })
 }
 
-function handleCompareError(input: VerificationInput): VerificationResult {
-  const prevSha = input.previousDeployment?.commitSha?.substring(0, 7) ?? 'unknown'
-  const currSha = input.commitSha.substring(0, 7)
+function handleCompareError(input: VerificationInput, reason: string): VerificationResult {
   return buildResult(input, {
     hasFourEyes: false,
     status: 'error',
     approvalDetails: {
       method: null,
       approvers: [],
-      reason: `Commit SHAs differ (${prevSha}→${currSha}) but GitHub compare returned 0 commits. Possible rollback, branch divergence, or API error.`,
+      reason,
     },
   })
 }

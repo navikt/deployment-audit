@@ -218,6 +218,38 @@ describe('verifyDeployment - Case 2b: compare error (different SHAs, 0 commits)'
     expect(result.status).toBe('error')
     expect(result.hasFourEyes).toBe(false)
   })
+
+  it('should return error with GitHub App message when compareFailed is true', () => {
+    const input = makeBaseInput({
+      commitsBetween: [],
+      compareFailed: true,
+    })
+
+    const result = verifyDeployment(input)
+
+    expect(result.status).toBe('error')
+    expect(result.hasFourEyes).toBe(false)
+    expect(result.approvalDetails.reason).toContain('GitHub compare API failed')
+    expect(result.approvalDetails.reason).toContain('GitHub App')
+  })
+
+  it('should prioritize compareFailed over SHA comparison', () => {
+    const input = makeBaseInput({
+      commitSha: 'same-sha',
+      previousDeployment: {
+        id: 999,
+        commitSha: 'same-sha',
+        createdAt: '2026-02-26T10:00:00Z',
+      },
+      commitsBetween: [],
+      compareFailed: true,
+    })
+
+    const result = verifyDeployment(input)
+
+    expect(result.status).toBe('error')
+    expect(result.approvalDetails.reason).toContain('GitHub compare API failed')
+  })
 })
 
 // =============================================================================
