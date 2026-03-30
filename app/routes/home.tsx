@@ -1,11 +1,23 @@
-import { Alert, BodyShort, Box, Button, Heading, HGrid, HStack, Select, Tag, VStack } from '@navikt/ds-react'
+import {
+  Alert,
+  BodyShort,
+  Box,
+  Button,
+  Checkbox,
+  CheckboxGroup,
+  Heading,
+  HGrid,
+  HStack,
+  Tag,
+  VStack,
+} from '@navikt/ds-react'
 import { Form, Link, useRouteLoaderData } from 'react-router'
 import { AppCard, type AppCardData } from '~/components/AppCard'
 import { getAllActiveRepositories } from '~/db/application-repositories.server'
 import { type DevTeamSummaryStats, getDevTeamSummaryStats } from '~/db/dashboard-stats.server'
 import { getDevTeamAppsWithIssues } from '~/db/deployments/home.server'
 import { getAllDevTeams, getDevTeamApplications } from '~/db/dev-teams.server'
-import { getUserDevTeam, setUserDevTeam } from '~/db/user-dev-team-preference.server'
+import { addUserDevTeam, getUserDevTeams, removeUserDevTeam } from '~/db/user-dev-team-preference.server'
 import { getAppDeploymentStatsBatch } from '../db/deployments.server'
 import { getAllAlertCounts, getAllMonitoredApplications } from '../db/monitored-applications.server'
 import { ok } from '../lib/action-result'
@@ -25,17 +37,30 @@ export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData()
   const intent = formData.get('intent')
 
-  if (intent === 'select-dev-team') {
+  if (intent === 'add-dev-team') {
     const devTeamId = Number(formData.get('devTeamId'))
     if (!devTeamId || Number.isNaN(devTeamId)) {
       return { error: 'Ugyldig team-valg' }
     }
     try {
-      await setUserDevTeam(identity.navIdent, devTeamId)
+      await addUserDevTeam(identity.navIdent, devTeamId)
     } catch {
-      return { error: 'Kunne ikke lagre team-valg. Migrering av database kan mangle.' }
+      return { error: 'Kunne ikke legge til team. Migrering av database kan mangle.' }
     }
-    return ok('Team valgt')
+    return ok('Team lagt til')
+  }
+
+  if (intent === 'remove-dev-team') {
+    const devTeamId = Number(formData.get('devTeamId'))
+    if (!devTeamId || Number.isNaN(devTeamId)) {
+      return { error: 'Ugyldig team-valg' }
+    }
+    try {
+      await removeUserDevTeam(identity.navIdent, devTeamId)
+    } catch {
+      return { error: 'Kunne ikke fjerne team.' }
+    }
+    return ok('Team fjernet')
   }
 
   return { error: 'Ukjent handling' }
@@ -45,38 +70,39 @@ export async function loader({ request }: Route.LoaderArgs) {
   const identity = await requireUser(request)
   const availableDevTeams = await getAllDevTeams()
 
-  // getUserDevTeam may fail if migration hasn't run yet — treat as "no team selected"
-  let selectedDevTeam = null
+  // getUserDevTeams may fail if migration hasn't run yet
+  let selectedDevTeams: Awaited<ReturnType<typeof getUserDevTeams>> = []
   try {
-    selectedDevTeam = await getUserDevTeam(identity.navIdent)
+    selectedDevTeams = await getUserDevTeams(identity.navIdent)
   } catch {
     // user_dev_team_preference table may not exist yet
   }
 
-  // If no dev team selected, return just the selector data
-  if (!selectedDevTeam) {
+  // If no dev teams selected, return just the selector data
+  if (selectedDevTeams.length === 0) {
     return {
-      selectedDevTeam: null,
+      selectedDevTeams: [],
       availableDevTeams,
       teamStats: null,
       issueApps: [] as AppCardData[],
     }
   }
 
-  // Fetch dev team's direct app links
-  const directApps = await getDevTeamApplications(selectedDevTeam.id)
-  const directAppIds = directApps.length > 0 ? directApps.map((a) => a.monitored_app_id) : undefined
+  // Combine nais_team_slugs and direct app IDs from all selected teams
+  const allNaisTeamSlugs = [...new Set(selectedDevTeams.flatMap((t) => t.nais_team_slugs))]
+  const directAppsResults = await Promise.all(selectedDevTeams.map((t) => getDevTeamApplications(t.id)))
+  const allDirectAppIds = [...new Set(directAppsResults.flat().map((a) => a.monitored_app_id))]
+  const directAppIds = allDirectAppIds.length > 0 ? allDirectAppIds : undefined
 
-  // Fetch team stats and issue apps in parallel
+  // Fetch combined stats and issue apps in parallel
   const [teamStats, issueApps, alertCounts, activeReposByApp] = await Promise.all([
-    getDevTeamSummaryStats(selectedDevTeam.nais_team_slugs, directAppIds),
-    getDevTeamAppsWithIssues(selectedDevTeam.nais_team_slugs, directAppIds),
+    getDevTeamSummaryStats(allNaisTeamSlugs, directAppIds),
+    getDevTeamAppsWithIssues(allNaisTeamSlugs, directAppIds),
     getAllAlertCounts(),
     getAllActiveRepositories(),
   ])
 
-  // For issue apps, we need to fetch the monitored_app IDs to get stats
-  const [allApps] = await Promise.all([getAllMonitoredApplications()])
+  const allApps = await getAllMonitoredApplications()
 
   // Build AppCardData for issue apps
   const issueAppKeys = new Set(issueApps.map((a) => `${a.team_slug}/${a.environment_name}/${a.app_name}`))
@@ -104,7 +130,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     alertCount: alertCounts.get(app.id) || 0,
   }))
 
-  // Sort: most issues first
   issueAppCards.sort((a, b) => {
     const aIssues = a.stats.without_four_eyes + a.alertCount
     const bIssues = b.stats.without_four_eyes + b.alertCount
@@ -112,7 +137,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   })
 
   return {
-    selectedDevTeam,
+    selectedDevTeams,
     availableDevTeams,
     teamStats,
     issueApps: issueAppCards,
@@ -177,9 +202,10 @@ function TeamStatsCard({ stats }: { stats: DevTeamSummaryStats }) {
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { selectedDevTeam, availableDevTeams, teamStats, issueApps } = loaderData
+  const { selectedDevTeams, availableDevTeams, teamStats, issueApps } = loaderData
   const layoutData = useRouteLoaderData<typeof layoutLoader>('routes/layout')
   const isAdmin = layoutData?.user?.role === 'admin'
+  const selectedIds = new Set(selectedDevTeams.map((t) => t.id))
 
   return (
     <VStack gap="space-32">
@@ -192,88 +218,74 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         </HStack>
       )}
 
-      {/* No dev team selected — show selector */}
-      {!selectedDevTeam && (
-        <VStack gap="space-16">
-          <Alert variant="info">
-            Velg ditt utviklingsteam for å se en personalisert oversikt over applikasjoner som trenger oppfølging.
-          </Alert>
-
-          {availableDevTeams.length > 0 ? (
-            <Form method="post">
-              <input type="hidden" name="intent" value="select-dev-team" />
-              <HStack gap="space-16" align="end">
-                <Select label="Velg utviklingsteam" name="devTeamId">
-                  <option value="">— Velg team —</option>
-                  {availableDevTeams.map((team) => (
-                    <option key={team.id} value={team.id}>
+      {/* Team selector — always visible */}
+      {availableDevTeams.length > 0 ? (
+        <Box background="raised" padding="space-16" borderRadius="4">
+          <VStack gap="space-12">
+            <Heading level="2" size="small">
+              Mine utviklingsteam
+            </Heading>
+            <CheckboxGroup legend="Velg team du tilhører" hideLegend>
+              <HStack gap="space-16" wrap>
+                {availableDevTeams.map((team) => (
+                  <Form method="post" key={team.id}>
+                    <input
+                      type="hidden"
+                      name="intent"
+                      value={selectedIds.has(team.id) ? 'remove-dev-team' : 'add-dev-team'}
+                    />
+                    <input type="hidden" name="devTeamId" value={team.id} />
+                    <Checkbox
+                      value={String(team.id)}
+                      checked={selectedIds.has(team.id)}
+                      onChange={(e) => e.currentTarget.form?.requestSubmit()}
+                    >
                       {team.name}
-                    </option>
-                  ))}
-                </Select>
-                <Button type="submit" size="medium">
-                  Velg team
-                </Button>
+                    </Checkbox>
+                  </Form>
+                ))}
               </HStack>
-            </Form>
-          ) : (
-            <Alert variant="warning">Ingen utviklingsteam er tilgjengelige.</Alert>
-          )}
-        </VStack>
+            </CheckboxGroup>
+          </VStack>
+        </Box>
+      ) : (
+        <Alert variant="warning">Ingen utviklingsteam er tilgjengelige.</Alert>
       )}
 
-      {/* Dev team selected — show team overview */}
-      {selectedDevTeam && teamStats && (
+      {/* No teams selected — prompt */}
+      {selectedDevTeams.length === 0 && availableDevTeams.length > 0 && (
+        <Alert variant="info">Velg ett eller flere utviklingsteam over for å se en personalisert oversikt.</Alert>
+      )}
+
+      {/* Teams selected — show combined overview */}
+      {selectedDevTeams.length > 0 && teamStats && (
         <VStack gap="space-24">
-          {/* Team header */}
-          <HStack justify="space-between" align="center" wrap>
-            <HStack gap="space-12" align="center">
-              <Heading level="2" size="medium">
-                {selectedDevTeam.name}
-              </Heading>
-              {selectedDevTeam.nais_team_slugs.length > 0 && (
-                <HStack gap="space-4">
-                  {selectedDevTeam.nais_team_slugs.map((slug) => (
-                    <Tag key={slug} variant="neutral" size="xsmall">
-                      {slug}
-                    </Tag>
-                  ))}
-                </HStack>
-              )}
-            </HStack>
-            <Form method="post">
-              <input type="hidden" name="intent" value="select-dev-team" />
-              <HStack gap="space-8" align="end">
-                <Select label="Bytt team" name="devTeamId" size="small" hideLabel>
-                  {availableDevTeams.map((team) => (
-                    <option key={team.id} value={team.id} selected={team.id === selectedDevTeam.id}>
-                      {team.name}
-                    </option>
-                  ))}
-                </Select>
-                <Button type="submit" size="small" variant="tertiary">
-                  Bytt
-                </Button>
-              </HStack>
-            </Form>
+          {/* Team names */}
+          <HStack gap="space-8" align="center" wrap>
+            {selectedDevTeams.map((team) => (
+              <Tag key={team.id} variant="moderate" size="small">
+                {team.name}
+              </Tag>
+            ))}
           </HStack>
 
-          {/* Team stats */}
+          {/* Combined stats */}
           <TeamStatsCard stats={teamStats} />
 
-          {/* Navigation links */}
-          <HStack gap="space-16">
-            {selectedDevTeam.nais_team_slugs.map((slug) => (
-              <Button key={slug} as={Link} to={`/team/${slug}`} size="small" variant="secondary">
-                Alle apper ({slug})
-              </Button>
+          {/* Navigation links per team */}
+          <HStack gap="space-8" wrap>
+            {selectedDevTeams.map((team) => (
+              <HStack key={team.id} gap="space-8">
+                {team.nais_team_slugs.map((slug) => (
+                  <Button key={slug} as={Link} to={`/team/${slug}`} size="small" variant="secondary">
+                    Alle apper ({slug})
+                  </Button>
+                ))}
+                <Button as={Link} to={`/boards/${team.slug}`} size="small" variant="secondary">
+                  {team.name} — Tavler
+                </Button>
+              </HStack>
             ))}
-            <Button as={Link} to={`/boards/${selectedDevTeam.slug}`} size="small" variant="secondary">
-              Tavler
-            </Button>
-            <Button as={Link} to={`/boards/${selectedDevTeam.slug}/dashboard`} size="small" variant="secondary">
-              Dashboard
-            </Button>
           </HStack>
 
           {/* Issue apps */}

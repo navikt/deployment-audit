@@ -1,4 +1,16 @@
-import { Alert, BodyShort, Box, Button, Heading, HGrid, HStack, Select, Tag, VStack } from '@navikt/ds-react'
+import {
+  Alert,
+  BodyShort,
+  Box,
+  Button,
+  Checkbox,
+  CheckboxGroup,
+  Heading,
+  HGrid,
+  HStack,
+  Tag,
+  VStack,
+} from '@navikt/ds-react'
 import type { Meta, StoryObj } from '@storybook/react'
 import { Link } from 'react-router'
 import { AppCard, type AppCardData } from '~/components/AppCard'
@@ -76,18 +88,20 @@ function TeamStatsCard({ stats }: { stats: DevTeamSummaryStats }) {
 }
 
 function HomePage({
-  selectedDevTeam = null,
+  selectedDevTeams = [],
   availableDevTeams = [],
   teamStats = null,
   issueApps = [],
   isAdmin = false,
 }: {
-  selectedDevTeam?: DevTeamInfo | null
+  selectedDevTeams?: DevTeamInfo[]
   availableDevTeams?: DevTeamInfo[]
   teamStats?: DevTeamSummaryStats | null
   issueApps?: AppCardData[]
   isAdmin?: boolean
 }) {
+  const selectedIds = new Set(selectedDevTeams.map((t) => t.id))
+
   return (
     <VStack gap="space-32">
       {isAdmin && (
@@ -98,56 +112,54 @@ function HomePage({
         </HStack>
       )}
 
-      {!selectedDevTeam && (
-        <VStack gap="space-16">
-          <Alert variant="info">
-            Velg ditt utviklingsteam for å se en personalisert oversikt over applikasjoner som trenger oppfølging.
-          </Alert>
-          {availableDevTeams.length > 0 && (
-            <HStack gap="space-16" align="end">
-              <Select label="Velg utviklingsteam" name="devTeamId">
-                <option value="">— Velg team —</option>
+      {availableDevTeams.length > 0 && (
+        <Box background="raised" padding="space-16" borderRadius="4">
+          <VStack gap="space-12">
+            <Heading level="2" size="small">
+              Mine utviklingsteam
+            </Heading>
+            <CheckboxGroup legend="Velg team du tilhører" hideLegend>
+              <HStack gap="space-16" wrap>
                 {availableDevTeams.map((team) => (
-                  <option key={team.id} value={team.id}>
+                  <Checkbox key={team.id} value={String(team.id)} checked={selectedIds.has(team.id)} readOnly>
                     {team.name}
-                  </option>
+                  </Checkbox>
                 ))}
-              </Select>
-              <Button size="medium">Velg team</Button>
-            </HStack>
-          )}
-        </VStack>
+              </HStack>
+            </CheckboxGroup>
+          </VStack>
+        </Box>
       )}
 
-      {selectedDevTeam && teamStats && (
+      {selectedDevTeams.length === 0 && availableDevTeams.length > 0 && (
+        <Alert variant="info">Velg ett eller flere utviklingsteam over for å se en personalisert oversikt.</Alert>
+      )}
+
+      {selectedDevTeams.length > 0 && teamStats && (
         <VStack gap="space-24">
-          <HStack justify="space-between" align="center" wrap>
-            <HStack gap="space-12" align="center">
-              <Heading level="2" size="medium">
-                {selectedDevTeam.name}
-              </Heading>
-              {selectedDevTeam.nais_team_slugs.map((slug) => (
-                <Tag key={slug} variant="neutral" size="xsmall">
-                  {slug}
-                </Tag>
-              ))}
-            </HStack>
+          <HStack gap="space-8" align="center" wrap>
+            {selectedDevTeams.map((team) => (
+              <Tag key={team.id} variant="moderate" size="small">
+                {team.name}
+              </Tag>
+            ))}
           </HStack>
 
           <TeamStatsCard stats={teamStats} />
 
-          <HStack gap="space-16">
-            {selectedDevTeam.nais_team_slugs.map((slug) => (
-              <Button key={slug} as={Link} to={`/team/${slug}`} size="small" variant="secondary">
-                Alle apper ({slug})
-              </Button>
+          <HStack gap="space-8" wrap>
+            {selectedDevTeams.map((team) => (
+              <HStack key={team.id} gap="space-8">
+                {team.nais_team_slugs.map((slug) => (
+                  <Button key={slug} as={Link} to={`/team/${slug}`} size="small" variant="secondary">
+                    Alle apper ({slug})
+                  </Button>
+                ))}
+                <Button as={Link} to={`/boards/${team.slug}`} size="small" variant="secondary">
+                  {team.name} — Tavler
+                </Button>
+              </HStack>
             ))}
-            <Button as={Link} to={`/boards/${selectedDevTeam.slug}`} size="small" variant="secondary">
-              Tavler
-            </Button>
-            <Button as={Link} to={`/boards/${selectedDevTeam.slug}/dashboard`} size="small" variant="secondary">
-              Dashboard
-            </Button>
           </HStack>
 
           {issueApps.length > 0 ? (
@@ -170,15 +182,17 @@ function HomePage({
   )
 }
 
-const mockDevTeam: DevTeamInfo = {
-  id: 1,
-  name: 'Motta pensjon',
-  slug: 'motta-pensjon',
-  nais_team_slugs: ['pensjondeployer', 'pensjonsamhandling'],
-}
+const mockDevTeams: DevTeamInfo[] = [
+  {
+    id: 1,
+    name: 'Motta pensjon',
+    slug: 'motta-pensjon',
+    nais_team_slugs: ['pensjondeployer', 'pensjonsamhandling'],
+  },
+]
 
 const mockAvailableTeams: DevTeamInfo[] = [
-  mockDevTeam,
+  ...mockDevTeams,
   { id: 2, name: 'Beregne pensjon', slug: 'beregne-pensjon', nais_team_slugs: ['pensjonberegning'] },
   { id: 3, name: 'Utbetale pensjon', slug: 'utbetale-pensjon', nais_team_slugs: ['pensjonutbetaling'] },
 ]
@@ -211,12 +225,22 @@ export default meta
 
 type Story = StoryObj<typeof HomePage>
 
-export const WithTeamSelected: Story = {
-  name: 'Med valgt team',
+export const WithTeamsSelected: Story = {
+  name: 'Med valgte team',
   args: {
-    selectedDevTeam: mockDevTeam,
+    selectedDevTeams: mockDevTeams,
     availableDevTeams: mockAvailableTeams,
     teamStats: mockTeamStats,
+    issueApps: mockIssueApps,
+  },
+}
+
+export const MultipleTeams: Story = {
+  name: 'Flere team valgt',
+  args: {
+    selectedDevTeams: mockAvailableTeams.slice(0, 2),
+    availableDevTeams: mockAvailableTeams,
+    teamStats: { ...mockTeamStats, total_apps: 12, total_deployments: 98 },
     issueApps: mockIssueApps,
   },
 }
@@ -224,7 +248,7 @@ export const WithTeamSelected: Story = {
 export const NoTeamSelected: Story = {
   name: 'Ingen team valgt',
   args: {
-    selectedDevTeam: null,
+    selectedDevTeams: [],
     availableDevTeams: mockAvailableTeams,
     teamStats: null,
     issueApps: [],
@@ -234,7 +258,7 @@ export const NoTeamSelected: Story = {
 export const AllAppsOk: Story = {
   name: 'Alle apper i orden',
   args: {
-    selectedDevTeam: mockDevTeam,
+    selectedDevTeams: mockDevTeams,
     availableDevTeams: mockAvailableTeams,
     teamStats: { ...mockTeamStats, apps_with_issues: 0, without_four_eyes: 0 },
     issueApps: [],
@@ -244,7 +268,7 @@ export const AllAppsOk: Story = {
 export const HighCoverage: Story = {
   name: 'Høy dekning (95%+)',
   args: {
-    selectedDevTeam: mockDevTeam,
+    selectedDevTeams: mockDevTeams,
     availableDevTeams: mockAvailableTeams,
     teamStats: { ...mockTeamStats, four_eyes_percentage: 98, apps_with_issues: 0 },
     issueApps: [],
@@ -254,7 +278,7 @@ export const HighCoverage: Story = {
 export const LowCoverage: Story = {
   name: 'Lav dekning (<80%)',
   args: {
-    selectedDevTeam: mockDevTeam,
+    selectedDevTeams: mockDevTeams,
     availableDevTeams: mockAvailableTeams,
     teamStats: { ...mockTeamStats, four_eyes_percentage: 65, apps_with_issues: 3 },
     issueApps: mockApps.slice(0, 3),
@@ -264,7 +288,7 @@ export const LowCoverage: Story = {
 export const AdminView: Story = {
   name: 'Som admin',
   args: {
-    selectedDevTeam: mockDevTeam,
+    selectedDevTeams: mockDevTeams,
     availableDevTeams: mockAvailableTeams,
     teamStats: mockTeamStats,
     issueApps: mockIssueApps,
