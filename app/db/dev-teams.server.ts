@@ -20,6 +20,19 @@ export interface DevTeamApplication {
   app_name: string
 }
 
+export async function getAllDevTeams(): Promise<DevTeamWithNaisTeams[]> {
+  const result = await pool.query(
+    `SELECT dt.*,
+       COALESCE(array_agg(dn.nais_team_slug ORDER BY dn.nais_team_slug) FILTER (WHERE dn.nais_team_slug IS NOT NULL), '{}') as nais_team_slugs
+     FROM dev_teams dt
+     LEFT JOIN dev_team_nais_teams dn ON dn.dev_team_id = dt.id
+     WHERE dt.is_active = true
+     GROUP BY dt.id
+     ORDER BY dt.name`,
+  )
+  return result.rows
+}
+
 export async function getDevTeamsBySection(sectionId: number): Promise<DevTeamWithNaisTeams[]> {
   const result = await pool.query(
     `SELECT dt.*,

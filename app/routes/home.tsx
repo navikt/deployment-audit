@@ -4,12 +4,12 @@ import { AppCard, type AppCardData } from '~/components/AppCard'
 import { getAllActiveRepositories } from '~/db/application-repositories.server'
 import { type DevTeamSummaryStats, getDevTeamSummaryStats } from '~/db/dashboard-stats.server'
 import { getDevTeamAppsWithIssues } from '~/db/deployments/home.server'
-import { getDevTeamApplications, getDevTeamsBySection } from '~/db/dev-teams.server'
+import { getAllDevTeams, getDevTeamApplications } from '~/db/dev-teams.server'
 import { getUserDevTeam, setUserDevTeam } from '~/db/user-dev-team-preference.server'
 import { getAppDeploymentStatsBatch } from '../db/deployments.server'
 import { getAllAlertCounts, getAllMonitoredApplications } from '../db/monitored-applications.server'
 import { ok } from '../lib/action-result'
-import { getUserSections, requireUser } from '../lib/auth.server'
+import { requireUser } from '../lib/auth.server'
 import type { Route } from './+types/home'
 import type { loader as layoutLoader } from './layout'
 
@@ -40,16 +40,12 @@ export async function action({ request }: Route.ActionArgs) {
 export async function loader({ request }: Route.LoaderArgs) {
   try {
     const identity = await requireUser(request)
-    const sections = await getUserSections(identity.entraGroups)
 
-    // Get user's selected dev team
-    const selectedDevTeam = await getUserDevTeam(identity.navIdent)
-
-    // Get available dev teams for the team selector
-    const sectionIds = sections.map((s) => s.id)
-    const devTeamsBySectionPromises = sectionIds.map((id) => getDevTeamsBySection(id))
-    const devTeamsBySection = await Promise.all(devTeamsBySectionPromises)
-    const availableDevTeams = devTeamsBySection.flat()
+    // Get user's selected dev team and all available dev teams in parallel
+    const [selectedDevTeam, availableDevTeams] = await Promise.all([
+      getUserDevTeam(identity.navIdent),
+      getAllDevTeams(),
+    ])
 
     // If no dev team selected, return just the selector data
     if (!selectedDevTeam) {
@@ -58,7 +54,6 @@ export async function loader({ request }: Route.LoaderArgs) {
         availableDevTeams,
         teamStats: null,
         issueApps: [] as AppCardData[],
-        sectionNames: sections.map((s) => s.name),
       }
     }
 
@@ -117,7 +112,6 @@ export async function loader({ request }: Route.LoaderArgs) {
       availableDevTeams,
       teamStats,
       issueApps: issueAppCards,
-      sectionNames: sections.map((s) => s.name),
     }
   } catch (_error) {
     return {
@@ -125,7 +119,6 @@ export async function loader({ request }: Route.LoaderArgs) {
       availableDevTeams: [],
       teamStats: null,
       issueApps: [] as AppCardData[],
-      sectionNames: [],
     }
   }
 }
@@ -188,7 +181,7 @@ function TeamStatsCard({ stats }: { stats: DevTeamSummaryStats }) {
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { selectedDevTeam, availableDevTeams, teamStats, issueApps, sectionNames } = loaderData
+  const { selectedDevTeam, availableDevTeams, teamStats, issueApps } = loaderData
   const layoutData = useRouteLoaderData<typeof layoutLoader>('routes/layout')
   const isAdmin = layoutData?.user?.role === 'admin'
 
@@ -228,9 +221,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               </HStack>
             </Form>
           ) : (
-            <Alert variant="warning">
-              Ingen utviklingsteam er tilgjengelige for dine seksjoner ({sectionNames.join(', ') || 'ingen'}).
-            </Alert>
+            <Alert variant="warning">Ingen utviklingsteam er tilgjengelige.</Alert>
           )}
         </VStack>
       )}
