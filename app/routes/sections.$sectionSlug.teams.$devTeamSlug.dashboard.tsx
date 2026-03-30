@@ -7,7 +7,7 @@ import { getOriginOfChangeCoverage } from '~/db/deployment-goal-links.server'
 import { getDevTeamApplications, getDevTeamBySlug } from '~/db/dev-teams.server'
 import { requireUser } from '~/lib/auth.server'
 import { type BoardPeriodType, getCurrentPeriod, getPeriodsForYear } from '~/lib/board-periods'
-import type { Route } from './+types/boards.$devTeamSlug.dashboard'
+import type { Route } from './+types/sections.$sectionSlug.teams.$devTeamSlug.dashboard'
 
 export function meta({ data }: Route.MetaArgs) {
   return [{ title: `Dashboard – ${data?.devTeam?.name ?? 'Team'}` }]
@@ -48,25 +48,29 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     directAppIds.length > 0 ? directAppIds : undefined,
   )
 
-  return { devTeam, periods, selectedPeriod, periodType, currentBoard, objectiveProgress, coverage }
+  return {
+    devTeam,
+    periods,
+    selectedPeriod,
+    periodType,
+    currentBoard,
+    objectiveProgress,
+    coverage,
+    sectionSlug: params.sectionSlug,
+  }
 }
 
 export default function DevTeamDashboard() {
-  const { devTeam, periods, selectedPeriod, periodType, currentBoard, objectiveProgress, coverage } =
+  const { devTeam, periods, selectedPeriod, periodType, currentBoard, objectiveProgress, coverage, sectionSlug } =
     useLoaderData<typeof loader>()
   const [searchParams, setSearchParams] = useSearchParams()
+  const teamBasePath = `/sections/${sectionSlug}/teams/${devTeam.slug}`
 
   return (
     <VStack gap="space-24">
       <div>
         <HStack gap="space-8" align="center">
-          <Button
-            as={Link}
-            to={`/boards/${devTeam.slug}`}
-            variant="tertiary"
-            size="small"
-            icon={<ChevronLeftIcon aria-hidden />}
-          >
+          <Button as={Link} to={teamBasePath} variant="tertiary" size="small" icon={<ChevronLeftIcon aria-hidden />}>
             Tavler
           </Button>
         </HStack>
@@ -140,7 +144,7 @@ export default function DevTeamDashboard() {
       {/* Board objective progress */}
       {!currentBoard ? (
         <Alert variant="info">
-          Ingen tavle funnet for {selectedPeriod.label}. <Link to={`/boards/${devTeam.slug}`}>Opprett en tavle</Link>
+          Ingen tavle funnet for {selectedPeriod.label}. <Link to={teamBasePath}>Opprett en tavle</Link>
         </Alert>
       ) : (
         <VStack gap="space-16">
@@ -150,8 +154,7 @@ export default function DevTeamDashboard() {
 
           {objectiveProgress.length === 0 ? (
             <Alert variant="info">
-              Ingen mål er lagt til på denne tavlen.{' '}
-              <Link to={`/boards/${devTeam.slug}/${currentBoard.id}`}>Legg til mål</Link>
+              Ingen mål er lagt til på denne tavlen. <Link to={`${teamBasePath}/${currentBoard.id}`}>Legg til mål</Link>
             </Alert>
           ) : (
             <VStack gap="space-12">

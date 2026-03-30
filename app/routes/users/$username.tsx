@@ -205,7 +205,10 @@ export default function UserPage() {
           <HStack gap="space-8" wrap>
             {devTeams.map((team) => (
               <Tag key={team.id} variant="moderate" size="small">
-                <Link to={`/boards/${team.slug}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                <Link
+                  to={`/sections/${team.section_slug}/teams/${team.slug}`}
+                  style={{ textDecoration: 'none', color: 'inherit' }}
+                >
                   {team.name}
                 </Link>
               </Tag>

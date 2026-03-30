@@ -4,12 +4,13 @@ import { useState } from 'react'
 import { Form, Link, useLoaderData } from 'react-router'
 import { type Board, createBoard, getBoardsByDevTeam } from '~/db/boards.server'
 import { getDevTeamBySlug } from '~/db/dev-teams.server'
+import { type DevTeamMember, getDevTeamMembers } from '~/db/user-dev-team-preference.server'
 import { requireUser } from '~/lib/auth.server'
 import { type BoardPeriodType, getCurrentPeriod, getPeriodsForYear } from '~/lib/board-periods'
-import type { Route } from './+types/boards.$devTeamSlug'
+import type { Route } from './+types/sections.$sectionSlug.teams.$devTeamSlug'
 
 export function meta({ data }: Route.MetaArgs) {
-  return [{ title: `Tavler – ${data?.devTeam?.name ?? 'Utviklingsteam'}` }]
+  return [{ title: `${data?.devTeam?.name ?? 'Utviklingsteam'}` }]
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
@@ -18,10 +19,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (!devTeam) {
     throw new Response('Utviklingsteam ikke funnet', { status: 404 })
   }
-  const boards = await getBoardsByDevTeam(devTeam.id)
+  const [boards, members] = await Promise.all([
+    getBoardsByDevTeam(devTeam.id),
+    getDevTeamMembers(devTeam.id).catch(() => [] as DevTeamMember[]),
+  ])
   const currentTertial = getCurrentPeriod('tertiary')
   const currentQuarter = getCurrentPeriod('quarterly')
-  return { devTeam, boards, currentTertial, currentQuarter }
+  return { devTeam, boards, members, currentTertial, currentQuarter, sectionSlug: params.sectionSlug }
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
@@ -64,19 +68,43 @@ export async function action({ request, params }: Route.ActionArgs) {
   return { error: 'Ukjent handling.' }
 }
 
-export default function BoardsList() {
-  const { devTeam, boards } = useLoaderData<typeof loader>()
+export default function DevTeamPage() {
+  const { devTeam, boards, members, sectionSlug } = useLoaderData<typeof loader>()
   const [showCreate, setShowCreate] = useState(false)
+  const teamBasePath = `/sections/${sectionSlug}/teams/${devTeam.slug}`
 
   return (
     <VStack gap="space-24">
       <div>
         <Heading level="1" size="large" spacing>
-          Tavler – {devTeam.name}
+          {devTeam.name}
         </Heading>
-        <BodyShort textColor="subtle">Mål- og commitmentstavler for utviklingsteamet.</BodyShort>
+        <BodyShort textColor="subtle">Teamside med mål- og commitmentstavler.</BodyShort>
       </div>
 
+      {/* Members */}
+      {members.length > 0 && (
+        <VStack gap="space-8">
+          <Heading level="2" size="small">
+            Medlemmer ({members.length})
+          </Heading>
+          <HStack gap="space-8" wrap>
+            {members.map((member) => (
+              <Tag key={member.nav_ident} variant="neutral" size="small">
+                {member.github_username ? (
+                  <Link to={`/users/${member.github_username}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                    {member.display_name || member.nav_ident}
+                  </Link>
+                ) : (
+                  member.display_name || member.nav_ident
+                )}
+              </Tag>
+            ))}
+          </HStack>
+        </VStack>
+      )}
+
+      {/* Board actions */}
       {!showCreate ? (
         <HStack gap="space-8">
           <Button variant="secondary" size="small" icon={<PlusIcon aria-hidden />} onClick={() => setShowCreate(true)}>
@@ -84,7 +112,7 @@ export default function BoardsList() {
           </Button>
           <Button
             as={Link}
-            to={`/boards/${devTeam.slug}/dashboard`}
+            to={`${teamBasePath}/dashboard`}
             variant="tertiary"
             size="small"
             icon={<BarChartIcon aria-hidden />}
@@ -111,7 +139,7 @@ export default function BoardsList() {
           </Table.Header>
           <Table.Body>
             {boards.map((board) => (
-              <BoardRow key={board.id} board={board} devTeamSlug={devTeam.slug} />
+              <BoardRow key={board.id} board={board} teamBasePath={teamBasePath} />
             ))}
           </Table.Body>
         </Table>
@@ -120,11 +148,11 @@ export default function BoardsList() {
   )
 }
 
-function BoardRow({ board, devTeamSlug }: { board: Board; devTeamSlug: string }) {
+function BoardRow({ board, teamBasePath }: { board: Board; teamBasePath: string }) {
   return (
     <Table.Row>
       <Table.DataCell>
-        <Link to={`/boards/${devTeamSlug}/${board.id}`}>{board.title}</Link>
+        <Link to={`${teamBasePath}/${board.id}`}>{board.title}</Link>
       </Table.DataCell>
       <Table.DataCell>{board.period_label}</Table.DataCell>
       <Table.DataCell>
@@ -138,7 +166,7 @@ function BoardRow({ board, devTeamSlug }: { board: Board; devTeamSlug: string })
         </Tag>
       </Table.DataCell>
       <Table.DataCell>
-        <Button as={Link} to={`/boards/${devTeamSlug}/${board.id}`} variant="tertiary" size="xsmall">
+        <Button as={Link} to={`${teamBasePath}/${board.id}`} variant="tertiary" size="xsmall">
           Vis
         </Button>
       </Table.DataCell>

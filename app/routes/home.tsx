@@ -281,7 +281,12 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                     Alle apper ({slug})
                   </Button>
                 ))}
-                <Button as={Link} to={`/boards/${team.slug}`} size="small" variant="secondary">
+                <Button
+                  as={Link}
+                  to={`/sections/${team.section_slug}/teams/${team.slug}`}
+                  size="small"
+                  variant="secondary"
+                >
                   {team.name} — Tavler
                 </Button>
               </HStack>

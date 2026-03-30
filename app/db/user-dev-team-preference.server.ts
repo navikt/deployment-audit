@@ -6,13 +6,14 @@ import type { DevTeamWithNaisTeams } from './dev-teams.server'
  */
 export async function getUserDevTeams(navIdent: string): Promise<DevTeamWithNaisTeams[]> {
   const result = await pool.query(
-    `SELECT dt.*,
+    `SELECT dt.*, s.slug as section_slug,
        COALESCE(array_agg(dn.nais_team_slug ORDER BY dn.nais_team_slug) FILTER (WHERE dn.nais_team_slug IS NOT NULL), '{}') as nais_team_slugs
      FROM user_dev_team_preference p
      JOIN dev_teams dt ON dt.id = p.dev_team_id
+     LEFT JOIN sections s ON s.id = dt.section_id
      LEFT JOIN dev_team_nais_teams dn ON dn.dev_team_id = dt.id
      WHERE p.nav_ident = $1 AND dt.is_active = true
-     GROUP BY dt.id
+     GROUP BY dt.id, s.slug
      ORDER BY dt.name`,
     [navIdent],
   )
@@ -80,4 +81,25 @@ export async function removeUserDevTeam(navIdent: string, devTeamId: number): Pr
     navIdent,
     devTeamId,
   ])
+}
+
+export interface DevTeamMember {
+  nav_ident: string
+  github_username: string | null
+  display_name: string | null
+}
+
+/**
+ * Get all members of a dev team (users who have selected this team).
+ */
+export async function getDevTeamMembers(devTeamId: number): Promise<DevTeamMember[]> {
+  const result = await pool.query(
+    `SELECT p.nav_ident, um.github_username, um.display_name
+     FROM user_dev_team_preference p
+     LEFT JOIN user_mappings um ON UPPER(um.nav_ident) = UPPER(p.nav_ident)
+     WHERE p.dev_team_id = $1
+     ORDER BY COALESCE(um.display_name, p.nav_ident)`,
+    [devTeamId],
+  )
+  return result.rows
 }

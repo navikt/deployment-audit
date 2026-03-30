@@ -30,6 +30,7 @@ interface DevTeamInfo {
   id: number
   name: string
   slug: string
+  section_slug?: string
   nais_team_slugs: string[]
 }
 
@@ -155,7 +156,12 @@ function HomePage({
                     Alle apper ({slug})
                   </Button>
                 ))}
-                <Button as={Link} to={`/boards/${team.slug}`} size="small" variant="secondary">
+                <Button
+                  as={Link}
+                  to={`/sections/${team.section_slug}/teams/${team.slug}`}
+                  size="small"
+                  variant="secondary"
+                >
                   {team.name} — Tavler
                 </Button>
               </HStack>
@@ -187,14 +193,27 @@ const mockDevTeams: DevTeamInfo[] = [
     id: 1,
     name: 'Motta pensjon',
     slug: 'motta-pensjon',
+    section_slug: 'pensjon',
     nais_team_slugs: ['pensjondeployer', 'pensjonsamhandling'],
   },
 ]
 
 const mockAvailableTeams: DevTeamInfo[] = [
   ...mockDevTeams,
-  { id: 2, name: 'Beregne pensjon', slug: 'beregne-pensjon', nais_team_slugs: ['pensjonberegning'] },
-  { id: 3, name: 'Utbetale pensjon', slug: 'utbetale-pensjon', nais_team_slugs: ['pensjonutbetaling'] },
+  {
+    id: 2,
+    name: 'Beregne pensjon',
+    slug: 'beregne-pensjon',
+    section_slug: 'pensjon',
+    nais_team_slugs: ['pensjonberegning'],
+  },
+  {
+    id: 3,
+    name: 'Utbetale pensjon',
+    slug: 'utbetale-pensjon',
+    section_slug: 'pensjon',
+    nais_team_slugs: ['pensjonutbetaling'],
+  },
 ]
 
 const mockTeamStats: DevTeamSummaryStats = {

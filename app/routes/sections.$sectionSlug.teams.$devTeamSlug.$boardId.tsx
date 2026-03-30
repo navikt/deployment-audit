@@ -29,7 +29,7 @@ import {
 } from '~/db/boards.server'
 import { getDevTeamBySlug } from '~/db/dev-teams.server'
 import { requireUser } from '~/lib/auth.server'
-import type { Route } from './+types/boards.$devTeamSlug.$boardId'
+import type { Route } from './+types/sections.$sectionSlug.teams.$devTeamSlug.$boardId'
 
 export function meta({ data }: Route.MetaArgs) {
   return [{ title: `${data?.board?.title ?? 'Tavle'} – ${data?.devTeam?.name ?? 'Team'}` }]
@@ -43,7 +43,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const board = await getBoardWithObjectives(Number(params.boardId))
   if (!board || board.dev_team_id !== devTeam.id) throw new Response('Tavle ikke funnet', { status: 404 })
 
-  return { devTeam, board }
+  return { devTeam, board, sectionSlug: params.sectionSlug }
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
@@ -120,20 +120,15 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function BoardDetail() {
-  const { devTeam, board } = useLoaderData<typeof loader>()
+  const { devTeam, board, sectionSlug } = useLoaderData<typeof loader>()
   const [showAddObjective, setShowAddObjective] = useState(false)
+  const teamBasePath = `/sections/${sectionSlug}/teams/${devTeam.slug}`
 
   return (
     <VStack gap="space-24">
       <div>
         <HStack gap="space-8" align="center">
-          <Button
-            as={Link}
-            to={`/boards/${devTeam.slug}`}
-            variant="tertiary"
-            size="small"
-            icon={<ChevronLeftIcon aria-hidden />}
-          >
+          <Button as={Link} to={teamBasePath} variant="tertiary" size="small" icon={<ChevronLeftIcon aria-hidden />}>
             Tilbake
           </Button>
         </HStack>

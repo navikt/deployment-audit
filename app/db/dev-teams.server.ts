@@ -11,6 +11,7 @@ export interface DevTeam {
 
 export interface DevTeamWithNaisTeams extends DevTeam {
   nais_team_slugs: string[]
+  section_slug?: string
 }
 
 export interface DevTeamApplication {
@@ -22,12 +23,13 @@ export interface DevTeamApplication {
 
 export async function getAllDevTeams(): Promise<DevTeamWithNaisTeams[]> {
   const result = await pool.query(
-    `SELECT dt.*,
+    `SELECT dt.*, s.slug as section_slug,
        COALESCE(array_agg(dn.nais_team_slug ORDER BY dn.nais_team_slug) FILTER (WHERE dn.nais_team_slug IS NOT NULL), '{}') as nais_team_slugs
      FROM dev_teams dt
+     JOIN sections s ON s.id = dt.section_id
      LEFT JOIN dev_team_nais_teams dn ON dn.dev_team_id = dt.id
      WHERE dt.is_active = true
-     GROUP BY dt.id
+     GROUP BY dt.id, s.slug
      ORDER BY dt.name`,
   )
   return result.rows
@@ -35,12 +37,13 @@ export async function getAllDevTeams(): Promise<DevTeamWithNaisTeams[]> {
 
 export async function getDevTeamsBySection(sectionId: number): Promise<DevTeamWithNaisTeams[]> {
   const result = await pool.query(
-    `SELECT dt.*,
+    `SELECT dt.*, s.slug as section_slug,
        COALESCE(array_agg(dn.nais_team_slug ORDER BY dn.nais_team_slug) FILTER (WHERE dn.nais_team_slug IS NOT NULL), '{}') as nais_team_slugs
      FROM dev_teams dt
+     LEFT JOIN sections s ON s.id = dt.section_id
      LEFT JOIN dev_team_nais_teams dn ON dn.dev_team_id = dt.id
      WHERE dt.section_id = $1 AND dt.is_active = true
-     GROUP BY dt.id
+     GROUP BY dt.id, s.slug
      ORDER BY dt.name`,
     [sectionId],
   )
@@ -49,12 +52,13 @@ export async function getDevTeamsBySection(sectionId: number): Promise<DevTeamWi
 
 export async function getDevTeamBySlug(slug: string): Promise<DevTeamWithNaisTeams | null> {
   const result = await pool.query(
-    `SELECT dt.*,
+    `SELECT dt.*, s.slug as section_slug,
        COALESCE(array_agg(dn.nais_team_slug ORDER BY dn.nais_team_slug) FILTER (WHERE dn.nais_team_slug IS NOT NULL), '{}') as nais_team_slugs
      FROM dev_teams dt
+     JOIN sections s ON s.id = dt.section_id
      LEFT JOIN dev_team_nais_teams dn ON dn.dev_team_id = dt.id
      WHERE dt.slug = $1
-     GROUP BY dt.id`,
+     GROUP BY dt.id, s.slug`,
     [slug],
   )
   return result.rows[0] ?? null

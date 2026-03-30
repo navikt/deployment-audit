@@ -138,7 +138,7 @@ export default function SectionOverview() {
         ) : (
           <VStack gap="space-12">
             {stats.map((teamStats) => (
-              <DevTeamCard key={teamStats.dev_team_id} stats={teamStats} />
+              <DevTeamCard key={teamStats.dev_team_id} stats={teamStats} sectionSlug={section.slug} />
             ))}
           </VStack>
         )}
@@ -180,7 +180,7 @@ function SummaryCard({
   )
 }
 
-function DevTeamCard({ stats }: { stats: DevTeamDashboardStats }) {
+function DevTeamCard({ stats, sectionSlug }: { stats: DevTeamDashboardStats; sectionSlug: string }) {
   const fourEyesPct = Math.round(stats.four_eyes_coverage * 100)
   const goalPct = Math.round(stats.goal_coverage * 100)
 
@@ -189,7 +189,7 @@ function DevTeamCard({ stats }: { stats: DevTeamDashboardStats }) {
       <HStack justify="space-between" align="start" wrap>
         <VStack gap="space-8">
           <Heading level="3" size="medium">
-            <Link to={`/boards/${stats.dev_team_slug}`}>{stats.dev_team_name}</Link>
+            <Link to={`/sections/${sectionSlug}/teams/${stats.dev_team_slug}`}>{stats.dev_team_name}</Link>
           </Heading>
           <HStack gap="space-8" wrap>
             {stats.nais_team_slugs.map((slug) => (

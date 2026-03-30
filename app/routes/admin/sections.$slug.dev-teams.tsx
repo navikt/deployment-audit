@@ -216,6 +216,7 @@ export default function AdminDevTeams() {
               <DevTeamRow
                 key={team.id}
                 team={team}
+                sectionSlug={section.slug}
                 linkedApps={appsByTeam[team.id] ?? []}
                 availableApps={availableAppsByTeam[team.id] ?? []}
                 isEditing={editingId === team.id}
@@ -235,6 +236,7 @@ export default function AdminDevTeams() {
 
 function DevTeamRow({
   team,
+  sectionSlug,
   linkedApps,
   availableApps,
   isEditing,
@@ -245,6 +247,7 @@ function DevTeamRow({
   onCancelApps,
 }: {
   team: DevTeamWithNaisTeams
+  sectionSlug: string
   linkedApps: DevTeamApplication[]
   availableApps: { id: number; team_slug: string; environment_name: string; app_name: string; is_linked: boolean }[]
   isEditing: boolean
@@ -379,7 +382,7 @@ function DevTeamRow({
         <HStack gap="space-4">
           <Button
             as={Link}
-            to={`/boards/${team.slug}`}
+            to={`/sections/${sectionSlug}/teams/${team.slug}`}
             variant="tertiary"
             size="xsmall"
             icon={<BarChartIcon aria-hidden />}
