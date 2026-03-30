@@ -48,6 +48,7 @@ import {
   type DeploymentNavFilters,
   getDeploymentById,
   getNextDeployment,
+  getPreviousDeploymentForDiff,
   getPreviousDeploymentForNav,
   getStatusHistory,
 } from '~/db/deployments.server'
@@ -128,6 +129,13 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   // Get previous and next deployments for navigation (respecting filters)
   const previousDeployment = await getPreviousDeploymentForNav(deploymentId, deployment.monitored_app_id, navFilters)
   const nextDeployment = await getNextDeployment(deploymentId, deployment.monitored_app_id, navFilters)
+
+  // Get the true chronological previous deployment for GitHub diff links (unfiltered)
+  const previousDeploymentForDiff = await getPreviousDeploymentForDiff(
+    deploymentId,
+    deployment.monitored_app_id,
+    app.audit_start_year,
+  )
 
   // Collect all GitHub usernames we need to look up
   const usernames: string[] = []
@@ -230,6 +238,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     goalLinks,
     availableBoards,
     previousDeployment,
+    previousDeploymentForDiff,
     nextDeployment,
     userMappings: serializeUserMappings(userMappings),
     appUrl,
@@ -263,6 +272,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
     goalLinks,
     availableBoards,
     previousDeployment,
+    previousDeploymentForDiff,
     nextDeployment,
     userMappings,
     appUrl,
@@ -475,12 +485,12 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
               {status.description}
               {(deployment.four_eyes_status === 'unverified_commits' ||
                 deployment.four_eyes_status === 'approved_pr_with_unreviewed') &&
-                previousDeployment?.commit_sha &&
+                previousDeploymentForDiff?.commit_sha &&
                 deployment.commit_sha && (
                   <>
                     {' '}
                     <a
-                      href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/compare/${previousDeployment.commit_sha}...${deployment.commit_sha}`}
+                      href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/compare/${previousDeploymentForDiff.commit_sha}...${deployment.commit_sha}`}
                       target="_blank"
                       rel="noopener noreferrer"
                     >
@@ -550,11 +560,11 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
               </Heading>
               <BodyShort spacing>
                 Følgende commits mellom forrige og dette deploymentet har ikke godkjent PR.
-                {previousDeployment?.commit_sha && deployment.commit_sha && (
+                {previousDeploymentForDiff?.commit_sha && deployment.commit_sha && (
                   <>
                     {' '}
                     <a
-                      href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/compare/${previousDeployment.commit_sha}...${deployment.commit_sha}`}
+                      href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/compare/${previousDeploymentForDiff.commit_sha}...${deployment.commit_sha}`}
                       target="_blank"
                       rel="noopener noreferrer"
                     >
@@ -1327,11 +1337,11 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
             <BodyShort>
               Dette deploymentet har status "{status.text}" og krever manuell godkjenning for å oppfylle
               fire-øyne-prinsippet.
-              {previousDeployment?.commit_sha && deployment.commit_sha && (
+              {previousDeploymentForDiff?.commit_sha && deployment.commit_sha && (
                 <>
                   {' '}
                   <a
-                    href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/compare/${previousDeployment.commit_sha}...${deployment.commit_sha}`}
+                    href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/compare/${previousDeploymentForDiff.commit_sha}...${deployment.commit_sha}`}
                     target="_blank"
                     rel="noopener noreferrer"
                   >

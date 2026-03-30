@@ -772,6 +772,39 @@ export async function getPreviousDeploymentForNav(
   return result.rows[0] || null
 }
 
+/**
+ * Get the true chronologically previous deployment for GitHub diff links.
+ * Unlike getPreviousDeploymentForNav, this ignores user filters (status, method, etc.)
+ * to always return the actual previous deployment — deployments can arrive out of order,
+ * so we use created_at, not id.
+ */
+export async function getPreviousDeploymentForDiff(
+  currentDeploymentId: number,
+  monitoredAppId: number,
+  auditStartYear?: number | null,
+): Promise<{ commit_sha: string } | null> {
+  let sql = `SELECT prev.commit_sha FROM deployments prev
+     CROSS JOIN deployments curr
+     WHERE prev.monitored_app_id = $1
+       AND curr.id = $2
+       AND prev.created_at < curr.created_at
+       AND prev.commit_sha IS NOT NULL
+       AND prev.four_eyes_status NOT IN ('legacy', 'legacy_pending')
+       AND prev.commit_sha !~ '^refs/'`
+
+  const params: (number | string)[] = [monitoredAppId, currentDeploymentId]
+
+  if (auditStartYear) {
+    sql += ` AND prev.created_at >= make_date($3, 1, 1)`
+    params.push(auditStartYear)
+  }
+
+  sql += ` ORDER BY prev.created_at DESC LIMIT 1`
+
+  const result = await pool.query(sql, params)
+  return result.rows[0] || null
+}
+
 export interface AppDeploymentStats {
   total: number
   with_four_eyes: number
