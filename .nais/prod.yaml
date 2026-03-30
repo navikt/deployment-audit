@@ -64,7 +64,7 @@ spec:
       - name: pensjon-deployment-audit-logs
         cascadingDelete: false
         lifecycleCondition:
-          age: 365
+          age: 4018
           withState: ANY
 
   observability:
