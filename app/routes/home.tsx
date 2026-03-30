@@ -30,7 +30,11 @@ export async function action({ request }: Route.ActionArgs) {
     if (!devTeamId || Number.isNaN(devTeamId)) {
       return { error: 'Ugyldig team-valg' }
     }
-    await setUserDevTeam(identity.navIdent, devTeamId)
+    try {
+      await setUserDevTeam(identity.navIdent, devTeamId)
+    } catch {
+      return { error: 'Kunne ikke lagre team-valg. Migrering av database kan mangle.' }
+    }
     return ok('Team valgt')
   }
 
@@ -38,88 +42,80 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
+  const identity = await requireUser(request)
+  const availableDevTeams = await getAllDevTeams()
+
+  // getUserDevTeam may fail if migration hasn't run yet — treat as "no team selected"
+  let selectedDevTeam = null
   try {
-    const identity = await requireUser(request)
+    selectedDevTeam = await getUserDevTeam(identity.navIdent)
+  } catch {
+    // user_dev_team_preference table may not exist yet
+  }
 
-    // Get user's selected dev team and all available dev teams in parallel
-    const [selectedDevTeam, availableDevTeams] = await Promise.all([
-      getUserDevTeam(identity.navIdent),
-      getAllDevTeams(),
-    ])
-
-    // If no dev team selected, return just the selector data
-    if (!selectedDevTeam) {
-      return {
-        selectedDevTeam: null,
-        availableDevTeams,
-        teamStats: null,
-        issueApps: [] as AppCardData[],
-      }
-    }
-
-    // Fetch dev team's direct app links
-    const directApps = await getDevTeamApplications(selectedDevTeam.id)
-    const directAppIds = directApps.length > 0 ? directApps.map((a) => a.monitored_app_id) : undefined
-
-    // Fetch team stats and issue apps in parallel
-    const [teamStats, issueApps, alertCounts, activeReposByApp] = await Promise.all([
-      getDevTeamSummaryStats(selectedDevTeam.nais_team_slugs, directAppIds),
-      getDevTeamAppsWithIssues(selectedDevTeam.nais_team_slugs, directAppIds),
-      getAllAlertCounts(),
-      getAllActiveRepositories(),
-    ])
-
-    // For issue apps, we need to fetch the monitored_app IDs to get stats
-    const [allApps] = await Promise.all([getAllMonitoredApplications()])
-
-    // Build AppCardData for issue apps
-    const issueAppKeys = new Set(issueApps.map((a) => `${a.team_slug}/${a.environment_name}/${a.app_name}`))
-    const matchingApps = allApps.filter((app) =>
-      issueAppKeys.has(`${app.team_slug}/${app.environment_name}/${app.app_name}`),
-    )
-
-    const statsByApp =
-      matchingApps.length > 0
-        ? await getAppDeploymentStatsBatch(
-            matchingApps.map((a) => ({ id: a.id, audit_start_year: a.audit_start_year })),
-          )
-        : new Map()
-
-    const issueAppCards: AppCardData[] = matchingApps.map((app) => ({
-      ...app,
-      active_repo: activeReposByApp.get(app.id) || null,
-      stats: statsByApp.get(app.id) || {
-        total: 0,
-        with_four_eyes: 0,
-        without_four_eyes: 0,
-        pending_verification: 0,
-        last_deployment: null,
-        last_deployment_id: null,
-        four_eyes_percentage: 0,
-      },
-      alertCount: alertCounts.get(app.id) || 0,
-    }))
-
-    // Sort: most issues first
-    issueAppCards.sort((a, b) => {
-      const aIssues = a.stats.without_four_eyes + a.alertCount
-      const bIssues = b.stats.without_four_eyes + b.alertCount
-      return bIssues - aIssues
-    })
-
-    return {
-      selectedDevTeam,
-      availableDevTeams,
-      teamStats,
-      issueApps: issueAppCards,
-    }
-  } catch (_error) {
+  // If no dev team selected, return just the selector data
+  if (!selectedDevTeam) {
     return {
       selectedDevTeam: null,
-      availableDevTeams: [],
+      availableDevTeams,
       teamStats: null,
       issueApps: [] as AppCardData[],
     }
+  }
+
+  // Fetch dev team's direct app links
+  const directApps = await getDevTeamApplications(selectedDevTeam.id)
+  const directAppIds = directApps.length > 0 ? directApps.map((a) => a.monitored_app_id) : undefined
+
+  // Fetch team stats and issue apps in parallel
+  const [teamStats, issueApps, alertCounts, activeReposByApp] = await Promise.all([
+    getDevTeamSummaryStats(selectedDevTeam.nais_team_slugs, directAppIds),
+    getDevTeamAppsWithIssues(selectedDevTeam.nais_team_slugs, directAppIds),
+    getAllAlertCounts(),
+    getAllActiveRepositories(),
+  ])
+
+  // For issue apps, we need to fetch the monitored_app IDs to get stats
+  const [allApps] = await Promise.all([getAllMonitoredApplications()])
+
+  // Build AppCardData for issue apps
+  const issueAppKeys = new Set(issueApps.map((a) => `${a.team_slug}/${a.environment_name}/${a.app_name}`))
+  const matchingApps = allApps.filter((app) =>
+    issueAppKeys.has(`${app.team_slug}/${app.environment_name}/${app.app_name}`),
+  )
+
+  const statsByApp =
+    matchingApps.length > 0
+      ? await getAppDeploymentStatsBatch(matchingApps.map((a) => ({ id: a.id, audit_start_year: a.audit_start_year })))
+      : new Map()
+
+  const issueAppCards: AppCardData[] = matchingApps.map((app) => ({
+    ...app,
+    active_repo: activeReposByApp.get(app.id) || null,
+    stats: statsByApp.get(app.id) || {
+      total: 0,
+      with_four_eyes: 0,
+      without_four_eyes: 0,
+      pending_verification: 0,
+      last_deployment: null,
+      last_deployment_id: null,
+      four_eyes_percentage: 0,
+    },
+    alertCount: alertCounts.get(app.id) || 0,
+  }))
+
+  // Sort: most issues first
+  issueAppCards.sort((a, b) => {
+    const aIssues = a.stats.without_four_eyes + a.alertCount
+    const bIssues = b.stats.without_four_eyes + b.alertCount
+    return bIssues - aIssues
+  })
+
+  return {
+    selectedDevTeam,
+    availableDevTeams,
+    teamStats,
+    issueApps: issueAppCards,
   }
 }
 
