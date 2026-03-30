@@ -7,6 +7,7 @@ import {
   ClockIcon,
   DownloadIcon,
   ExclamationmarkTriangleIcon,
+  ExternalLinkIcon,
   MinusCircleIcon,
   TrashIcon,
   XMarkIcon,
@@ -483,7 +484,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      Se endringer på GitHub
+                      Se endringer på GitHub <ExternalLinkIcon title="Åpnes i ny fane" fontSize="1em" />
                     </a>
                   </>
                 )}
@@ -557,7 +558,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      Se endringer på GitHub
+                      Se endringer på GitHub <ExternalLinkIcon title="Åpnes i ny fane" fontSize="1em" />
                     </a>
                   </>
                 )}
@@ -1334,7 +1335,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    Se endringer på GitHub
+                    Se endringer på GitHub <ExternalLinkIcon title="Åpnes i ny fane" fontSize="1em" />
                   </a>
                 </>
               )}
