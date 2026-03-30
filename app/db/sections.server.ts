@@ -80,7 +80,7 @@ export async function getSectionsForEntraGroups(
 /**
  * Get all team_slugs that belong to the given sections.
  */
-export async function getTeamSlugsForSections(sectionIds: number[]): Promise<string[]> {
+async function getTeamSlugsForSections(sectionIds: number[]): Promise<string[]> {
   if (sectionIds.length === 0) return []
 
   const result = await pool.query(

@@ -35,6 +35,16 @@ export interface BoardObjectiveProgress {
   total_linked_deployments: number
 }
 
+export interface DevTeamSummaryStats {
+  total_apps: number
+  total_deployments: number
+  with_four_eyes: number
+  without_four_eyes: number
+  pending_verification: number
+  four_eyes_percentage: number
+  apps_with_issues: number
+}
+
 /**
  * Get overall section stats using section_teams for the full picture.
  * This includes ALL deployments for nais teams in the section, regardless of dev team assignment.
@@ -131,6 +141,63 @@ export async function getSectionDashboardStats(
     four_eyes_coverage: row.total_deployments > 0 ? row.with_four_eyes / row.total_deployments : 0,
     goal_coverage: row.total_deployments > 0 ? row.linked_to_goal / row.total_deployments : 0,
   }))
+}
+
+/**
+ * Get summary stats for a single dev team.
+ * Uses direct app links when available, otherwise falls back to nais team slugs.
+ */
+export async function getDevTeamSummaryStats(
+  naisTeamSlugs: string[],
+  directAppIds?: number[],
+): Promise<DevTeamSummaryStats> {
+  const useDirectApps = directAppIds && directAppIds.length > 0
+
+  const result = await pool.query(
+    `WITH team_apps AS (
+       SELECT ma.id
+       FROM monitored_applications ma
+       WHERE ma.is_active = true
+         AND (
+           CASE
+             WHEN $3::boolean THEN ma.id = ANY($4::int[])
+             ELSE ma.team_slug = ANY($1::text[])
+           END
+         )
+     )
+     SELECT
+       (SELECT COUNT(*) FROM team_apps)::int AS total_apps,
+       COUNT(d.id)::int AS total_deployments,
+       COUNT(d.id) FILTER (WHERE d.has_four_eyes = true)::int AS with_four_eyes,
+       COUNT(d.id) FILTER (WHERE d.four_eyes_status IN ('direct_push', 'unverified_commits', 'approved_pr_with_unreviewed', 'unauthorized_repository', 'unauthorized_branch'))::int AS without_four_eyes,
+       COUNT(d.id) FILTER (WHERE d.four_eyes_status IN ('pending', 'pending_baseline', 'pending_approval', 'unknown'))::int AS pending_verification,
+       COUNT(DISTINCT CASE
+         WHEN (
+           COALESCE((SELECT SUM(CASE WHEN d2.four_eyes_status IN ('direct_push', 'unverified_commits', 'approved_pr_with_unreviewed', 'unauthorized_repository', 'unauthorized_branch') THEN 1 ELSE 0 END) FROM deployments d2 WHERE d2.monitored_app_id = ta.id AND (ma2.audit_start_year IS NULL OR d2.created_at >= make_date(ma2.audit_start_year, 1, 1))), 0) > 0
+           OR COALESCE((SELECT SUM(CASE WHEN d2.four_eyes_status IN ('pending', 'pending_baseline', 'pending_approval', 'unknown') THEN 1 ELSE 0 END) FROM deployments d2 WHERE d2.monitored_app_id = ta.id AND (ma2.audit_start_year IS NULL OR d2.created_at >= make_date(ma2.audit_start_year, 1, 1))), 0) > 0
+           OR COALESCE((SELECT COUNT(*) FROM repository_alerts ra WHERE ra.monitored_app_id = ta.id AND ra.resolved_at IS NULL), 0) > 0
+         ) THEN ta.id
+       END)::int AS apps_with_issues
+     FROM team_apps ta
+     JOIN monitored_applications ma2 ON ma2.id = ta.id
+     LEFT JOIN deployments d ON d.monitored_app_id = ta.id
+       AND (ma2.audit_start_year IS NULL OR d.created_at >= make_date(ma2.audit_start_year, 1, 1))`,
+    [naisTeamSlugs, [], useDirectApps ?? false, directAppIds ?? []],
+  )
+
+  const row = result.rows[0]
+  const total = row?.total_deployments ?? 0
+  const withFourEyes = row?.with_four_eyes ?? 0
+
+  return {
+    total_apps: row?.total_apps ?? 0,
+    total_deployments: total,
+    with_four_eyes: withFourEyes,
+    without_four_eyes: row?.without_four_eyes ?? 0,
+    pending_verification: row?.pending_verification ?? 0,
+    four_eyes_percentage: total > 0 ? Math.round((withFourEyes / total) * 100) : 0,
+    apps_with_issues: row?.apps_with_issues ?? 0,
+  }
 }
 
 /**

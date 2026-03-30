@@ -3,6 +3,56 @@ import { pool } from '../connection.server'
 import type { AppWithIssues, DeploymentWithApp, IssueDeployment } from '../deployments.server'
 
 /**
+ * Get apps with issues filtered to a dev team's scope.
+ * Uses both nais_team_slugs and direct app IDs (like dashboard stats).
+ */
+export async function getDevTeamAppsWithIssues(
+  naisTeamSlugs: string[],
+  directAppIds?: number[],
+): Promise<AppWithIssues[]> {
+  const useDirectApps = directAppIds && directAppIds.length > 0
+
+  const result = await pool.query(
+    `
+    SELECT 
+      ma.app_name,
+      ma.team_slug,
+      ma.environment_name,
+      COALESCE(dep.without_four_eyes, 0)::integer as without_four_eyes,
+      COALESCE(dep.pending_verification, 0)::integer as pending_verification,
+      COALESCE(alerts.count, 0)::integer as alert_count
+    FROM monitored_applications ma
+    LEFT JOIN LATERAL (
+      SELECT 
+        SUM(CASE WHEN d.four_eyes_status = ANY($1) THEN 1 ELSE 0 END) as without_four_eyes,
+        SUM(CASE WHEN d.four_eyes_status = ANY($2) THEN 1 ELSE 0 END) as pending_verification
+      FROM deployments d
+      WHERE d.monitored_app_id = ma.id
+        AND (ma.audit_start_year IS NULL OR d.created_at >= make_date(ma.audit_start_year, 1, 1))
+    ) dep ON true
+    LEFT JOIN LATERAL (
+      SELECT COUNT(*) as count
+      FROM repository_alerts ra
+      WHERE ra.monitored_app_id = ma.id AND ra.resolved_at IS NULL
+    ) alerts ON true
+    WHERE ma.is_active = true
+      AND (
+        CASE
+          WHEN $4::boolean THEN ma.id = ANY($5::int[])
+          ELSE ma.team_slug = ANY($3::text[])
+        END
+      )
+      AND (COALESCE(dep.without_four_eyes, 0) > 0 
+        OR COALESCE(dep.pending_verification, 0) > 0 
+        OR COALESCE(alerts.count, 0) > 0)
+    ORDER BY COALESCE(dep.without_four_eyes, 0) DESC, COALESCE(alerts.count, 0) DESC
+  `,
+    [NOT_APPROVED_STATUSES, PENDING_STATUSES, naisTeamSlugs, useDirectApps ?? false, directAppIds ?? []],
+  )
+  return result.rows
+}
+
+/**
  * Get recent deployments for Slack Home Tab
  */
 async function getRecentDeploymentsForHomeTab(limit = 10): Promise<DeploymentWithApp[]> {
