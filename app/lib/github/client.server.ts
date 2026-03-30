@@ -1,6 +1,7 @@
 import { createAppAuth } from '@octokit/auth-app'
 import { Octokit } from '@octokit/rest'
 import { logger } from '~/lib/logger.server'
+import { withGitHubSpan } from '~/lib/tracing.server'
 
 let octokit: Octokit | null = null
 let requestCount = 0
@@ -91,6 +92,15 @@ export function getGitHubClient(): Octokit {
       if (remaining && parseInt(remaining, 10) < 100) {
         logger.warn(`⚠️  GitHub rate limit: ${remaining}/${limit} remaining`)
       }
+    })
+
+    // Wrap each request in an OTel span
+    octokit.hook.wrap('request', async (request, options) => {
+      const method = options.method || 'GET'
+      let endpoint = options.url?.replace('https://api.github.com', '') || ''
+      if (options.owner) endpoint = endpoint.replace('{owner}', options.owner as string)
+      if (options.repo) endpoint = endpoint.replace('{repo}', options.repo as string)
+      return withGitHubSpan(`${method} ${endpoint}`, async () => request(options))
     })
   }
 

@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import winston from 'winston'
 import { logSyncJobMessage } from '~/db/sync-jobs.server'
+import { getTraceId } from '~/lib/tracing.server'
 
 // =============================================================================
 // Job Context via AsyncLocalStorage
@@ -61,16 +62,18 @@ function logToDb(level: 'info' | 'warn' | 'error' | 'debug', message: string, de
 
 export const logger = {
   info(message: string, details?: Record<string, unknown>) {
-    winstonLogger.info(message)
+    winstonLogger.info(message, { trace_id: getTraceId(), ...details })
     logToDb('info', message, details)
   },
   warn(message: string, details?: Record<string, unknown>) {
-    winstonLogger.warn(message)
+    winstonLogger.warn(message, { trace_id: getTraceId(), ...details })
     logToDb('warn', message, details)
   },
   error(message: string, errorOrDetails?: unknown) {
+    const traceId = getTraceId()
     if (errorOrDetails instanceof Error) {
       winstonLogger.error(message, {
+        trace_id: traceId,
         error: errorOrDetails.message,
         stack_trace: errorOrDetails.stack,
       })
@@ -79,15 +82,15 @@ export const logger = {
         stack_trace: errorOrDetails.stack,
       })
     } else if (errorOrDetails && typeof errorOrDetails === 'object') {
-      winstonLogger.error(message, errorOrDetails as Record<string, unknown>)
+      winstonLogger.error(message, { trace_id: traceId, ...(errorOrDetails as Record<string, unknown>) })
       logToDb('error', message, errorOrDetails as Record<string, unknown>)
     } else {
-      winstonLogger.error(message)
+      winstonLogger.error(message, { trace_id: traceId })
       logToDb('error', message)
     }
   },
   debug(message: string, details?: Record<string, unknown>) {
-    winstonLogger.debug(message)
+    winstonLogger.debug(message, { trace_id: getTraceId(), ...details })
     logToDb('debug', message, details)
   },
 }

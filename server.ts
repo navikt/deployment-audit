@@ -1,4 +1,5 @@
 import { createRequestHandler } from '@react-router/express'
+import { trace } from '@opentelemetry/api'
 import compression from 'compression'
 import express from 'express'
 import path from 'node:path'
@@ -25,11 +26,15 @@ function accessLogMiddleware(req: express.Request, res: express.Response, next: 
     // Skip static asset requests in production to reduce noise
     if (isProd && req.path.startsWith('/assets/')) return
 
+    const span = trace.getActiveSpan()
+    const traceId = span?.spanContext().traceId
+
     accessLogger.info('request', {
       method: req.method,
       path: req.originalUrl,
       status: res.statusCode,
       duration_ms: duration,
+      trace_id: traceId,
       user_agent: req.get('user-agent'),
       remote_addr: req.ip,
     })

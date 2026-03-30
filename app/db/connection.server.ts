@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { Pool, type QueryResult } from 'pg'
 import { logger } from '~/lib/logger.server'
+import { withDbSpan } from '~/lib/tracing.server'
 
 let poolInstance: Pool | null = null
 
@@ -69,21 +70,44 @@ export function getPool(): Pool {
   return poolInstance
 }
 
-// Lazy pool proxy — defers creation until first use to avoid throwing at import time
+// Lazy pool proxy — defers creation until first use and instruments queries with OTel spans
 export const pool: Pool = new Proxy({} as Pool, {
   get(_target, prop) {
     const instance = getPool()
     const value = (instance as any)[prop]
-    return typeof value === 'function' ? value.bind(instance) : value
+    if (typeof value !== 'function') return value
+
+    if (prop === 'query') {
+      return (...args: any[]) => {
+        const sql = typeof args[0] === 'string' ? args[0] : args[0]?.text || 'unknown'
+        const operation = extractOperation(sql)
+        return withDbSpan(operation, sql, () => value.apply(instance, args))
+      }
+    }
+
+    return value.bind(instance)
   },
 })
+
+function extractOperation(sql: string): string {
+  const trimmed = sql.trimStart().toUpperCase()
+  if (trimmed.startsWith('SELECT')) return 'SELECT'
+  if (trimmed.startsWith('INSERT')) return 'INSERT'
+  if (trimmed.startsWith('UPDATE')) return 'UPDATE'
+  if (trimmed.startsWith('DELETE')) return 'DELETE'
+  if (trimmed.startsWith('WITH')) return 'WITH'
+  return 'QUERY'
+}
 
 export async function query<T extends Record<string, any> = any>(
   text: string,
   params?: any[],
 ): Promise<QueryResult<T>> {
-  const p = getPool()
-  return p.query<T>(text, params)
+  const operation = extractOperation(text)
+  return withDbSpan(operation, text, () => {
+    const p = getPool()
+    return p.query<T>(text, params)
+  })
 }
 
 export async function closePool(): Promise<void> {
