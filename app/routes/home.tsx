@@ -1,8 +1,14 @@
-import { Alert, BodyShort, Box, Button, Heading, HGrid, HStack, Tag, VStack } from '@navikt/ds-react'
+import { Alert, BodyShort, Box, Button, Detail, Heading, HGrid, HStack, Tag, VStack } from '@navikt/ds-react'
 import { Link, useRouteLoaderData } from 'react-router'
 import { AppCard, type AppCardData } from '~/components/AppCard'
 import { getAllActiveRepositories } from '~/db/application-repositories.server'
-import { type DevTeamSummaryStats, getDevTeamSummaryStats } from '~/db/dashboard-stats.server'
+import { getBoardsByDevTeam } from '~/db/boards.server'
+import {
+  type BoardObjectiveProgress,
+  type DevTeamSummaryStats,
+  getBoardObjectiveProgress,
+  getDevTeamSummaryStats,
+} from '~/db/dashboard-stats.server'
 import { getDevTeamAppsWithIssues } from '~/db/deployments/home.server'
 import { getDevTeamApplications } from '~/db/dev-teams.server'
 import { getUserDevTeams } from '~/db/user-dev-team-preference.server'
@@ -17,6 +23,16 @@ export function meta(_args: Route.MetaArgs) {
     { title: 'Deployment Audit' },
     { name: 'description', content: 'Audit Nais deployments for godkjenningsstatus' },
   ]
+}
+
+interface BoardSummary {
+  boardId: number
+  boardTitle: string
+  periodLabel: string
+  teamName: string
+  teamSlug: string
+  sectionSlug: string
+  objectives: BoardObjectiveProgress[]
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -36,6 +52,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       selectedDevTeams: [],
       teamStats: null,
       issueApps: [] as AppCardData[],
+      boardSummaries: [] as BoardSummary[],
     }
   }
 
@@ -45,12 +62,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   const allDirectAppIds = [...new Set(directAppsResults.flat().map((a) => a.monitored_app_id))]
   const directAppIds = allDirectAppIds.length > 0 ? allDirectAppIds : undefined
 
-  // Fetch combined stats and issue apps in parallel
-  const [teamStats, issueApps, alertCounts, activeReposByApp] = await Promise.all([
+  // Fetch stats, issue apps, and boards in parallel
+  const [teamStats, issueApps, alertCounts, activeReposByApp, ...boardsByTeam] = await Promise.all([
     getDevTeamSummaryStats(allNaisTeamSlugs, directAppIds),
     getDevTeamAppsWithIssues(allNaisTeamSlugs, directAppIds),
     getAllAlertCounts(),
     getAllActiveRepositories(),
+    ...selectedDevTeams.map((t) => getBoardsByDevTeam(t.id)),
   ])
 
   const allApps = await getAllMonitoredApplications()
@@ -87,10 +105,36 @@ export async function loader({ request }: Route.LoaderArgs) {
     return bIssues - aIssues
   })
 
+  // Build board summaries from active boards
+  const now = new Date()
+  const activeBoards: { board: (typeof boardsByTeam)[0][0]; team: (typeof selectedDevTeams)[0] }[] = []
+  for (let i = 0; i < selectedDevTeams.length; i++) {
+    const team = selectedDevTeams[i]
+    const boards = boardsByTeam[i] ?? []
+    for (const board of boards) {
+      if (board.is_active && new Date(board.period_end) >= now) {
+        activeBoards.push({ board, team })
+      }
+    }
+  }
+
+  const boardSummaries: BoardSummary[] = await Promise.all(
+    activeBoards.map(async ({ board, team }) => ({
+      boardId: board.id,
+      boardTitle: board.title,
+      periodLabel: board.period_label,
+      teamName: team.name,
+      teamSlug: team.slug,
+      sectionSlug: team.section_slug ?? '',
+      objectives: await getBoardObjectiveProgress(board.id),
+    })),
+  )
+
   return {
     selectedDevTeams,
     teamStats,
     issueApps: issueAppCards,
+    boardSummaries,
   }
 }
 
@@ -152,7 +196,7 @@ function TeamStatsCard({ stats }: { stats: DevTeamSummaryStats }) {
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { selectedDevTeams, teamStats, issueApps } = loaderData
+  const { selectedDevTeams, teamStats, issueApps, boardSummaries } = loaderData
   const layoutData = useRouteLoaderData<typeof layoutLoader>('routes/layout')
   const isAdmin = layoutData?.user?.role === 'admin'
   const githubUsername = layoutData?.user?.githubUsername
@@ -213,6 +257,20 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             ))}
           </HStack>
 
+          {/* Active boards summary */}
+          {boardSummaries.length > 0 && (
+            <VStack gap="space-16">
+              <Heading level="3" size="small">
+                Aktive måltavler
+              </Heading>
+              <HGrid gap="space-16" columns={{ xs: 1, md: boardSummaries.length === 1 ? 1 : 2 }}>
+                {boardSummaries.map((board) => (
+                  <BoardSummaryCard key={board.boardId} board={board} />
+                ))}
+              </HGrid>
+            </VStack>
+          )}
+
           {/* Issue apps */}
           {issueApps.length > 0 ? (
             <VStack gap="space-16">
@@ -231,5 +289,57 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         </VStack>
       )}
     </VStack>
+  )
+}
+
+function BoardSummaryCard({ board }: { board: BoardSummary }) {
+  const boardUrl = `/sections/${board.sectionSlug}/teams/${board.teamSlug}/${board.boardId}`
+  const totalDeployments = board.objectives.reduce((sum, o) => sum + o.total_linked_deployments, 0)
+
+  return (
+    <Box padding="space-20" background="raised" borderRadius="4">
+      <VStack gap="space-12">
+        <HStack justify="space-between" align="center" wrap>
+          <VStack gap="space-4">
+            <Link to={boardUrl}>
+              <BodyShort weight="semibold">{board.boardTitle}</BodyShort>
+            </Link>
+            <Detail textColor="subtle">
+              {board.teamName} · {board.periodLabel}
+            </Detail>
+          </VStack>
+          <Tag variant="moderate" size="xsmall" data-color="info">
+            {totalDeployments} leveranser koblet
+          </Tag>
+        </HStack>
+
+        {board.objectives.length > 0 ? (
+          <VStack gap="space-8">
+            {board.objectives.map((obj) => (
+              <HStack key={obj.objective_id} gap="space-8" align="start">
+                <BodyShort size="small" style={{ flex: 1 }}>
+                  {obj.objective_title}
+                </BodyShort>
+                <Tag
+                  variant="moderate"
+                  size="xsmall"
+                  data-color={obj.total_linked_deployments > 0 ? 'success' : 'neutral'}
+                >
+                  {obj.total_linked_deployments}
+                </Tag>
+              </HStack>
+            ))}
+          </VStack>
+        ) : (
+          <Detail textColor="subtle">Ingen mål er lagt til ennå.</Detail>
+        )}
+
+        <div>
+          <Button as={Link} to={boardUrl} size="xsmall" variant="tertiary">
+            Åpne tavle
+          </Button>
+        </div>
+      </VStack>
+    </Box>
   )
 }
