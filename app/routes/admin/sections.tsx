@@ -1,8 +1,9 @@
 import { PlusIcon } from '@navikt/aksel-icons'
-import { Alert, BodyShort, Box, Button, Heading, HStack, TextField, VStack } from '@navikt/ds-react'
+import { Alert, BodyShort, Box, Button, Detail, Heading, HStack, Tag, TextField, VStack } from '@navikt/ds-react'
 import { useState } from 'react'
 import { Form, Link, useLoaderData } from 'react-router'
-import { createSection, getAllSectionsWithTeams } from '~/db/sections.server'
+import { getSectionOverallStats, type SectionOverallStats } from '~/db/dashboard-stats.server'
+import { createSection, getAllSectionsWithTeams, type SectionWithTeams } from '~/db/sections.server'
 import { requireAdmin } from '~/lib/auth.server'
 import type { Route } from './+types/sections'
 
@@ -13,7 +14,29 @@ export function meta() {
 export async function loader({ request }: Route.LoaderArgs) {
   await requireAdmin(request)
   const sections = await getAllSectionsWithTeams()
-  return { sections }
+  const ytdStart = new Date(new Date().getFullYear(), 0, 1)
+
+  const statsBySection = new Map<number, SectionOverallStats>()
+  await Promise.all(
+    sections.map(async (s) => {
+      statsBySection.set(s.id, await getSectionOverallStats(s.id, ytdStart))
+    }),
+  )
+
+  return {
+    sections: sections.map((s) => ({
+      ...s,
+      stats: statsBySection.get(s.id) ?? {
+        total_deployments: 0,
+        with_four_eyes: 0,
+        without_four_eyes: 0,
+        pending_verification: 0,
+        linked_to_goal: 0,
+        four_eyes_coverage: 0,
+        goal_coverage: 0,
+      },
+    })),
+  }
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -113,21 +136,67 @@ export default function AdminSections() {
       ) : (
         <VStack gap="space-12">
           {sections.map((section) => (
-            <Box
-              key={section.id}
-              padding="space-20"
-              borderRadius="8"
-              background="raised"
-              borderColor="neutral-subtle"
-              borderWidth="1"
-            >
-              <Heading level="2" size="medium">
-                <Link to={`/sections/${section.slug}`}>{section.name}</Link>
-              </Heading>
-            </Box>
+            <SectionCard key={section.id} section={section} />
           ))}
         </VStack>
       )}
     </VStack>
   )
+}
+
+function SectionCard({ section }: { section: SectionWithTeams & { stats: SectionOverallStats } }) {
+  const { stats } = section
+  const fourEyesPct = formatCoverage(stats.four_eyes_coverage)
+  const goalPct = formatCoverage(stats.goal_coverage)
+
+  return (
+    <Box padding="space-20" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
+      <HStack justify="space-between" align="start" wrap>
+        <Heading level="2" size="medium">
+          <Link to={`/sections/${section.slug}`}>{section.name}</Link>
+        </Heading>
+
+        <HStack gap="space-24" wrap>
+          <VStack gap="space-4" align="center">
+            <Detail textColor="subtle">Deployments i år</Detail>
+            <BodyShort weight="semibold">{stats.total_deployments}</BodyShort>
+          </VStack>
+          <VStack gap="space-4" align="center">
+            <Detail textColor="subtle">4-øyne</Detail>
+            <Tag variant={getHealthVariant(stats.four_eyes_coverage)} size="small">
+              {fourEyesPct}
+            </Tag>
+          </VStack>
+          <VStack gap="space-4" align="center">
+            <Detail textColor="subtle">Endringsopphav</Detail>
+            <Tag variant={getHealthVariant(stats.goal_coverage)} size="small">
+              {goalPct}
+            </Tag>
+          </VStack>
+          {stats.without_four_eyes > 0 && (
+            <VStack gap="space-4" align="center">
+              <Detail textColor="subtle">Uten 4-øyne</Detail>
+              <Tag variant="warning" size="small">
+                {stats.without_four_eyes}
+              </Tag>
+            </VStack>
+          )}
+        </HStack>
+      </HStack>
+    </Box>
+  )
+}
+
+function formatCoverage(ratio: number): string {
+  const pct = Math.round(ratio * 100)
+  if (ratio > 0 && pct === 0) return '<1%'
+  if (ratio < 1 && pct === 100) return '99%'
+  return `${pct}%`
+}
+
+function getHealthVariant(ratio: number): 'success' | 'warning' | 'error' | 'neutral' {
+  if (ratio >= 0.9) return 'success'
+  if (ratio >= 0.7) return 'warning'
+  if (ratio > 0) return 'error'
+  return 'neutral'
 }
