@@ -59,7 +59,6 @@ export default [
     route('admin/audit-reports/:id/pdf', 'routes/admin/audit-reports.$id.pdf.ts'),
     route('admin/audit-reports/:id/view', 'routes/admin/audit-reports.$id.view.ts'),
     route('admin/global-settings', 'routes/admin/global-settings.tsx'),
-    route('admin/risks-controls', 'routes/admin/risks-controls.tsx'),
     route('admin/env', 'routes/admin/environment.tsx'),
     route('admin/sections', 'routes/admin/sections.tsx'),
     route('admin/sections/:slug/dev-teams', 'routes/admin/sections.$slug.dev-teams.tsx'),

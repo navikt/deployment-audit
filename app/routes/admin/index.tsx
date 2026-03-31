@@ -7,7 +7,6 @@ import {
   FileTextIcon,
   LaptopIcon,
   PersonGroupIcon,
-  ShieldCheckmarkIcon,
 } from '@navikt/aksel-icons'
 import { BodyShort, Box, Heading, HGrid, VStack } from '@navikt/ds-react'
 import { Link, useLoaderData } from 'react-router'
@@ -223,28 +222,6 @@ export default function AdminIndex() {
                   Seksjoner
                 </Heading>
                 <BodyShort textColor="subtle">Administrer seksjoner, team-tilknytninger og Entra ID-grupper.</BodyShort>
-              </div>
-            </VStack>
-          </Box>
-        </Link>
-
-        <Link to="/admin/risks-controls" style={{ textDecoration: 'none', height: '100%' }}>
-          <Box
-            padding="space-24"
-            borderRadius="8"
-            background="raised"
-            borderColor="neutral-subtle"
-            borderWidth="1"
-            className="admin-card"
-            style={{ height: '100%' }}
-          >
-            <VStack gap="space-12">
-              <ShieldCheckmarkIcon fontSize="2rem" aria-hidden />
-              <div>
-                <Heading level="2" size="small" spacing>
-                  Risiko og kontroller
-                </Heading>
-                <BodyShort textColor="subtle">Risikoregister og kontroller for deployment-prosessen.</BodyShort>
               </div>
             </VStack>
           </Box>
