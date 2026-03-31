@@ -70,7 +70,7 @@ export default function SectionOverview() {
           {isAdmin && (
             <Button
               as={Link}
-              to={`/admin/sections/${section.slug}/dev-teams`}
+              to={`/sections/${section.slug}/edit`}
               variant="tertiary"
               size="small"
               icon={<PencilIcon aria-hidden />}
@@ -113,7 +113,7 @@ export default function SectionOverview() {
         {devTeams.length === 0 ? (
           <Alert variant="info">
             Ingen utviklingsteam er opprettet.{' '}
-            <AkselLink as={Link} to={`/admin/sections/${section.slug}/dev-teams`}>
+            <AkselLink as={Link} to={`/sections/${section.slug}/edit`}>
               Opprett utviklingsteam
             </AkselLink>
           </Alert>

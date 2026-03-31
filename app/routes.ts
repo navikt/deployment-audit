@@ -60,8 +60,8 @@ export default [
     route('admin/audit-reports/:id/view', 'routes/admin/audit-reports.$id.view.ts'),
     route('admin/global-settings', 'routes/admin/global-settings.tsx'),
     route('admin/env', 'routes/admin/environment.tsx'),
-    route('admin/sections', 'routes/admin/sections.tsx'),
-    route('admin/sections/:slug/dev-teams', 'routes/admin/sections.$slug.dev-teams.tsx'),
+    route('sections', 'routes/admin/sections.tsx'),
+    route('sections/:slug/edit', 'routes/admin/sections.$slug.dev-teams.tsx'),
     route('sections/:sectionSlug/teams/:devTeamSlug', 'routes/sections.$sectionSlug.teams.$devTeamSlug.tsx'),
     route(
       'sections/:sectionSlug/teams/:devTeamSlug/boards',

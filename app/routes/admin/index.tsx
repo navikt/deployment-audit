@@ -205,7 +205,7 @@ export default function AdminIndex() {
           </Box>
         </Link>
 
-        <Link to="/admin/sections" style={{ textDecoration: 'none', height: '100%' }}>
+        <Link to="/sections" style={{ textDecoration: 'none', height: '100%' }}>
           <Box
             padding="space-24"
             borderRadius="8"
