@@ -1,5 +1,5 @@
-import { BarChartIcon, PencilIcon, PersonGroupIcon, PlusIcon, TrashIcon } from '@navikt/aksel-icons'
-import { Alert, BodyShort, Box, Button, Heading, HStack, Tag, TextField, VStack } from '@navikt/ds-react'
+import { BarChartIcon, PencilIcon, PersonGroupIcon, PlusIcon } from '@navikt/aksel-icons'
+import { Alert, BodyShort, Box, Button, Heading, HStack, TextField, VStack } from '@navikt/ds-react'
 import { useState } from 'react'
 import { Form, Link, useLoaderData } from 'react-router'
 import {
@@ -235,23 +235,9 @@ function SectionCard({
   return (
     <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
       <HStack justify="space-between" align="center" wrap>
-        <VStack gap="space-8">
-          <Heading level="2" size="medium">
-            {section.name}
-          </Heading>
-          <HStack gap="space-4" wrap>
-            {section.team_slugs.map((slug) => (
-              <Tag key={slug} variant="neutral" size="small">
-                {slug}
-              </Tag>
-            ))}
-            {section.team_slugs.length === 0 && (
-              <BodyShort size="small" textColor="subtle">
-                Ingen nais-team
-              </BodyShort>
-            )}
-          </HStack>
-        </VStack>
+        <Heading level="2" size="medium">
+          {section.name}
+        </Heading>
         <HStack gap="space-4">
           <Button
             as={Link}
@@ -274,13 +260,6 @@ function SectionCard({
           <Button variant="tertiary" size="small" icon={<PencilIcon aria-hidden />} onClick={onEdit}>
             Rediger
           </Button>
-          <Form method="post" style={{ display: 'inline' }}>
-            <input type="hidden" name="intent" value="deactivate" />
-            <input type="hidden" name="id" value={section.id} />
-            <Button variant="tertiary-neutral" size="small" icon={<TrashIcon aria-hidden />} type="submit">
-              Deaktiver
-            </Button>
-          </Form>
         </HStack>
       </HStack>
     </Box>
