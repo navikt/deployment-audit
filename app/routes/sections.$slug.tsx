@@ -1,5 +1,23 @@
-import { BarChartIcon, CheckmarkCircleIcon, ExclamationmarkTriangleIcon, LinkIcon } from '@navikt/aksel-icons'
-import { Link as AkselLink, Alert, BodyShort, Box, Detail, Heading, HGrid, HStack, Tag, VStack } from '@navikt/ds-react'
+import {
+  BarChartIcon,
+  CheckmarkCircleIcon,
+  ExclamationmarkTriangleIcon,
+  LinkIcon,
+  PencilIcon,
+} from '@navikt/aksel-icons'
+import {
+  Link as AkselLink,
+  Alert,
+  BodyShort,
+  Box,
+  Button,
+  Detail,
+  Heading,
+  HGrid,
+  HStack,
+  Tag,
+  VStack,
+} from '@navikt/ds-react'
 import { Link, useLoaderData } from 'react-router'
 import type { DevTeamDashboardStats } from '~/db/dashboard-stats.server'
 import { getSectionDashboardStats, getSectionOverallStats } from '~/db/dashboard-stats.server'
@@ -13,7 +31,7 @@ export function meta({ data }: Route.MetaArgs) {
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  await requireUser(request)
+  const user = await requireUser(request)
   const section = await getSectionBySlug(params.slug)
   if (!section) throw new Response('Seksjon ikke funnet', { status: 404 })
 
@@ -26,11 +44,18 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     getDevTeamsBySection(section.id),
   ])
 
-  return { section, allTimeStats, ytdDeployments: ytdStats.total_deployments, ytdTeamStats, devTeams }
+  return {
+    section,
+    allTimeStats,
+    ytdDeployments: ytdStats.total_deployments,
+    ytdTeamStats,
+    devTeams,
+    isAdmin: user.role === 'admin',
+  }
 }
 
 export default function SectionOverview() {
-  const { section, allTimeStats, ytdDeployments, ytdTeamStats, devTeams } = useLoaderData<typeof loader>()
+  const { section, allTimeStats, ytdDeployments, ytdTeamStats, devTeams, isAdmin } = useLoaderData<typeof loader>()
 
   const overallFourEyes = allTimeStats.four_eyes_coverage
   const overallGoalCoverage = allTimeStats.goal_coverage
@@ -38,9 +63,22 @@ export default function SectionOverview() {
   return (
     <VStack gap="space-32">
       <div>
-        <Heading level="1" size="xlarge" spacing>
-          {section.name}
-        </Heading>
+        <HStack justify="space-between" align="center">
+          <Heading level="1" size="xlarge" spacing>
+            {section.name}
+          </Heading>
+          {isAdmin && (
+            <Button
+              as={Link}
+              to={`/admin/sections/${section.slug}/dev-teams`}
+              variant="tertiary"
+              size="small"
+              icon={<PencilIcon aria-hidden />}
+            >
+              Rediger
+            </Button>
+          )}
+        </HStack>
         <BodyShort textColor="subtle">Seksjonsoversikt – helsetilstand for SDLC governance</BodyShort>
       </div>
 

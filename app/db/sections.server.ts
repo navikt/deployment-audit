@@ -24,6 +24,18 @@ export async function getSectionBySlug(slug: string): Promise<Section | null> {
   return result.rows[0] ?? null
 }
 
+export async function getSectionWithTeams(slug: string): Promise<SectionWithTeams | null> {
+  const result = await pool.query(
+    `SELECT s.*, COALESCE(array_agg(st.team_slug ORDER BY st.team_slug) FILTER (WHERE st.team_slug IS NOT NULL), '{}') as team_slugs
+     FROM sections s
+     LEFT JOIN section_teams st ON st.section_id = s.id
+     WHERE s.slug = $1
+     GROUP BY s.id`,
+    [slug],
+  )
+  return result.rows[0] ?? null
+}
+
 async function getSectionById(id: number): Promise<Section | null> {
   const result = await pool.query('SELECT * FROM sections WHERE id = $1', [id])
   return result.rows[0] ?? null

@@ -26,17 +26,17 @@ import {
   setDevTeamNaisTeams,
   updateDevTeam,
 } from '~/db/dev-teams.server'
-import { getSectionBySlug } from '~/db/sections.server'
+import { getSectionBySlug, getSectionWithTeams, setSectionTeams, updateSection } from '~/db/sections.server'
 import { requireAdmin } from '~/lib/auth.server'
 import type { Route } from './+types/sections.$slug.dev-teams'
 
 export function meta({ data }: Route.MetaArgs) {
-  return [{ title: `Utviklingsteam – ${data?.section?.name ?? 'Seksjon'} – Admin` }]
+  return [{ title: `Rediger – ${data?.section?.name ?? 'Seksjon'} – Admin` }]
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   await requireAdmin(request)
-  const section = await getSectionBySlug(params.slug)
+  const section = await getSectionWithTeams(params.slug)
   if (!section) {
     throw new Response('Seksjon ikke funnet', { status: 404 })
   }
@@ -64,6 +64,34 @@ export async function action({ request, params }: Route.ActionArgs) {
 
   const formData = await request.formData()
   const intent = formData.get('intent') as string
+
+  if (intent === 'update_section') {
+    const name = (formData.get('name') as string)?.trim()
+    const entraGroupAdmin = (formData.get('entra_group_admin') as string)?.trim()
+    const entraGroupUser = (formData.get('entra_group_user') as string)?.trim()
+    const teamSlugs = (formData.get('team_slugs') as string)
+      ?.split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+
+    if (!name) {
+      return { error: 'Navn er påkrevd.' }
+    }
+
+    try {
+      await updateSection(section.id, {
+        name,
+        entra_group_admin: entraGroupAdmin || null,
+        entra_group_user: entraGroupUser || null,
+      })
+      if (teamSlugs) {
+        await setSectionTeams(section.id, teamSlugs)
+      }
+      return { success: true }
+    } catch (error) {
+      return { error: `Kunne ikke oppdatere seksjon: ${error}` }
+    }
+  }
 
   if (intent === 'create') {
     const slug = (formData.get('slug') as string)?.trim()
@@ -126,22 +154,20 @@ export async function action({ request, params }: Route.ActionArgs) {
   return { error: 'Ukjent handling.' }
 }
 
-export default function AdminDevTeams() {
+export default function AdminSectionEdit() {
   const { section, devTeams, appsByTeam, availableAppsByTeam } = useLoaderData<typeof loader>()
   const [editingId, setEditingId] = useState<number | null>(null)
   const [managingAppsId, setManagingAppsId] = useState<number | null>(null)
   const [showCreate, setShowCreate] = useState(false)
+  const [editingSection, setEditingSection] = useState(false)
 
   return (
     <VStack gap="space-24">
       <div>
         <Heading level="1" size="large" spacing>
-          Utviklingsteam – {section.name}
+          {section.name}
         </Heading>
-        <BodyShort textColor="subtle">
-          Administrer utviklingsteam under seksjonen. Utviklingsteam er uavhengige av Nais-team og brukes for
-          mål-/commitmentstavler.
-        </BodyShort>
+        <BodyShort textColor="subtle">Rediger seksjon, utviklingsteam og applikasjoner.</BodyShort>
         <HStack gap="space-8" style={{ marginTop: 'var(--ax-space-8)' }}>
           <Button
             as={Link}
@@ -155,81 +181,181 @@ export default function AdminDevTeams() {
         </HStack>
       </div>
 
-      {!showCreate ? (
-        <HStack>
-          <Button variant="secondary" size="small" icon={<PlusIcon aria-hidden />} onClick={() => setShowCreate(true)}>
-            Nytt utviklingsteam
-          </Button>
+      {/* Section settings */}
+      <VStack gap="space-16">
+        <HStack justify="space-between" align="center">
+          <Heading level="2" size="medium">
+            Innstillinger
+          </Heading>
+          {!editingSection && (
+            <Button
+              variant="tertiary"
+              size="small"
+              icon={<PencilIcon aria-hidden />}
+              onClick={() => setEditingSection(true)}
+            >
+              Rediger
+            </Button>
+          )}
         </HStack>
-      ) : (
-        <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
-          <Form method="post" onSubmit={() => setShowCreate(false)}>
-            <input type="hidden" name="intent" value="create" />
-            <VStack gap="space-16">
-              <Heading level="2" size="small">
-                Opprett nytt utviklingsteam
-              </Heading>
+        {editingSection ? (
+          <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
+            <Form method="post" onSubmit={() => setEditingSection(false)}>
+              <input type="hidden" name="intent" value="update_section" />
+              <VStack gap="space-12">
+                <HStack gap="space-16" wrap>
+                  <TextField label="Navn" name="name" size="small" defaultValue={section.name} autoComplete="off" />
+                  <TextField
+                    label="Nais-team (kommaseparert)"
+                    name="team_slugs"
+                    size="small"
+                    defaultValue={section.team_slugs.join(', ')}
+                    autoComplete="off"
+                    style={{ minWidth: '300px' }}
+                  />
+                </HStack>
+                <HStack gap="space-16" wrap>
+                  <TextField
+                    label="Admin-gruppe (Entra ID)"
+                    name="entra_group_admin"
+                    size="small"
+                    defaultValue={section.entra_group_admin ?? ''}
+                    autoComplete="off"
+                  />
+                  <TextField
+                    label="Bruker-gruppe (Entra ID)"
+                    name="entra_group_user"
+                    size="small"
+                    defaultValue={section.entra_group_user ?? ''}
+                    autoComplete="off"
+                  />
+                </HStack>
+                <HStack gap="space-8">
+                  <Button type="submit" size="small">
+                    Lagre
+                  </Button>
+                  <Button variant="tertiary" size="small" onClick={() => setEditingSection(false)}>
+                    Avbryt
+                  </Button>
+                </HStack>
+              </VStack>
+            </Form>
+          </Box>
+        ) : (
+          <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
+            <VStack gap="space-8">
               <HStack gap="space-16" wrap>
-                <TextField
-                  label="Slug"
-                  name="slug"
-                  size="small"
-                  placeholder="f.eks. team-pensjon-ytelse"
-                  autoComplete="off"
-                />
-                <TextField
-                  label="Visningsnavn"
-                  name="name"
-                  size="small"
-                  placeholder="f.eks. Team Pensjon Ytelse"
-                  autoComplete="off"
-                />
-              </HStack>
-              <HStack gap="space-8">
-                <Button type="submit" size="small">
-                  Opprett
-                </Button>
-                <Button variant="tertiary" size="small" onClick={() => setShowCreate(false)}>
-                  Avbryt
-                </Button>
+                <VStack gap="space-4">
+                  <BodyShort size="small" weight="semibold">
+                    Nais-team
+                  </BodyShort>
+                  <HStack gap="space-4" wrap>
+                    {section.team_slugs.length > 0 ? (
+                      section.team_slugs.map((slug) => (
+                        <Tag key={slug} variant="neutral" size="small">
+                          {slug}
+                        </Tag>
+                      ))
+                    ) : (
+                      <BodyShort size="small" textColor="subtle">
+                        Ingen
+                      </BodyShort>
+                    )}
+                  </HStack>
+                </VStack>
               </HStack>
             </VStack>
-          </Form>
-        </Box>
-      )}
+          </Box>
+        )}
+      </VStack>
 
-      {devTeams.length === 0 ? (
-        <Alert variant="info">Ingen utviklingsteam er opprettet for denne seksjonen.</Alert>
-      ) : (
-        <Table>
-          <Table.Header>
-            <Table.Row>
-              <Table.HeaderCell>Utviklingsteam</Table.HeaderCell>
-              <Table.HeaderCell>Slug</Table.HeaderCell>
-              <Table.HeaderCell>Nais-team</Table.HeaderCell>
-              <Table.HeaderCell>Applikasjoner</Table.HeaderCell>
-              <Table.HeaderCell />
-            </Table.Row>
-          </Table.Header>
-          <Table.Body>
-            {devTeams.map((team) => (
-              <DevTeamRow
-                key={team.id}
-                team={team}
-                sectionSlug={section.slug}
-                linkedApps={appsByTeam[team.id] ?? []}
-                availableApps={availableAppsByTeam[team.id] ?? []}
-                isEditing={editingId === team.id}
-                isManagingApps={managingAppsId === team.id}
-                onEdit={() => setEditingId(team.id)}
-                onCancel={() => setEditingId(null)}
-                onManageApps={() => setManagingAppsId(managingAppsId === team.id ? null : team.id)}
-                onCancelApps={() => setManagingAppsId(null)}
-              />
-            ))}
-          </Table.Body>
-        </Table>
-      )}
+      {/* Dev teams */}
+      <VStack gap="space-16">
+        <Heading level="2" size="medium">
+          Utviklingsteam
+        </Heading>
+
+        {!showCreate ? (
+          <HStack>
+            <Button
+              variant="secondary"
+              size="small"
+              icon={<PlusIcon aria-hidden />}
+              onClick={() => setShowCreate(true)}
+            >
+              Nytt utviklingsteam
+            </Button>
+          </HStack>
+        ) : (
+          <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
+            <Form method="post" onSubmit={() => setShowCreate(false)}>
+              <input type="hidden" name="intent" value="create" />
+              <VStack gap="space-16">
+                <Heading level="3" size="small">
+                  Opprett nytt utviklingsteam
+                </Heading>
+                <HStack gap="space-16" wrap>
+                  <TextField
+                    label="Slug"
+                    name="slug"
+                    size="small"
+                    placeholder="f.eks. team-pensjon-ytelse"
+                    autoComplete="off"
+                  />
+                  <TextField
+                    label="Visningsnavn"
+                    name="name"
+                    size="small"
+                    placeholder="f.eks. Team Pensjon Ytelse"
+                    autoComplete="off"
+                  />
+                </HStack>
+                <HStack gap="space-8">
+                  <Button type="submit" size="small">
+                    Opprett
+                  </Button>
+                  <Button variant="tertiary" size="small" onClick={() => setShowCreate(false)}>
+                    Avbryt
+                  </Button>
+                </HStack>
+              </VStack>
+            </Form>
+          </Box>
+        )}
+
+        {devTeams.length === 0 ? (
+          <Alert variant="info">Ingen utviklingsteam er opprettet for denne seksjonen.</Alert>
+        ) : (
+          <Table>
+            <Table.Header>
+              <Table.Row>
+                <Table.HeaderCell>Utviklingsteam</Table.HeaderCell>
+                <Table.HeaderCell>Slug</Table.HeaderCell>
+                <Table.HeaderCell>Nais-team</Table.HeaderCell>
+                <Table.HeaderCell>Applikasjoner</Table.HeaderCell>
+                <Table.HeaderCell />
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
+              {devTeams.map((team) => (
+                <DevTeamRow
+                  key={team.id}
+                  team={team}
+                  sectionSlug={section.slug}
+                  linkedApps={appsByTeam[team.id] ?? []}
+                  availableApps={availableAppsByTeam[team.id] ?? []}
+                  isEditing={editingId === team.id}
+                  isManagingApps={managingAppsId === team.id}
+                  onEdit={() => setEditingId(team.id)}
+                  onCancel={() => setEditingId(null)}
+                  onManageApps={() => setManagingAppsId(managingAppsId === team.id ? null : team.id)}
+                  onCancelApps={() => setManagingAppsId(null)}
+                />
+              ))}
+            </Table.Body>
+          </Table>
+        )}
+      </VStack>
     </VStack>
   )
 }
