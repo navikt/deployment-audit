@@ -4,15 +4,15 @@ import { useState } from 'react'
 import { Form, Link, useLoaderData } from 'react-router'
 import { getSectionOverallStats, type SectionOverallStats } from '~/db/dashboard-stats.server'
 import { createSection, getAllSectionsWithTeams, type SectionWithTeams } from '~/db/sections.server'
-import { requireAdmin } from '~/lib/auth.server'
+import { requireAdmin, requireUser } from '~/lib/auth.server'
 import type { Route } from './+types/sections'
 
 export function meta() {
-  return [{ title: 'Seksjoner - Admin - Deployment Audit' }]
+  return [{ title: 'Seksjoner - Deployment Audit' }]
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
-  await requireAdmin(request)
+  const user = await requireUser(request)
   const sections = await getAllSectionsWithTeams()
   const ytdStart = new Date(new Date().getFullYear(), 0, 1)
 
@@ -24,6 +24,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   )
 
   return {
+    isAdmin: user.role === 'admin',
     sections: sections.map((s) => ({
       ...s,
       stats: statsBySection.get(s.id) ?? {
@@ -66,25 +67,23 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function AdminSections() {
-  const { sections } = useLoaderData<typeof loader>()
+  const { sections, isAdmin } = useLoaderData<typeof loader>()
   const [showCreate, setShowCreate] = useState(false)
 
   return (
     <VStack gap="space-24">
-      <div>
-        <Heading level="1" size="large" spacing>
+      <HStack justify="space-between" align="center">
+        <Heading level="1" size="large">
           Seksjoner
         </Heading>
-        <BodyShort textColor="subtle">Administrer seksjoner og tilhørende nais-team.</BodyShort>
-      </div>
-
-      {!showCreate ? (
-        <HStack>
-          <Button variant="secondary" size="small" icon={<PlusIcon aria-hidden />} onClick={() => setShowCreate(true)}>
+        {isAdmin && !showCreate && (
+          <Button variant="tertiary" size="small" icon={<PlusIcon aria-hidden />} onClick={() => setShowCreate(true)}>
             Ny seksjon
           </Button>
-        </HStack>
-      ) : (
+        )}
+      </HStack>
+
+      {showCreate && (
         <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
           <Form method="post" onSubmit={() => setShowCreate(false)}>
             <input type="hidden" name="intent" value="create" />
