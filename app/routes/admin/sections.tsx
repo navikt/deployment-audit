@@ -1,5 +1,5 @@
 import { BarChartIcon, PencilIcon, PersonGroupIcon, PlusIcon, TrashIcon } from '@navikt/aksel-icons'
-import { Alert, BodyShort, Box, Button, Heading, HStack, Table, Tag, TextField, VStack } from '@navikt/ds-react'
+import { Alert, BodyShort, Box, Button, Heading, HStack, Tag, TextField, VStack } from '@navikt/ds-react'
 import { useState } from 'react'
 import { Form, Link, useLoaderData } from 'react-router'
 import {
@@ -98,12 +98,9 @@ export default function AdminSections() {
         <Heading level="1" size="large" spacing>
           Seksjoner
         </Heading>
-        <BodyShort textColor="subtle">
-          Administrer seksjoner som grupperer Nais-team under en organisatorisk enhet med tilgangsstyring.
-        </BodyShort>
+        <BodyShort textColor="subtle">Administrer seksjoner og tilhørende nais-team.</BodyShort>
       </div>
 
-      {/* Create form */}
       {!showCreate ? (
         <HStack>
           <Button variant="secondary" size="small" icon={<PlusIcon aria-hidden />} onClick={() => setShowCreate(true)}>
@@ -157,38 +154,26 @@ export default function AdminSections() {
         </Box>
       )}
 
-      {/* Sections table */}
       {sections.length === 0 ? (
         <Alert variant="info">Ingen seksjoner er opprettet ennå.</Alert>
       ) : (
-        <Table>
-          <Table.Header>
-            <Table.Row>
-              <Table.HeaderCell>Seksjon</Table.HeaderCell>
-              <Table.HeaderCell>Slug</Table.HeaderCell>
-              <Table.HeaderCell>Team</Table.HeaderCell>
-              <Table.HeaderCell>Entra-grupper</Table.HeaderCell>
-              <Table.HeaderCell />
-            </Table.Row>
-          </Table.Header>
-          <Table.Body>
-            {sections.map((section) => (
-              <SectionRow
-                key={section.id}
-                section={section}
-                isEditing={editingId === section.id}
-                onEdit={() => setEditingId(section.id)}
-                onCancel={() => setEditingId(null)}
-              />
-            ))}
-          </Table.Body>
-        </Table>
+        <VStack gap="space-16">
+          {sections.map((section) => (
+            <SectionCard
+              key={section.id}
+              section={section}
+              isEditing={editingId === section.id}
+              onEdit={() => setEditingId(section.id)}
+              onCancel={() => setEditingId(null)}
+            />
+          ))}
+        </VStack>
       )}
     </VStack>
   )
 }
 
-function SectionRow({
+function SectionCard({
   section,
   isEditing,
   onEdit,
@@ -201,100 +186,78 @@ function SectionRow({
 }) {
   if (isEditing) {
     return (
-      <Table.Row>
-        <Table.DataCell colSpan={5}>
-          <Form method="post" onSubmit={onCancel}>
-            <input type="hidden" name="intent" value="update" />
-            <input type="hidden" name="id" value={section.id} />
-            <VStack gap="space-12" style={{ padding: 'var(--ax-space-8) 0' }}>
-              <HStack gap="space-16" wrap>
-                <TextField label="Navn" name="name" size="small" defaultValue={section.name} autoComplete="off" />
-                <TextField
-                  label="Team (kommaseparert)"
-                  name="team_slugs"
-                  size="small"
-                  defaultValue={section.team_slugs.join(', ')}
-                  autoComplete="off"
-                  style={{ minWidth: '300px' }}
-                />
-              </HStack>
-              <HStack gap="space-16" wrap>
-                <TextField
-                  label="Admin-gruppe"
-                  name="entra_group_admin"
-                  size="small"
-                  defaultValue={section.entra_group_admin ?? ''}
-                  autoComplete="off"
-                />
-                <TextField
-                  label="Bruker-gruppe"
-                  name="entra_group_user"
-                  size="small"
-                  defaultValue={section.entra_group_user ?? ''}
-                  autoComplete="off"
-                />
-              </HStack>
-              <HStack gap="space-8">
-                <Button type="submit" size="small">
-                  Lagre
-                </Button>
-                <Button variant="tertiary" size="small" onClick={onCancel}>
-                  Avbryt
-                </Button>
-              </HStack>
-            </VStack>
-          </Form>
-        </Table.DataCell>
-      </Table.Row>
+      <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
+        <Form method="post" onSubmit={onCancel}>
+          <input type="hidden" name="intent" value="update" />
+          <input type="hidden" name="id" value={section.id} />
+          <VStack gap="space-12">
+            <HStack gap="space-16" wrap>
+              <TextField label="Navn" name="name" size="small" defaultValue={section.name} autoComplete="off" />
+              <TextField
+                label="Nais-team (kommaseparert)"
+                name="team_slugs"
+                size="small"
+                defaultValue={section.team_slugs.join(', ')}
+                autoComplete="off"
+                style={{ minWidth: '300px' }}
+              />
+            </HStack>
+            <HStack gap="space-16" wrap>
+              <TextField
+                label="Admin-gruppe (Entra ID)"
+                name="entra_group_admin"
+                size="small"
+                defaultValue={section.entra_group_admin ?? ''}
+                autoComplete="off"
+              />
+              <TextField
+                label="Bruker-gruppe (Entra ID)"
+                name="entra_group_user"
+                size="small"
+                defaultValue={section.entra_group_user ?? ''}
+                autoComplete="off"
+              />
+            </HStack>
+            <HStack gap="space-8">
+              <Button type="submit" size="small">
+                Lagre
+              </Button>
+              <Button variant="tertiary" size="small" onClick={onCancel}>
+                Avbryt
+              </Button>
+            </HStack>
+          </VStack>
+        </Form>
+      </Box>
     )
   }
 
   return (
-    <Table.Row>
-      <Table.DataCell>{section.name}</Table.DataCell>
-      <Table.DataCell>
-        <code>{section.slug}</code>
-      </Table.DataCell>
-      <Table.DataCell>
-        <HStack gap="space-4" wrap>
-          {section.team_slugs.map((slug) => (
-            <Tag key={slug} variant="neutral" size="small">
-              {slug}
-            </Tag>
-          ))}
-          {section.team_slugs.length === 0 && (
-            <BodyShort size="small" textColor="subtle">
-              Ingen team
-            </BodyShort>
-          )}
-        </HStack>
-      </Table.DataCell>
-      <Table.DataCell>
-        <VStack gap="space-2">
-          {section.entra_group_admin && (
-            <Tag variant="warning" size="small">
-              Admin: {section.entra_group_admin.slice(0, 8)}…
-            </Tag>
-          )}
-          {section.entra_group_user && (
-            <Tag variant="info" size="small">
-              User: {section.entra_group_user.slice(0, 8)}…
-            </Tag>
-          )}
-          {!section.entra_group_admin && !section.entra_group_user && (
-            <BodyShort size="small" textColor="subtle">
-              Ikke konfigurert
-            </BodyShort>
-          )}
+    <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
+      <HStack justify="space-between" align="center" wrap>
+        <VStack gap="space-8">
+          <Heading level="2" size="medium">
+            {section.name}
+          </Heading>
+          <HStack gap="space-4" wrap>
+            {section.team_slugs.map((slug) => (
+              <Tag key={slug} variant="neutral" size="small">
+                {slug}
+              </Tag>
+            ))}
+            {section.team_slugs.length === 0 && (
+              <BodyShort size="small" textColor="subtle">
+                Ingen nais-team
+              </BodyShort>
+            )}
+          </HStack>
         </VStack>
-      </Table.DataCell>
-      <Table.DataCell>
         <HStack gap="space-4">
           <Button
             as={Link}
             to={`/sections/${section.slug}`}
             variant="tertiary"
-            size="xsmall"
+            size="small"
             icon={<BarChartIcon aria-hidden />}
           >
             Oversikt
@@ -303,23 +266,23 @@ function SectionRow({
             as={Link}
             to={`/admin/sections/${section.slug}/dev-teams`}
             variant="tertiary"
-            size="xsmall"
+            size="small"
             icon={<PersonGroupIcon aria-hidden />}
           >
             Utviklingsteam
           </Button>
-          <Button variant="tertiary" size="xsmall" icon={<PencilIcon aria-hidden />} onClick={onEdit}>
+          <Button variant="tertiary" size="small" icon={<PencilIcon aria-hidden />} onClick={onEdit}>
             Rediger
           </Button>
           <Form method="post" style={{ display: 'inline' }}>
             <input type="hidden" name="intent" value="deactivate" />
             <input type="hidden" name="id" value={section.id} />
-            <Button variant="tertiary-neutral" size="xsmall" icon={<TrashIcon aria-hidden />} type="submit">
+            <Button variant="tertiary-neutral" size="small" icon={<TrashIcon aria-hidden />} type="submit">
               Deaktiver
             </Button>
           </Form>
         </HStack>
-      </Table.DataCell>
-    </Table.Row>
+      </HStack>
+    </Box>
   )
 }
