@@ -19,18 +19,18 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const ytdStart = new Date(new Date().getFullYear(), 0, 1)
 
-  const [allTimeStats, ytdStats, stats, devTeams] = await Promise.all([
+  const [allTimeStats, ytdStats, ytdTeamStats, devTeams] = await Promise.all([
     getSectionOverallStats(section.id),
     getSectionOverallStats(section.id, ytdStart),
-    getSectionDashboardStats(section.id),
+    getSectionDashboardStats(section.id, ytdStart),
     getDevTeamsBySection(section.id),
   ])
 
-  return { section, allTimeStats, ytdDeployments: ytdStats.total_deployments, stats, devTeams }
+  return { section, allTimeStats, ytdDeployments: ytdStats.total_deployments, ytdTeamStats, devTeams }
 }
 
 export default function SectionOverview() {
-  const { section, allTimeStats, ytdDeployments, stats, devTeams } = useLoaderData<typeof loader>()
+  const { section, allTimeStats, ytdDeployments, ytdTeamStats, devTeams } = useLoaderData<typeof loader>()
 
   const overallFourEyes = allTimeStats.four_eyes_coverage
   const overallGoalCoverage = allTimeStats.goal_coverage
@@ -81,7 +81,7 @@ export default function SectionOverview() {
           </Alert>
         ) : (
           <VStack gap="space-12">
-            {stats.map((teamStats) => (
+            {ytdTeamStats.map((teamStats) => (
               <DevTeamCard key={teamStats.dev_team_id} stats={teamStats} sectionSlug={section.slug} />
             ))}
           </VStack>
@@ -147,7 +147,7 @@ function DevTeamCard({ stats, sectionSlug }: { stats: DevTeamDashboardStats; sec
 
         <HStack gap="space-24" wrap>
           <VStack gap="space-4" align="center">
-            <Detail textColor="subtle">Deployments</Detail>
+            <Detail textColor="subtle">Deployments i år</Detail>
             <BodyShort weight="semibold">{stats.total_deployments}</BodyShort>
           </VStack>
           <VStack gap="space-4" align="center">
