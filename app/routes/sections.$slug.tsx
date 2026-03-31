@@ -1,24 +1,11 @@
 import { BarChartIcon, CheckmarkCircleIcon, ExclamationmarkTriangleIcon, LinkIcon } from '@navikt/aksel-icons'
-import {
-  Link as AkselLink,
-  Alert,
-  BodyShort,
-  Box,
-  Detail,
-  Heading,
-  HGrid,
-  HStack,
-  Select,
-  Tag,
-  VStack,
-} from '@navikt/ds-react'
-import { Link, useLoaderData, useSearchParams } from 'react-router'
+import { Link as AkselLink, Alert, BodyShort, Box, Detail, Heading, HGrid, HStack, Tag, VStack } from '@navikt/ds-react'
+import { Link, useLoaderData } from 'react-router'
 import type { DevTeamDashboardStats } from '~/db/dashboard-stats.server'
 import { getSectionDashboardStats, getSectionOverallStats } from '~/db/dashboard-stats.server'
 import { getDevTeamsBySection } from '~/db/dev-teams.server'
 import { getSectionBySlug } from '~/db/sections.server'
 import { requireUser } from '~/lib/auth.server'
-import { type BoardPeriodType, getCurrentPeriod, getPeriodsForYear } from '~/lib/board-periods'
 import type { Route } from './+types/sections.$slug'
 
 export function meta({ data }: Route.MetaArgs) {
@@ -30,32 +17,23 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const section = await getSectionBySlug(params.slug)
   if (!section) throw new Response('Seksjon ikke funnet', { status: 404 })
 
-  const url = new URL(request.url)
-  const periodType = (url.searchParams.get('periodType') as BoardPeriodType) || 'tertiary'
-  const periodLabel = url.searchParams.get('period') || getCurrentPeriod(periodType).label
+  const ytdStart = new Date(new Date().getFullYear(), 0, 1)
 
-  const year = new Date().getFullYear()
-  const periods = getPeriodsForYear(periodType, year)
-  const selectedPeriod = periods.find((p) => p.label === periodLabel) ?? getCurrentPeriod(periodType)
+  const [allTimeStats, ytdStats, stats, devTeams] = await Promise.all([
+    getSectionOverallStats(section.id),
+    getSectionOverallStats(section.id, ytdStart),
+    getSectionDashboardStats(section.id),
+    getDevTeamsBySection(section.id),
+  ])
 
-  const startDate = new Date(selectedPeriod.start)
-  const endDate = new Date(selectedPeriod.end)
-  endDate.setDate(endDate.getDate() + 1) // inclusive end
-
-  const overallStats = await getSectionOverallStats(section.id, startDate, endDate)
-  const stats = await getSectionDashboardStats(section.id, startDate, endDate)
-  const devTeams = await getDevTeamsBySection(section.id)
-
-  return { section, overallStats, stats, devTeams, periods, selectedPeriod, periodType }
+  return { section, allTimeStats, ytdDeployments: ytdStats.total_deployments, stats, devTeams }
 }
 
 export default function SectionOverview() {
-  const { section, overallStats, stats, devTeams, periods, selectedPeriod, periodType } = useLoaderData<typeof loader>()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const { section, allTimeStats, ytdDeployments, stats, devTeams } = useLoaderData<typeof loader>()
 
-  const totalDeployments = overallStats.total_deployments
-  const overallFourEyes = overallStats.four_eyes_coverage
-  const overallGoalCoverage = overallStats.goal_coverage
+  const overallFourEyes = allTimeStats.four_eyes_coverage
+  const overallGoalCoverage = allTimeStats.goal_coverage
 
   return (
     <VStack gap="space-32">
@@ -66,43 +44,9 @@ export default function SectionOverview() {
         <BodyShort textColor="subtle">Seksjonsoversikt – helsetilstand for SDLC governance</BodyShort>
       </div>
 
-      {/* Period selector */}
-      <HStack gap="space-16" wrap>
-        <Select
-          label="Periodetype"
-          size="small"
-          value={periodType}
-          onChange={(e) => {
-            const params = new URLSearchParams(searchParams)
-            params.set('periodType', e.target.value)
-            params.delete('period')
-            setSearchParams(params)
-          }}
-        >
-          <option value="tertiary">Tertial</option>
-          <option value="quarterly">Kvartal</option>
-        </Select>
-        <Select
-          label="Periode"
-          size="small"
-          value={selectedPeriod.label}
-          onChange={(e) => {
-            const params = new URLSearchParams(searchParams)
-            params.set('period', e.target.value)
-            setSearchParams(params)
-          }}
-        >
-          {periods.map((p) => (
-            <option key={p.label} value={p.label}>
-              {p.label}
-            </option>
-          ))}
-        </Select>
-      </HStack>
-
       {/* Summary cards */}
       <HGrid gap="space-16" columns={{ xs: 1, sm: 2, lg: 4 }}>
-        <SummaryCard title="Deployments" value={totalDeployments} icon={<BarChartIcon aria-hidden />} />
+        <SummaryCard title="Deployments i år" value={ytdDeployments} icon={<BarChartIcon aria-hidden />} />
         <SummaryCard
           title="4-øyne dekning"
           value={`${Math.round(overallFourEyes * 100)}%`}

@@ -51,8 +51,8 @@ export interface DevTeamSummaryStats {
  */
 export async function getSectionOverallStats(
   sectionId: number,
-  startDate: Date,
-  endDate: Date,
+  startDate?: Date,
+  endDate?: Date,
 ): Promise<SectionOverallStats> {
   const result = await pool.query(
     `SELECT
@@ -63,10 +63,11 @@ export async function getSectionOverallStats(
        COUNT(DISTINCT dgl.deployment_id)::int AS linked_to_goal
      FROM section_teams st
      JOIN deployments d ON d.team_slug = st.team_slug
-       AND d.created_at >= $2 AND d.created_at < $3
+       AND ($2::timestamptz IS NULL OR d.created_at >= $2)
+       AND ($3::timestamptz IS NULL OR d.created_at < $3)
      LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id
      WHERE st.section_id = $1`,
-    [sectionId, startDate, endDate],
+    [sectionId, startDate ?? null, endDate ?? null],
   )
 
   const row = result.rows[0]
@@ -91,8 +92,8 @@ export async function getSectionOverallStats(
  */
 export async function getSectionDashboardStats(
   sectionId: number,
-  startDate: Date,
-  endDate: Date,
+  startDate?: Date,
+  endDate?: Date,
 ): Promise<DevTeamDashboardStats[]> {
   const result = await pool.query(
     `WITH team_apps AS (
@@ -119,7 +120,8 @@ export async function getSectionDashboardStats(
            WHEN ta.direct_app_ids IS NOT NULL THEN d.monitored_app_id = ANY(ta.direct_app_ids)
            ELSE d.team_slug = ANY(ta.nais_team_slugs)
          END
-       ) AND d.created_at >= $2 AND d.created_at < $3
+       ) AND ($2::timestamptz IS NULL OR d.created_at >= $2)
+         AND ($3::timestamptz IS NULL OR d.created_at < $3)
        LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id
        GROUP BY ta.dev_team_id
      )
@@ -133,7 +135,7 @@ export async function getSectionDashboardStats(
      FROM team_apps ta
      LEFT JOIN deployment_stats ds ON ds.dev_team_id = ta.dev_team_id
      ORDER BY ta.dev_team_name`,
-    [sectionId, startDate, endDate],
+    [sectionId, startDate ?? null, endDate ?? null],
   )
 
   return result.rows.map((row) => ({
