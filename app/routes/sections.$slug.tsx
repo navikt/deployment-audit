@@ -24,6 +24,7 @@ import { getSectionDashboardStats, getSectionOverallStats } from '~/db/dashboard
 import { getDevTeamsBySection } from '~/db/dev-teams.server'
 import { getSectionBySlug } from '~/db/sections.server'
 import { requireUser } from '~/lib/auth.server'
+import styles from '~/styles/common.module.css'
 import type { Route } from './+types/sections.$slug'
 
 export function meta({ data }: Route.MetaArgs) {
@@ -176,42 +177,38 @@ function DevTeamCard({ stats, sectionSlug }: { stats: DevTeamDashboardStats; sec
 
   return (
     <Box padding="space-20" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
-      <HStack justify="space-between" align="start" wrap>
-        <VStack gap="space-8">
-          <Heading level="3" size="medium">
-            <Link to={`/sections/${sectionSlug}/teams/${stats.dev_team_slug}`}>{stats.dev_team_name}</Link>
-          </Heading>
-        </VStack>
+      <div className={styles.statGrid}>
+        <Heading level="3" size="medium">
+          <Link to={`/sections/${sectionSlug}/teams/${stats.dev_team_slug}`}>{stats.dev_team_name}</Link>
+        </Heading>
 
-        <HStack gap="space-24" wrap>
-          <VStack gap="space-4" align="center" style={{ minWidth: '7rem' }}>
-            <Detail textColor="subtle">Deployments i år</Detail>
-            <BodyShort weight="semibold">{stats.total_deployments}</BodyShort>
-          </VStack>
-          <VStack gap="space-4" align="center" style={{ minWidth: '5rem' }}>
-            <Detail textColor="subtle">4-øyne</Detail>
-            <Tag variant={getHealthVariant(stats.four_eyes_coverage)} size="small">
-              {fourEyesPct}
-            </Tag>
-          </VStack>
-          <VStack gap="space-4" align="center" style={{ minWidth: '7rem' }}>
-            <Detail textColor="subtle">Endringsopphav</Detail>
-            <Tag variant={getHealthVariant(stats.goal_coverage)} size="small">
-              {goalPct}
-            </Tag>
-          </VStack>
-          <VStack gap="space-4" align="center" style={{ minWidth: '9rem' }}>
-            <Detail textColor="subtle">Helsetilstand</Detail>
-            <Tag
-              variant={getHealthVariant(Math.min(stats.four_eyes_coverage, stats.goal_coverage))}
-              size="small"
-              icon={getHealthIcon(stats.four_eyes_coverage, stats.goal_coverage)}
-            >
-              {getHealthLabel(stats.four_eyes_coverage, stats.goal_coverage)}
-            </Tag>
-          </VStack>
-        </HStack>
-      </HStack>
+        <VStack gap="space-4" align="center">
+          <Detail textColor="subtle">Deployments i år</Detail>
+          <BodyShort weight="semibold">{stats.total_deployments}</BodyShort>
+        </VStack>
+        <VStack gap="space-4" align="center">
+          <Detail textColor="subtle">4-øyne</Detail>
+          <Tag variant={getHealthVariant(stats.four_eyes_coverage)} size="small">
+            {fourEyesPct}
+          </Tag>
+        </VStack>
+        <VStack gap="space-4" align="center">
+          <Detail textColor="subtle">Endringsopphav</Detail>
+          <Tag variant={getHealthVariant(stats.goal_coverage)} size="small">
+            {goalPct}
+          </Tag>
+        </VStack>
+        <VStack gap="space-4" align="center">
+          <Detail textColor="subtle">Helsetilstand</Detail>
+          <Tag
+            variant={getHealthVariant(Math.min(stats.four_eyes_coverage, stats.goal_coverage))}
+            size="small"
+            icon={getHealthIcon(stats.four_eyes_coverage, stats.goal_coverage)}
+          >
+            {getHealthLabel(stats.four_eyes_coverage, stats.goal_coverage)}
+          </Tag>
+        </VStack>
+      </div>
     </Box>
   )
 }

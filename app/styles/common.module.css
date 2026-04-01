@@ -36,6 +36,21 @@
   border-bottom: 1px solid var(--ax-border-neutral-subtle);
 }
 
+/* Card with aligned stat columns across multiple cards */
+.statGrid {
+  display: grid;
+  grid-template-columns: 1fr 7rem 5rem 7.5rem 10rem;
+  gap: var(--ax-space-24);
+  align-items: start;
+}
+
+@media (max-width: 768px) {
+  .statGrid {
+    grid-template-columns: 1fr;
+    gap: var(--ax-space-12);
+  }
+}
+
 /* Truncated text with ellipsis */
 .truncateText {
   overflow: hidden;
