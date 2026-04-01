@@ -13,7 +13,7 @@ import {
   VStack,
 } from '@navikt/ds-react'
 import { useState } from 'react'
-import { Form, Link, useLoaderData } from 'react-router'
+import { Form, Link, useLoaderData, useRouteLoaderData } from 'react-router'
 import { AppCard, type AppCardData } from '~/components/AppCard'
 import { getAllActiveRepositories } from '~/db/application-repositories.server'
 import { type Board, createBoard, getBoardsByDevTeam } from '~/db/boards.server'
@@ -25,6 +25,7 @@ import { type DevTeamMember, getDevTeamMembers } from '~/db/user-dev-team-prefer
 import { requireUser } from '~/lib/auth.server'
 import { type BoardPeriodType, getPeriodsForYear } from '~/lib/board-periods'
 import type { Route } from './+types/sections.$sectionSlug.teams.$devTeamSlug'
+import type { loader as layoutLoader } from './layout'
 
 export function meta({ data }: Route.MetaArgs) {
   return [{ title: `${data?.devTeam?.name ?? 'Utviklingsteam'}` }]
@@ -131,6 +132,8 @@ export async function action({ request, params }: Route.ActionArgs) {
 export default function DevTeamPage() {
   const { devTeam, boards, activeBoard, activeBoardProgress, members, appCards, sectionSlug } =
     useLoaderData<typeof loader>()
+  const layoutData = useRouteLoaderData<typeof layoutLoader>('routes/layout')
+  const isAdmin = layoutData?.user?.role === 'admin'
   const [showCreate, setShowCreate] = useState(false)
   const teamBasePath = `/sections/${sectionSlug}/teams/${devTeam.slug}`
   const inactiveBoards = boards.filter((b) => !b.is_active)
@@ -205,18 +208,27 @@ export default function DevTeamPage() {
       )}
 
       {/* Applications */}
-      {appCards.length > 0 && (
-        <VStack gap="space-8">
+      <VStack gap="space-8">
+        <HStack justify="space-between" align="center">
           <Heading level="2" size="small">
             Applikasjoner ({appCards.length})
           </Heading>
+          {isAdmin && (
+            <Button as={Link} to="/apps/add" size="small" variant="tertiary">
+              Legg til applikasjon
+            </Button>
+          )}
+        </HStack>
+        {appCards.length > 0 ? (
           <VStack gap="space-4">
             {appCards.map((app) => (
               <AppCard key={app.id} app={app} />
             ))}
           </VStack>
-        </VStack>
-      )}
+        ) : (
+          <BodyShort textColor="subtle">Ingen applikasjoner er lagt til ennå.</BodyShort>
+        )}
+      </VStack>
     </VStack>
   )
 }

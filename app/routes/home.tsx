@@ -198,22 +198,12 @@ function TeamStatsCard({ stats }: { stats: DevTeamSummaryStats }) {
 export default function Home({ loaderData }: Route.ComponentProps) {
   const { selectedDevTeams, teamStats, issueApps, boardSummaries } = loaderData
   const layoutData = useRouteLoaderData<typeof layoutLoader>('routes/layout')
-  const isAdmin = layoutData?.user?.role === 'admin'
   const githubUsername = layoutData?.user?.githubUsername
   const navIdent = layoutData?.user?.navIdent
   const profileId = githubUsername || navIdent
 
   return (
     <VStack gap="space-32">
-      {/* Admin add-app button */}
-      {isAdmin && (
-        <HStack justify="end">
-          <Button as={Link} to="/apps/add" size="small" variant="secondary">
-            Legg til applikasjon
-          </Button>
-        </HStack>
-      )}
-
       {/* No teams — prompt to set up profile */}
       {selectedDevTeams.length === 0 && (
         <Alert variant="info">
