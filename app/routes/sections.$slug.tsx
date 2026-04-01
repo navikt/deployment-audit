@@ -184,23 +184,23 @@ function DevTeamCard({ stats, sectionSlug }: { stats: DevTeamDashboardStats; sec
         </VStack>
 
         <HStack gap="space-24" wrap>
-          <VStack gap="space-4" align="center">
+          <VStack gap="space-4" align="center" style={{ minWidth: '7rem' }}>
             <Detail textColor="subtle">Deployments i år</Detail>
             <BodyShort weight="semibold">{stats.total_deployments}</BodyShort>
           </VStack>
-          <VStack gap="space-4" align="center">
+          <VStack gap="space-4" align="center" style={{ minWidth: '5rem' }}>
             <Detail textColor="subtle">4-øyne</Detail>
             <Tag variant={getHealthVariant(stats.four_eyes_coverage)} size="small">
               {fourEyesPct}
             </Tag>
           </VStack>
-          <VStack gap="space-4" align="center">
+          <VStack gap="space-4" align="center" style={{ minWidth: '7rem' }}>
             <Detail textColor="subtle">Endringsopphav</Detail>
             <Tag variant={getHealthVariant(stats.goal_coverage)} size="small">
               {goalPct}
             </Tag>
           </VStack>
-          <VStack gap="space-4" align="center">
+          <VStack gap="space-4" align="center" style={{ minWidth: '9rem' }}>
             <Detail textColor="subtle">Helsetilstand</Detail>
             <Tag
               variant={getHealthVariant(Math.min(stats.four_eyes_coverage, stats.goal_coverage))}
