@@ -1,6 +1,6 @@
-import { PlusIcon } from '@navikt/aksel-icons'
+import { CheckmarkCircleIcon, ExclamationmarkTriangleIcon, PlusIcon } from '@navikt/aksel-icons'
 import { Alert, BodyShort, Box, Button, Detail, Heading, HStack, Tag, TextField, VStack } from '@navikt/ds-react'
-import { useState } from 'react'
+import { type ReactNode, useState } from 'react'
 import { Form, Link, useLoaderData } from 'react-router'
 import { getSectionOverallStats, type SectionOverallStats } from '~/db/dashboard-stats.server'
 import { createSection, getAllSectionsWithTeams, type SectionWithTeams } from '~/db/sections.server'
@@ -173,9 +173,13 @@ function SectionCard({ section }: { section: SectionWithTeams & { stats: Section
             </Tag>
           </VStack>
           <VStack gap="space-4" align="center">
-            <Detail textColor="subtle">Uten 4-øyne</Detail>
-            <Tag variant={stats.without_four_eyes > 0 ? 'warning' : 'neutral'} size="small">
-              {stats.without_four_eyes}
+            <Detail textColor="subtle">Helsetilstand</Detail>
+            <Tag
+              variant={getHealthVariant(Math.min(stats.four_eyes_coverage, stats.goal_coverage))}
+              size="small"
+              icon={getHealthIcon(stats.four_eyes_coverage, stats.goal_coverage)}
+            >
+              {getHealthLabel(stats.four_eyes_coverage, stats.goal_coverage)}
             </Tag>
           </VStack>
         </HStack>
@@ -196,4 +200,18 @@ function getHealthVariant(ratio: number): 'success' | 'warning' | 'error' | 'neu
   if (ratio >= 0.7) return 'warning'
   if (ratio > 0) return 'error'
   return 'neutral'
+}
+
+function getHealthLabel(fourEyes: number, goalCoverage: number): string {
+  const min = Math.min(fourEyes, goalCoverage)
+  if (min >= 0.9) return 'God'
+  if (min >= 0.7) return 'Akseptabel'
+  if (min > 0) return 'Trenger oppfølging'
+  return 'Ingen data'
+}
+
+function getHealthIcon(fourEyes: number, goalCoverage: number): ReactNode {
+  const min = Math.min(fourEyes, goalCoverage)
+  if (min >= 0.7) return <CheckmarkCircleIcon aria-hidden />
+  return <ExclamationmarkTriangleIcon aria-hidden />
 }

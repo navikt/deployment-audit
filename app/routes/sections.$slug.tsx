@@ -201,9 +201,13 @@ function DevTeamCard({ stats, sectionSlug }: { stats: DevTeamDashboardStats; sec
             </Tag>
           </VStack>
           <VStack gap="space-4" align="center">
-            <Detail textColor="subtle">Uten 4-øyne</Detail>
-            <Tag variant={stats.without_four_eyes > 0 ? 'warning' : 'neutral'} size="small">
-              {stats.without_four_eyes}
+            <Detail textColor="subtle">Helsetilstand</Detail>
+            <Tag
+              variant={getHealthVariant(Math.min(stats.four_eyes_coverage, stats.goal_coverage))}
+              size="small"
+              icon={getHealthIcon(stats.four_eyes_coverage, stats.goal_coverage)}
+            >
+              {getHealthLabel(stats.four_eyes_coverage, stats.goal_coverage)}
             </Tag>
           </VStack>
         </HStack>
