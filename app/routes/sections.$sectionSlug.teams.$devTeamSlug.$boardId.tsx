@@ -28,6 +28,7 @@ import {
   updateObjective,
 } from '~/db/boards.server'
 import { getDevTeamBySlug } from '~/db/dev-teams.server'
+import { getSectionBySlug } from '~/db/sections.server'
 import { requireUser } from '~/lib/auth.server'
 import type { Route } from './+types/sections.$sectionSlug.teams.$devTeamSlug.$boardId'
 
@@ -43,7 +44,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const board = await getBoardWithObjectives(Number(params.boardId))
   if (!board || board.dev_team_id !== devTeam.id) throw new Response('Tavle ikke funnet', { status: 404 })
 
-  return { devTeam, board, sectionSlug: params.sectionSlug }
+  const section = await getSectionBySlug(params.sectionSlug)
+  return { devTeam, board, sectionSlug: params.sectionSlug, sectionName: section?.name ?? params.sectionSlug }
 }
 
 export async function action({ request, params }: Route.ActionArgs) {

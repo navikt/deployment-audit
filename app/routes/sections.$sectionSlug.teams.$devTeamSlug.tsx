@@ -21,6 +21,7 @@ import { type BoardObjectiveProgress, getBoardObjectiveProgress } from '~/db/das
 import { getAppDeploymentStatsBatch } from '~/db/deployments.server'
 import { getDevTeamApplications, getDevTeamBySlug } from '~/db/dev-teams.server'
 import { getAllAlertCounts, getAllMonitoredApplications } from '~/db/monitored-applications.server'
+import { getSectionBySlug } from '~/db/sections.server'
 import { type DevTeamMember, getDevTeamMembers } from '~/db/user-dev-team-preference.server'
 import { requireUser } from '~/lib/auth.server'
 import { type BoardPeriodType, getPeriodsForYear } from '~/lib/board-periods'
@@ -78,6 +79,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     }))
     .sort((a, b) => a.app_name.localeCompare(b.app_name, 'nb'))
 
+  const section = await getSectionBySlug(params.sectionSlug)
+
   return {
     devTeam,
     boards,
@@ -86,6 +89,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     members,
     appCards,
     sectionSlug: params.sectionSlug,
+    sectionName: section?.name ?? params.sectionSlug,
   }
 }
 

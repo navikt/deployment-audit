@@ -3,6 +3,7 @@ import { BodyShort, Button, Heading, Table, Tag, VStack } from '@navikt/ds-react
 import { Link, useLoaderData } from 'react-router'
 import { type Board, getBoardsByDevTeam } from '~/db/boards.server'
 import { getDevTeamBySlug } from '~/db/dev-teams.server'
+import { getSectionBySlug } from '~/db/sections.server'
 import { requireUser } from '~/lib/auth.server'
 import type { Route } from './+types/sections.$sectionSlug.teams.$devTeamSlug.boards'
 
@@ -18,7 +19,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const boards = await getBoardsByDevTeam(devTeam.id)
   const inactiveBoards = boards.filter((b) => !b.is_active)
 
-  return { devTeam, inactiveBoards, sectionSlug: params.sectionSlug }
+  const section = await getSectionBySlug(params.sectionSlug)
+
+  return {
+    devTeam,
+    inactiveBoards,
+    sectionSlug: params.sectionSlug,
+    sectionName: section?.name ?? params.sectionSlug,
+  }
 }
 
 export default function BoardHistory() {

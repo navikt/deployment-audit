@@ -10,6 +10,7 @@ interface BreadcrumbConfig {
 // Static breadcrumb configuration
 const breadcrumbConfig: Record<string, BreadcrumbConfig> = {
   '/': { label: 'Hjem' },
+  '/sections': { label: 'Seksjoner' },
   '/apps/add': { label: 'Legg til applikasjon' },
   '/admin': { label: 'Admin' },
   '/admin/users': { label: 'Brukermappinger' },
@@ -136,6 +137,54 @@ const dynamicBreadcrumbs: Array<{
     },
     parent: '/admin/users',
   },
+  // Section overview: /sections/:slug
+  {
+    pattern: /^\/sections\/([^/]+)$/,
+    getLabel: (matches) => {
+      const match = matches.find((m) => (m.data as Record<string, unknown>)?.section)
+      const section = (match?.data as Record<string, { name?: string }>)?.section
+      return section?.name || 'Seksjon'
+    },
+    parent: '/sections',
+  },
+  // Section edit: /sections/:slug/edit
+  {
+    pattern: /^\/sections\/([^/]+)\/edit$/,
+    getLabel: () => 'Rediger',
+    parent: '/sections/:slug',
+  },
+  // Team page: /sections/:slug/teams/:team
+  {
+    pattern: /^\/sections\/([^/]+)\/teams\/([^/]+)$/,
+    getLabel: (matches) => {
+      const match = matches.find((m) => (m.data as Record<string, unknown>)?.devTeam)
+      const devTeam = (match?.data as Record<string, { name?: string }>)?.devTeam
+      return devTeam?.name || 'Team'
+    },
+    parent: '/sections/:slug',
+  },
+  // Board page: /sections/:slug/teams/:team/:boardId
+  {
+    pattern: /^\/sections\/([^/]+)\/teams\/([^/]+)\/(\d+)$/,
+    getLabel: (matches) => {
+      const match = matches.find((m) => (m.data as Record<string, unknown>)?.board)
+      const board = (match?.data as Record<string, { title?: string }>)?.board
+      return board?.title || 'Tavle'
+    },
+    parent: '/sections/:slug/teams/:team',
+  },
+  // Boards list: /sections/:slug/teams/:team/boards
+  {
+    pattern: /^\/sections\/([^/]+)\/teams\/([^/]+)\/boards$/,
+    getLabel: () => 'Tidligere tavler',
+    parent: '/sections/:slug/teams/:team',
+  },
+  // Dashboard: /sections/:slug/teams/:team/dashboard
+  {
+    pattern: /^\/sections\/([^/]+)\/teams\/([^/]+)\/dashboard$/,
+    getLabel: () => 'Dashboard',
+    parent: '/sections/:slug/teams/:team',
+  },
 ]
 
 interface Crumb {
@@ -185,6 +234,37 @@ function buildBreadcrumbs(pathname: string, matches: ReturnType<typeof useMatche
       }
       if (deploymentId) {
         crumbs.push({ path: `${appPath}/deployments/${deploymentId}`, label: deploymentId })
+      }
+    }
+  }
+
+  // Helper to add section hierarchy crumbs
+  function addSectionCrumbs(includeTeam = false) {
+    const sectionMatch = pathname.match(/^\/sections\/([^/]+)/)
+    if (!sectionMatch) return
+    const sectionSlug = sectionMatch[1]
+    const sectionPath = `/sections/${sectionSlug}`
+
+    // Get section name from loader data
+    const sectionData = matches.find(
+      (m) => (m.data as Record<string, unknown>)?.section || (m.data as Record<string, unknown>)?.sectionName,
+    )
+    const sectionName =
+      (sectionData?.data as Record<string, { name?: string }>)?.section?.name ||
+      (sectionData?.data as Record<string, string>)?.sectionName ||
+      sectionSlug
+
+    crumbs.push({ path: '/sections', label: 'Seksjoner' })
+    crumbs.push({ path: sectionPath, label: sectionName })
+
+    if (includeTeam) {
+      const teamMatch = pathname.match(/^\/sections\/[^/]+\/teams\/([^/]+)/)
+      if (teamMatch) {
+        const teamSlug = teamMatch[1]
+        const teamPath = `/sections/${sectionSlug}/teams/${teamSlug}`
+        const teamData = matches.find((m) => (m.data as Record<string, unknown>)?.devTeam)
+        const teamName = (teamData?.data as Record<string, { name?: string }>)?.devTeam?.name || teamSlug
+        crumbs.push({ path: teamPath, label: teamName })
       }
     }
   }
@@ -249,6 +329,12 @@ function buildBreadcrumbs(pathname: string, matches: ReturnType<typeof useMatche
           const [, team] = envMatch
           crumbs.push({ path: `/team/${team}`, label: team })
         }
+      }
+      // Section hierarchy: /sections/:slug/teams/:team
+      else if (dynamic.parent === '/sections/:slug/teams/:team') {
+        addSectionCrumbs(true)
+      } else if (dynamic.parent === '/sections/:slug') {
+        addSectionCrumbs(false)
       } else if (dynamic.parent && dynamic.parent !== '/' && breadcrumbConfig[dynamic.parent]) {
         // Add static parent (but not home, that's already added)
         const parentSegments = dynamic.parent.split('/').filter(Boolean)

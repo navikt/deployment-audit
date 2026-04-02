@@ -5,6 +5,7 @@ import { getBoardsByDevTeam } from '~/db/boards.server'
 import { type BoardObjectiveProgress, getBoardObjectiveProgress } from '~/db/dashboard-stats.server'
 import { getOriginOfChangeCoverage } from '~/db/deployment-goal-links.server'
 import { getDevTeamApplications, getDevTeamBySlug } from '~/db/dev-teams.server'
+import { getSectionBySlug } from '~/db/sections.server'
 import { requireUser } from '~/lib/auth.server'
 import { type BoardPeriodType, getCurrentPeriod, getPeriodsForYear } from '~/lib/board-periods'
 import type { Route } from './+types/sections.$sectionSlug.teams.$devTeamSlug.dashboard'
@@ -48,6 +49,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     directAppIds.length > 0 ? directAppIds : undefined,
   )
 
+  const section = await getSectionBySlug(params.sectionSlug)
+
   return {
     devTeam,
     periods,
@@ -57,6 +60,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     objectiveProgress,
     coverage,
     sectionSlug: params.sectionSlug,
+    sectionName: section?.name ?? params.sectionSlug,
   }
 }
 
