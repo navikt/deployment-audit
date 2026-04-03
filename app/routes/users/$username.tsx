@@ -14,6 +14,7 @@ import {
   Modal,
   Radio,
   RadioGroup,
+  Select,
   Tag,
   TextField,
   VStack,
@@ -36,6 +37,7 @@ import { requireUser } from '~/lib/auth.server'
 import { isValidEmail, isValidNavIdent } from '~/lib/form-validators'
 import type { FourEyesStatus } from '~/lib/four-eyes-status'
 import { getBotDescription, getBotDisplayName, isGitHubBot } from '~/lib/github-bots'
+import { getDateRangeForPeriod, TIME_PERIOD_OPTIONS, type TimePeriod } from '~/lib/time-periods'
 import styles from '~/styles/common.module.css'
 import type { Route } from './+types/$username'
 
@@ -52,6 +54,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const url = new URL(request.url)
   const page = Math.max(1, Number.parseInt(url.searchParams.get('page') || '1', 10))
+  const period = (url.searchParams.get('period') || 'all') as TimePeriod
+  const dateRange = getDateRangeForPeriod(period)
 
   const isBot = isGitHubBot(username)
   const botDisplayName = getBotDisplayName(username)
@@ -60,8 +64,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const [mapping, deploymentCount, paginatedDeployments, monthlyStats] = await Promise.all([
     isBot ? Promise.resolve(null) : getUserMapping(username),
     getDeploymentCountByDeployer(username),
-    getDeployerDeploymentsPaginated(username, page, 20),
-    getDeployerMonthlyStats(username, 24),
+    getDeployerDeploymentsPaginated(username, page, 20, dateRange?.startDate, dateRange?.endDate),
+    getDeployerMonthlyStats(username, dateRange?.startDate, dateRange?.endDate),
   ])
 
   // Check if this is the logged-in user's own profile
@@ -98,6 +102,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     deploymentCount,
     paginatedDeployments,
     monthlyStats,
+    period,
     isBot,
     botDisplayName,
     botDescription,
@@ -202,6 +207,7 @@ export default function UserPage() {
     deploymentCount,
     paginatedDeployments,
     monthlyStats,
+    period,
     isBot,
     botDisplayName,
     botDescription,
@@ -397,24 +403,40 @@ export default function UserPage() {
         </Alert>
       )}
 
-      {/* Deployment activity chart */}
-      {monthlyStats.length > 0 && (
-        <VStack gap="space-12">
+      {/* Time period selector + chart + deployments */}
+      <VStack gap="space-24">
+        <HStack justify="space-between" align="end" wrap>
           <Heading level="2" size="small">
-            Leveranser over tid
+            Leveranser ({deploymentCount})
           </Heading>
+          <Select
+            label="Tidsperiode"
+            size="small"
+            value={period}
+            onChange={(e) => {
+              const params = new URLSearchParams(searchParams)
+              params.set('period', e.target.value)
+              params.delete('page')
+              setSearchParams(params)
+            }}
+            style={{ width: '14rem' }}
+          >
+            {TIME_PERIOD_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </Select>
+        </HStack>
+
+        {/* Deployment activity chart */}
+        {monthlyStats.length > 0 && (
           <Box background="raised" padding="space-16" borderRadius="4">
             <DeploymentActivityChart data={monthlyStats} />
           </Box>
-        </VStack>
-      )}
+        )}
 
-      {/* Deployments (paginated) */}
-      <VStack gap="space-16">
-        <Heading level="2" size="small">
-          Leveranser ({deploymentCount})
-        </Heading>
-
+        {/* Deployments (paginated) */}
         {paginatedDeployments.deployments.length === 0 ? (
           <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
             <BodyShort>Ingen leveranser funnet for denne brukeren.</BodyShort>
