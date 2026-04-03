@@ -474,6 +474,11 @@ export default function UserPage() {
                           </HStack>
                         </Tag>
                       )}
+                      {deployment.is_dependabot && (
+                        <Tag variant="moderate" size="xsmall" data-color="neutral">
+                          Dependabot
+                        </Tag>
+                      )}
                     </HStack>
                     <Detail textColor="subtle">{deployment.environment_name}</Detail>
                   </HStack>

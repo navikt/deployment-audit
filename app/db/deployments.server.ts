@@ -905,6 +905,7 @@ export async function getDeployerMonthlyStats(
 
 export interface DeployerDeploymentRow extends DeploymentWithApp {
   has_goal_link: boolean
+  is_dependabot: boolean
 }
 
 export interface PaginatedDeployerDeployments {
@@ -952,7 +953,8 @@ export async function getDeployerDeploymentsPaginated(
          ma.team_slug,
          ma.environment_name,
          ma.app_name,
-         EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = d.id) AS has_goal_link
+         EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = d.id) AS has_goal_link,
+         LOWER(d.github_pr_data->'creator'->>'username') = 'dependabot[bot]' AS is_dependabot
        FROM deployments d
        JOIN monitored_applications ma ON d.monitored_app_id = ma.id
        ${whereSql}
