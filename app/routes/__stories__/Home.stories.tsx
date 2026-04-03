@@ -52,7 +52,7 @@ function TeamStatsCard({ stats }: { stats: DevTeamSummaryStats }) {
       <Box padding="space-16" background="raised" borderRadius="4">
         <VStack gap="space-4">
           <BodyShort size="small" textColor="subtle">
-            Apper
+            Applikasjoner
           </BodyShort>
           <Heading size="large">{stats.total_apps}</Heading>
         </VStack>
@@ -60,7 +60,7 @@ function TeamStatsCard({ stats }: { stats: DevTeamSummaryStats }) {
       <Box padding="space-16" background="raised" borderRadius="4">
         <VStack gap="space-4">
           <BodyShort size="small" textColor="subtle">
-            Apper med problemer
+            Applikasjoner med problemer
           </BodyShort>
           <HStack align="center" gap="space-8">
             <Heading size="large">{stats.apps_with_issues}</Heading>
@@ -133,7 +133,7 @@ function HomePage({
               <HStack key={team.id} gap="space-8">
                 {team.nais_team_slugs.map((slug) => (
                   <Button key={slug} as={Link} to={`/team/${slug}`} size="small" variant="secondary">
-                    Alle apper ({slug})
+                    Alle applikasjoner ({slug})
                   </Button>
                 ))}
                 <Button
@@ -151,7 +151,7 @@ function HomePage({
           {issueApps.length > 0 ? (
             <VStack gap="space-16">
               <Heading level="3" size="small">
-                Apper som trenger oppfølging ({issueApps.length})
+                Applikasjoner som trenger oppfølging ({issueApps.length})
               </Heading>
               <div>
                 {issueApps.map((app) => (
@@ -160,7 +160,7 @@ function HomePage({
               </div>
             </VStack>
           ) : (
-            <Alert variant="success">Alle apper er i orden — ingen krever oppfølging.</Alert>
+            <Alert variant="success">Alle applikasjoner er i orden — ingen krever oppfølging.</Alert>
           )}
         </VStack>
       )}
@@ -252,7 +252,7 @@ export const NoTeamSelected: Story = {
 }
 
 export const AllAppsOk: Story = {
-  name: 'Alle apper i orden',
+  name: 'Alle applikasjoner i orden',
   args: {
     selectedDevTeams: mockDevTeams,
     teamStats: { ...mockTeamStats, apps_with_issues: 0, without_four_eyes: 0 },

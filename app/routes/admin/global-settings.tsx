@@ -60,7 +60,7 @@ export default function GlobalSettingsPage() {
             </Heading>
             <BodyShort>
               Konfigurer hvilken Slack-kanal som skal motta varsler når avvik registreres på deployments. Kanalen er
-              global for alle apper.
+              global for alle applikasjoner.
             </BodyShort>
 
             <Form method="post">

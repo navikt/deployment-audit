@@ -385,7 +385,7 @@ export function buildHomeTabBlocks({ baseUrl, stats, appsWithIssues, issueDeploy
     fields: [
       {
         type: 'mrkdwn',
-        text: `*Overvåkede apper:*\n${stats.totalApps}`,
+        text: `*Overvåkede applikasjoner:*\n${stats.totalApps}`,
       },
       {
         type: 'mrkdwn',

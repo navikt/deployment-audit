@@ -106,7 +106,7 @@ export const HideEnvironment: Story = {
 }
 
 export const MultipleApps: Story = {
-  name: 'Liste med flere apper',
+  name: 'Liste med flere applikasjoner',
   render: () => (
     <VStack gap="space-0">
       <AppCard

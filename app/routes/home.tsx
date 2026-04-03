@@ -170,7 +170,7 @@ function TeamStatsCard({ stats }: { stats: DevTeamSummaryStats }) {
       <Box padding="space-16" background="raised" borderRadius="4">
         <VStack gap="space-4">
           <BodyShort size="small" textColor="subtle">
-            Apper
+            Applikasjoner
           </BodyShort>
           <Heading size="large">{stats.total_apps}</Heading>
         </VStack>
@@ -179,7 +179,7 @@ function TeamStatsCard({ stats }: { stats: DevTeamSummaryStats }) {
       <Box padding="space-16" background="raised" borderRadius="4">
         <VStack gap="space-4">
           <BodyShort size="small" textColor="subtle">
-            Apper med problemer
+            Applikasjoner med problemer
           </BodyShort>
           <HStack align="center" gap="space-8">
             <Heading size="large">{stats.apps_with_issues}</Heading>
@@ -261,7 +261,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           {issueApps.length > 0 ? (
             <VStack gap="space-16">
               <Heading level="3" size="small">
-                Apper som trenger oppfølging ({issueApps.length})
+                Applikasjoner som trenger oppfølging ({issueApps.length})
               </Heading>
               <div>
                 {issueApps.map((app) => (
@@ -270,7 +270,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               </div>
             </VStack>
           ) : (
-            <Alert variant="success">Alle apper er i orden — ingen krever oppfølging.</Alert>
+            <Alert variant="success">Alle applikasjoner er i orden — ingen krever oppfølging.</Alert>
           )}
         </VStack>
       )}

@@ -57,7 +57,7 @@ export default function TeamEnvPage() {
           </Heading>
           <HStack gap="space-16" align="center">
             <Tag size="small" variant="neutral">
-              {apps.length} {apps.length === 1 ? 'app' : 'apper'}
+              {apps.length} {apps.length === 1 ? 'applikasjon' : 'applikasjoner'}
             </Tag>
             <AkselLink href={`https://console.nav.cloud.nais.io/team/${team}/applications`} target="_blank">
               <HStack gap="space-4" align="center">

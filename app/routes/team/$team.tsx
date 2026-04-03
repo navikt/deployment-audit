@@ -83,7 +83,7 @@ export default function TeamPage({ loaderData: { team, appsByEnv } }: Route.Comp
                   </Heading>
                 </Link>
                 <Tag size="xsmall" variant="neutral">
-                  {appsByEnv[env].length} {appsByEnv[env].length === 1 ? 'app' : 'apper'}
+                  {appsByEnv[env].length} {appsByEnv[env].length === 1 ? 'applikasjon' : 'applikasjoner'}
                 </Tag>
               </HStack>
 

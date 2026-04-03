@@ -16,7 +16,7 @@ function TeamEnvPage({ team, env, apps }: { team: string; env: string; apps: App
               {env}
             </Tag>
             <Tag variant="neutral-moderate" size="xsmall">
-              {apps.length} {apps.length === 1 ? 'app' : 'apper'}
+              {apps.length} {apps.length === 1 ? 'applikasjon' : 'applikasjoner'}
             </Tag>
           </HStack>
         </VStack>
@@ -67,7 +67,7 @@ export const SingleApp: Story = {
 }
 
 export const ManyApps: Story = {
-  name: 'Mange apper',
+  name: 'Mange applikasjoner',
   args: {
     team: 'pensjondeployer',
     env: 'prod-fss',

@@ -519,7 +519,7 @@ function DevTeamRow({
             Rediger
           </Button>
           <Button variant="tertiary" size="xsmall" onClick={onManageApps}>
-            Apper
+            Applikasjoner
           </Button>
           <Form method="post" style={{ display: 'inline' }}>
             <input type="hidden" name="intent" value="deactivate" />
