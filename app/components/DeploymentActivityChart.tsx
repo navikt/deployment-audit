@@ -37,6 +37,13 @@ export function DeploymentActivityChart({ data }: Props) {
           borderColor: 'rgba(255, 181, 46, 1)',
           borderWidth: 1,
         },
+        {
+          label: 'Dependabot',
+          data: data.map((d) => d.dependabot),
+          backgroundColor: 'rgba(130, 150, 180, 0.7)',
+          borderColor: 'rgba(130, 150, 180, 1)',
+          borderWidth: 1,
+        },
       ],
     }
   }, [data])

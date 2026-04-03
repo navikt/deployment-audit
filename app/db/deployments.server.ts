@@ -850,10 +850,11 @@ export interface DeployerMonthlyStats {
   total: number
   with_goal: number
   without_goal: number
+  dependabot: number
 }
 
 /**
- * Get monthly deployment counts for a deployer, grouped by goal linkage
+ * Get monthly deployment counts for a deployer, grouped by goal linkage and Dependabot
  */
 export async function getDeployerMonthlyStats(
   deployerUsername: string,
@@ -880,7 +881,12 @@ export async function getDeployerMonthlyStats(
     `SELECT
        TO_CHAR(DATE_TRUNC('month', d.created_at), 'YYYY-MM') AS month,
        COUNT(DISTINCT d.id)::int AS total,
-       COUNT(DISTINCT dgl.deployment_id)::int AS with_goal
+       COUNT(DISTINCT d.id) FILTER (
+         WHERE LOWER(d.github_pr_data->'creator'->>'username') = 'dependabot[bot]'
+       )::int AS dependabot,
+       COUNT(DISTINCT dgl.deployment_id) FILTER (
+         WHERE LOWER(d.github_pr_data->'creator'->>'username') IS DISTINCT FROM 'dependabot[bot]'
+       )::int AS with_goal_non_dep
      FROM deployments d
      LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id
      ${whereSql}
@@ -888,11 +894,12 @@ export async function getDeployerMonthlyStats(
      ORDER BY month`,
     params,
   )
-  return result.rows.map((row: { month: string; total: number; with_goal: number }) => ({
+  return result.rows.map((row: { month: string; total: number; dependabot: number; with_goal_non_dep: number }) => ({
     month: row.month,
     total: row.total,
-    with_goal: row.with_goal,
-    without_goal: row.total - row.with_goal,
+    dependabot: row.dependabot,
+    with_goal: row.with_goal_non_dep,
+    without_goal: row.total - row.dependabot - row.with_goal_non_dep,
   }))
 }
 
