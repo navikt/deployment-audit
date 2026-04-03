@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 
 interface SearchResult {
-  type: 'deployment' | 'user'
+  type: 'deployment' | 'user' | 'team' | 'app'
   id?: number
   url: string
   title: string
@@ -28,6 +28,32 @@ function Kbd({ children }: { children: React.ReactNode }) {
       {children}
     </Box>
   )
+}
+
+function resultTagVariant(type: SearchResult['type']): 'info' | 'neutral' | 'success' | 'warning' {
+  switch (type) {
+    case 'deployment':
+      return 'info'
+    case 'team':
+      return 'success'
+    case 'app':
+      return 'warning'
+    default:
+      return 'neutral'
+  }
+}
+
+function resultTagLabel(type: SearchResult['type']): string {
+  switch (type) {
+    case 'deployment':
+      return 'Leveranse'
+    case 'user':
+      return 'Bruker'
+    case 'team':
+      return 'Team'
+    case 'app':
+      return 'Applikasjon'
+  }
 }
 
 export function SearchDialog() {
@@ -162,7 +188,7 @@ export function SearchDialog() {
             label="Søk"
             hideLabel
             variant="simple"
-            placeholder="Søk på navn, NAV-ident, SHA, deployment ID..."
+            placeholder="Søk på team, applikasjon, navn, NAV-ident, SHA..."
             value={query}
             onChange={setQuery}
             autoComplete="off"
@@ -228,8 +254,8 @@ export function SearchDialog() {
                               >
                                 {result.title}
                               </BodyShort>
-                              <Tag size="xsmall" variant={result.type === 'deployment' ? 'info' : 'neutral'}>
-                                {result.type === 'deployment' ? 'Deployment' : 'Bruker'}
+                              <Tag size="xsmall" variant={resultTagVariant(result.type)}>
+                                {resultTagLabel(result.type)}
                               </Tag>
                             </HStack>
                             {result.subtitle && (
@@ -259,7 +285,7 @@ export function SearchDialog() {
             <Box padding="space-24">
               <VStack gap="space-8" align="center">
                 <BodyShort style={{ color: 'var(--ax-text-neutral-subtle)' }}>
-                  Søk på navn, NAV-ident, GitHub-brukernavn, SHA eller deployment ID
+                  Søk på team, applikasjon, navn, NAV-ident, GitHub-brukernavn, SHA eller deployment ID
                 </BodyShort>
                 <HStack gap="space-8">
                   <HStack gap="space-4" align="center">
