@@ -448,9 +448,11 @@ export default function UserPage() {
                 <Box key={deployment.id} padding="space-16" background="raised" className={styles.stackedListItem}>
                   <HStack gap="space-12" align="center" justify="space-between" wrap>
                     <HStack gap="space-12" align="center" wrap>
-                      <BodyShort weight="semibold" style={{ whiteSpace: 'nowrap' }}>
-                        {formatDate(deployment.created_at)}
-                      </BodyShort>
+                      <Link to={`/deployments/${deployment.id}`}>
+                        <BodyShort weight="semibold" style={{ whiteSpace: 'nowrap' }}>
+                          {formatDate(deployment.created_at)}
+                        </BodyShort>
+                      </Link>
                       <Link
                         to={`/team/${deployment.team_slug}/env/${deployment.environment_name}/app/${deployment.app_name}`}
                       >
