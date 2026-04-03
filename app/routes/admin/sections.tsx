@@ -1,5 +1,5 @@
-import { CheckmarkCircleIcon, ExclamationmarkTriangleIcon, PlusIcon } from '@navikt/aksel-icons'
-import { Alert, BodyShort, Box, Button, Detail, Heading, HStack, Tag, TextField, VStack } from '@navikt/ds-react'
+import { BarChartIcon, CheckmarkCircleIcon, ExclamationmarkTriangleIcon, LinkIcon, PlusIcon } from '@navikt/aksel-icons'
+import { Alert, BodyShort, Box, Button, Detail, Heading, HGrid, HStack, Tag, TextField, VStack } from '@navikt/ds-react'
 import { type ReactNode, useState } from 'react'
 import { Form, Link, useLoaderData } from 'react-router'
 import { getSectionOverallStats, type SectionOverallStats } from '~/db/dashboard-stats.server'
@@ -9,35 +9,46 @@ import styles from '~/styles/common.module.css'
 import type { Route } from './+types/sections'
 
 export function meta() {
-  return [{ title: 'Seksjoner - Deployment Audit' }]
+  return [{ title: 'Seksjoner – Deployment Audit' }]
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request)
-  const sections = await getAllSectionsWithTeams()
+  const allSections = await getAllSectionsWithTeams()
   const ytdStart = new Date(new Date().getFullYear(), 0, 1)
 
-  const statsBySection = new Map<number, SectionOverallStats>()
-  await Promise.all(
-    sections.map(async (s) => {
-      statsBySection.set(s.id, await getSectionOverallStats(s.id, ytdStart))
+  const [allTimeStatsList, ytdStatsList] = await Promise.all([
+    Promise.all(allSections.map((s) => getSectionOverallStats(s.id))),
+    Promise.all(allSections.map((s) => getSectionOverallStats(s.id, ytdStart))),
+  ])
+
+  const sections = allSections.map((s, i) => ({
+    ...s,
+    stats: ytdStatsList[i],
+  }))
+
+  // Aggregate across all sections
+  const aggregate = allTimeStatsList.reduce(
+    (acc, s) => ({
+      total_deployments: acc.total_deployments + s.total_deployments,
+      with_four_eyes: acc.with_four_eyes + s.with_four_eyes,
+      without_four_eyes: acc.without_four_eyes + s.without_four_eyes,
+      pending_verification: acc.pending_verification + s.pending_verification,
+      linked_to_goal: acc.linked_to_goal + s.linked_to_goal,
     }),
+    { total_deployments: 0, with_four_eyes: 0, without_four_eyes: 0, pending_verification: 0, linked_to_goal: 0 },
   )
+
+  const fourEyesCoverage = aggregate.total_deployments > 0 ? aggregate.with_four_eyes / aggregate.total_deployments : 0
+  const goalCoverage = aggregate.total_deployments > 0 ? aggregate.linked_to_goal / aggregate.total_deployments : 0
+
+  const ytdTotal = ytdStatsList.reduce((acc, s) => acc + s.total_deployments, 0)
 
   return {
     isAdmin: user.role === 'admin',
-    sections: sections.map((s) => ({
-      ...s,
-      stats: statsBySection.get(s.id) ?? {
-        total_deployments: 0,
-        with_four_eyes: 0,
-        without_four_eyes: 0,
-        pending_verification: 0,
-        linked_to_goal: 0,
-        four_eyes_coverage: 0,
-        goal_coverage: 0,
-      },
-    })),
+    sections,
+    overallStats: { fourEyesCoverage, goalCoverage },
+    ytdDeployments: ytdTotal,
   }
 }
 
@@ -68,21 +79,47 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function AdminSections() {
-  const { sections, isAdmin } = useLoaderData<typeof loader>()
+  const { sections, isAdmin, overallStats, ytdDeployments } = useLoaderData<typeof loader>()
   const [showCreate, setShowCreate] = useState(false)
 
   return (
-    <VStack gap="space-24">
-      <HStack justify="space-between" align="center">
-        <Heading level="1" size="large">
-          Seksjoner
-        </Heading>
-        {isAdmin && !showCreate && (
-          <Button variant="tertiary" size="small" icon={<PlusIcon aria-hidden />} onClick={() => setShowCreate(true)}>
-            Ny seksjon
-          </Button>
-        )}
-      </HStack>
+    <VStack gap="space-32">
+      <div>
+        <HStack justify="space-between" align="center">
+          <Heading level="1" size="xlarge" spacing>
+            Seksjoner
+          </Heading>
+          {isAdmin && !showCreate && (
+            <Button variant="tertiary" size="small" icon={<PlusIcon aria-hidden />} onClick={() => setShowCreate(true)}>
+              Ny seksjon
+            </Button>
+          )}
+        </HStack>
+        <BodyShort textColor="subtle">Samlet helsetilstand for SDLC governance</BodyShort>
+      </div>
+
+      {/* Summary cards */}
+      <HGrid gap="space-16" columns={{ xs: 1, sm: 2, lg: 4 }}>
+        <SummaryCard title="Deployments i år" value={ytdDeployments} icon={<BarChartIcon aria-hidden />} />
+        <SummaryCard
+          title="4-øyne dekning"
+          value={formatCoverage(overallStats.fourEyesCoverage)}
+          icon={<CheckmarkCircleIcon aria-hidden />}
+          variant={getHealthVariant(overallStats.fourEyesCoverage)}
+        />
+        <SummaryCard
+          title="Endringsopphav"
+          value={formatCoverage(overallStats.goalCoverage)}
+          icon={<LinkIcon aria-hidden />}
+          variant={getHealthVariant(overallStats.goalCoverage)}
+        />
+        <SummaryCard
+          title="Samlet helsetilstand"
+          value={getHealthLabel(overallStats.fourEyesCoverage, overallStats.goalCoverage)}
+          icon={getHealthIcon(overallStats.fourEyesCoverage, overallStats.goalCoverage)}
+          variant={getHealthVariant(Math.min(overallStats.fourEyesCoverage, overallStats.goalCoverage))}
+        />
+      </HGrid>
 
       {showCreate && (
         <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
@@ -131,15 +168,21 @@ export default function AdminSections() {
         </Box>
       )}
 
-      {sections.length === 0 ? (
-        <Alert variant="info">Ingen seksjoner er opprettet ennå.</Alert>
-      ) : (
-        <VStack gap="space-12">
-          {sections.map((section) => (
-            <SectionCard key={section.id} section={section} />
-          ))}
-        </VStack>
-      )}
+      {/* Section breakdown */}
+      <VStack gap="space-16">
+        <Heading level="2" size="large">
+          Seksjoner
+        </Heading>
+        {sections.length === 0 ? (
+          <Alert variant="info">Ingen seksjoner er opprettet ennå.</Alert>
+        ) : (
+          <VStack gap="space-12">
+            {sections.map((section) => (
+              <SectionCard key={section.id} section={section} />
+            ))}
+          </VStack>
+        )}
+      </VStack>
     </VStack>
   )
 }
@@ -183,6 +226,39 @@ function SectionCard({ section }: { section: SectionWithTeams & { stats: Section
           </Tag>
         </VStack>
       </div>
+    </Box>
+  )
+}
+
+function SummaryCard({
+  title,
+  value,
+  icon,
+  variant = 'neutral',
+}: {
+  title: string
+  value: string | number
+  icon: ReactNode
+  variant?: 'success' | 'warning' | 'error' | 'neutral'
+}) {
+  const bgMap = {
+    success: 'success-soft' as const,
+    warning: 'warning-soft' as const,
+    error: 'danger-soft' as const,
+    neutral: 'neutral-soft' as const,
+  }
+
+  return (
+    <Box padding="space-20" borderRadius="8" background={bgMap[variant]}>
+      <VStack gap="space-4">
+        <HStack gap="space-8" align="center">
+          {icon}
+          <Detail textColor="subtle">{title}</Detail>
+        </HStack>
+        <Heading size="large" level="3">
+          {value}
+        </Heading>
+      </VStack>
     </Box>
   )
 }
