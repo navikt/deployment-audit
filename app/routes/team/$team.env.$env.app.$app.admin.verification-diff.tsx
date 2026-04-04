@@ -77,10 +77,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     newStatus: row.new_status,
   }))
 
-  const lastComputed = result.rows.length > 0 ? result.rows[0].computed_at?.toISOString() : null
-
-  // Get latest reverify_app job for this app
+  // Get last computation time from the latest completed job, not from diffs
   const latestJob = await getLatestSyncJob(monitoredApp.id, 'reverify_app')
+  const lastComputed =
+    latestJob?.status === 'completed' && latestJob.completed_at ? new Date(latestJob.completed_at).toISOString() : null
 
   return { diffs, appContext, lastComputed, latestJob }
 }
