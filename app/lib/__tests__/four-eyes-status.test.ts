@@ -31,12 +31,30 @@ describe('status categorization', () => {
 })
 
 describe('isApprovedStatus', () => {
-  it.each(['approved', 'approved_pr', 'implicitly_approved', 'manually_approved'])('returns true for %s', (status) => {
+  it.each([
+    'approved',
+    'approved_pr',
+    'implicitly_approved',
+    'manually_approved',
+    'no_changes',
+  ])('returns true for %s', (status) => {
     expect(isApprovedStatus(status)).toBe(true)
   })
 
   it.each(['pending', 'direct_push', 'unknown', 'error', 'legacy'])('returns false for %s', (status) => {
     expect(isApprovedStatus(status)).toBe(false)
+  })
+})
+
+describe('APPROVED_STATUSES completeness', () => {
+  it('every status is categorized or explicitly uncategorized', () => {
+    const categorized = [...APPROVED_STATUSES, ...NOT_APPROVED_STATUSES, ...PENDING_STATUSES, ...LEGACY_STATUSES]
+    const uncategorized = ['error', 'repository_mismatch']
+    for (const status of FOUR_EYES_STATUSES) {
+      const inCategory = categorized.includes(status)
+      const inUncategorized = uncategorized.includes(status)
+      expect(inCategory || inUncategorized, `${status} must be categorized or explicitly uncategorized`).toBe(true)
+    }
   })
 })
 

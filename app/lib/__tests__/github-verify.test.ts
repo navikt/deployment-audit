@@ -29,7 +29,6 @@ function makeDeployment(overrides: Record<string, unknown> = {}) {
     id: 1,
     nais_deployment_id: 'deploy-1',
     commit_sha: 'abc123',
-    has_four_eyes: false,
     four_eyes_status: 'pending',
     detected_github_owner: 'navikt',
     detected_github_repo_name: 'my-app',
@@ -83,8 +82,8 @@ describe('verifyDeploymentsFourEyes', () => {
     expect(result.verified).toBe(2)
   })
 
-  it('skips deployments already marked has_four_eyes', async () => {
-    mockGetAll.mockResolvedValue([makeDeployment({ id: 1, has_four_eyes: true, four_eyes_status: 'pending' })])
+  it('skips deployments already approved', async () => {
+    mockGetAll.mockResolvedValue([makeDeployment({ id: 1, four_eyes_status: 'approved' })])
 
     const promise = verifyDeploymentsFourEyes()
     await vi.advanceTimersByTimeAsync(0)

@@ -18,6 +18,7 @@ export const FOUR_EYES_STATUSES = [
   'approved_pr', // Alias for approved (legacy)
   'implicitly_approved', // Approved via implicit approval rules
   'manually_approved', // Manually approved by admin
+  'no_changes', // No changes from previous deployment (same commit SHA)
   'pending', // Awaiting verification
   'pending_baseline', // First deployment, awaiting baseline
   'pending_approval', // Alias for pending (legacy)
@@ -47,7 +48,14 @@ export const APPROVED_STATUSES: FourEyesStatus[] = [
   'approved_pr',
   'implicitly_approved',
   'manually_approved',
+  'no_changes',
 ]
+
+/**
+ * SQL fragment for filtering approved deployments.
+ * Use in place of `has_four_eyes = true`.
+ */
+export const APPROVED_STATUSES_SQL = APPROVED_STATUSES.map((s) => `'${s}'`).join(', ')
 
 /**
  * Statuses that indicate deployment is NOT approved
@@ -79,6 +87,7 @@ export const FOUR_EYES_STATUS_LABELS: Record<FourEyesStatus, string> = {
   approved_pr: 'Godkjent PR',
   implicitly_approved: 'Implisitt godkjent',
   manually_approved: 'Manuelt godkjent',
+  no_changes: 'Ingen endringer',
   pending: 'Venter',
   pending_baseline: 'Første deployment',
   pending_approval: 'Venter godkjenning',

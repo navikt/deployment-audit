@@ -1,4 +1,5 @@
 import { type DeploymentFilters, getAllDeployments, updateDeploymentFourEyes } from '~/db/deployments.server'
+import { isApprovedStatus } from '~/lib/four-eyes-status'
 import { logger } from '~/lib/logger.server'
 import { runVerification } from '~/lib/verification'
 
@@ -25,7 +26,10 @@ export async function verifyDeploymentsFourEyes(filters?: DeploymentFilters & { 
   // that can only be changed via manual approval
   const statusesToVerify = ['pending', 'error']
   const needsVerification = deploymentsToVerify.filter(
-    (d) => !d.has_four_eyes && d.four_eyes_status !== 'legacy' && statusesToVerify.includes(d.four_eyes_status ?? ''),
+    (d) =>
+      !isApprovedStatus(d.four_eyes_status ?? '') &&
+      d.four_eyes_status !== 'legacy' &&
+      statusesToVerify.includes(d.four_eyes_status ?? ''),
   )
 
   // Sort by created_at ascending (oldest first)

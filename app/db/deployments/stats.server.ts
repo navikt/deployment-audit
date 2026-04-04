@@ -1,4 +1,4 @@
-import { NOT_APPROVED_STATUSES, PENDING_STATUSES } from '~/lib/four-eyes-status'
+import { APPROVED_STATUSES, NOT_APPROVED_STATUSES, PENDING_STATUSES } from '~/lib/four-eyes-status'
 import { pool } from '../connection.server'
 import type { AppDeploymentStats } from '../deployments.server'
 
@@ -10,16 +10,16 @@ export async function getAppDeploymentStats(
 ): Promise<AppDeploymentStats> {
   let sql = `SELECT 
       COUNT(*) as total,
-      SUM(CASE WHEN has_four_eyes = true THEN 1 ELSE 0 END) as with_four_eyes,
-      SUM(CASE WHEN four_eyes_status = ANY($2) THEN 1 ELSE 0 END) as without_four_eyes,
-      SUM(CASE WHEN four_eyes_status = ANY($3) THEN 1 ELSE 0 END) as pending_verification,
+      SUM(CASE WHEN four_eyes_status = ANY($2::text[]) THEN 1 ELSE 0 END) as with_four_eyes,
+      SUM(CASE WHEN four_eyes_status = ANY($3) THEN 1 ELSE 0 END) as without_four_eyes,
+      SUM(CASE WHEN four_eyes_status = ANY($4) THEN 1 ELSE 0 END) as pending_verification,
       MAX(created_at) as last_deployment,
       (SELECT id FROM deployments WHERE monitored_app_id = $1 ORDER BY created_at DESC LIMIT 1) as last_deployment_id
     FROM deployments
     WHERE monitored_app_id = $1`
 
-  const params: any[] = [monitoredAppId, NOT_APPROVED_STATUSES, PENDING_STATUSES]
-  let paramIndex = 4
+  const params: any[] = [monitoredAppId, APPROVED_STATUSES, NOT_APPROVED_STATUSES, PENDING_STATUSES]
+  let paramIndex = 5
 
   // Filter by audit start year if specified
   if (auditStartYear) {
@@ -82,14 +82,14 @@ export async function getAppDeploymentStatsBatch(
     `SELECT 
       monitored_app_id,
       COUNT(*) as total,
-      SUM(CASE WHEN has_four_eyes = true THEN 1 ELSE 0 END) as with_four_eyes,
-      SUM(CASE WHEN four_eyes_status = ANY($2) THEN 1 ELSE 0 END) as without_four_eyes,
-      SUM(CASE WHEN four_eyes_status = ANY($3) THEN 1 ELSE 0 END) as pending_verification,
+      SUM(CASE WHEN four_eyes_status = ANY($2::text[]) THEN 1 ELSE 0 END) as with_four_eyes,
+      SUM(CASE WHEN four_eyes_status = ANY($3) THEN 1 ELSE 0 END) as without_four_eyes,
+      SUM(CASE WHEN four_eyes_status = ANY($4) THEN 1 ELSE 0 END) as pending_verification,
       MAX(created_at) as last_deployment
     FROM deployments
     WHERE monitored_app_id = ANY($1) ${auditYearFilter}
     GROUP BY monitored_app_id`,
-    [appIds, NOT_APPROVED_STATUSES, PENDING_STATUSES],
+    [appIds, APPROVED_STATUSES, NOT_APPROVED_STATUSES, PENDING_STATUSES],
   )
 
   // Get last deployment IDs in a separate query for simplicity

@@ -3,7 +3,7 @@ export function getFourEyesStatus(deployment: any): {
   variant: 'success' | 'warning' | 'error' | 'info'
   description: string
 } {
-  // Check specific statuses first, before generic has_four_eyes check
+  // Map four_eyes_status to user-visible labels
   switch (deployment.four_eyes_status) {
     case 'approved':
     case 'approved_pr':
@@ -91,15 +91,6 @@ export function getFourEyesStatus(deployment: any): {
         variant: 'info',
         description: 'Deploymentet er ikke verifisert ennå.',
       }
-  }
-
-  // Fallback for has_four_eyes without specific status
-  if (deployment.has_four_eyes) {
-    return {
-      text: 'Godkjent',
-      variant: 'success',
-      description: 'Dette deploymentet har blitt godkjent.',
-    }
   }
 
   return {

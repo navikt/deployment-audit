@@ -106,7 +106,6 @@ export async function runVerification(
 
   logger.info(`   ✅ Verification complete:`)
   logger.info(`      - Status: ${result.status}`)
-  logger.info(`      - Four eyes: ${result.hasFourEyes}`)
   logger.info(`      - Unverified commits: ${result.unverifiedCommits.length}`)
 
   // Step 3: Store the result
@@ -149,7 +148,6 @@ export async function runVerification(
  * Existing verification status from the deployment table
  */
 export interface ExistingVerificationStatus {
-  hasFourEyes: boolean | null
   status: string | null
   prNumber: number | null
   prUrl: string | null
@@ -166,11 +164,8 @@ export interface DebugVerificationResult {
   newResult: VerificationResult
   comparison: {
     statusChanged: boolean
-    hasFourEyesChanged: boolean
     oldStatus: string | null
     newStatus: string
-    oldHasFourEyes: boolean | null
-    newHasFourEyes: boolean
     statusEquivalent: boolean // True if statuses differ in name only
   }
 }
@@ -189,7 +184,7 @@ export async function runDebugVerification(
 
   // Step 1: Get existing status from deployment
   const existingStatus = await getExistingVerificationStatus(deploymentId)
-  logger.info(`   📋 Existing status: ${existingStatus.status} (four_eyes: ${existingStatus.hasFourEyes})`)
+  logger.info(`   📋 Existing status: ${existingStatus.status}`)
 
   // Step 2: Fetch data from GitHub (this stores to snapshots table)
   const useCache = options.forceRefresh === false
@@ -214,7 +209,6 @@ export async function runDebugVerification(
 
   logger.info(`   ✅ New verification result:`)
   logger.info(`      - Status: ${newResult.status}`)
-  logger.info(`      - Four eyes: ${newResult.hasFourEyes}`)
 
   // Step 4: Build comparison
   // Normalize equivalent statuses for comparison
@@ -234,22 +228,14 @@ export async function runDebugVerification(
 
   const comparison = {
     statusChanged: normalizedOldStatus !== normalizedNewStatus,
-    hasFourEyesChanged: existingStatus.hasFourEyes !== newResult.hasFourEyes,
     oldStatus: existingStatus.status,
     newStatus: newResult.status,
-    oldHasFourEyes: existingStatus.hasFourEyes,
-    newHasFourEyes: newResult.hasFourEyes,
-    statusEquivalent, // True if statuses differ in name only, not meaning
+    statusEquivalent,
   }
 
-  if (comparison.statusChanged || comparison.hasFourEyesChanged) {
+  if (comparison.statusChanged) {
     logger.info(`   ⚠️  DIFFERENCE DETECTED:`)
-    if (comparison.statusChanged) {
-      logger.info(`      Status: ${comparison.oldStatus} → ${comparison.newStatus}`)
-    }
-    if (comparison.hasFourEyesChanged) {
-      logger.info(`      Four eyes: ${comparison.oldHasFourEyes} → ${comparison.newHasFourEyes}`)
-    }
+    logger.info(`      Status: ${comparison.oldStatus} → ${comparison.newStatus}`)
   } else {
     logger.info(`   ✅ No difference - results match`)
   }
@@ -270,7 +256,6 @@ export async function runDebugVerification(
 async function getExistingVerificationStatus(deploymentId: number): Promise<ExistingVerificationStatus> {
   const result = await pool.query(
     `SELECT 
-       has_four_eyes,
        four_eyes_status,
        github_pr_number,
        github_pr_url,
@@ -283,7 +268,6 @@ async function getExistingVerificationStatus(deploymentId: number): Promise<Exis
 
   if (result.rows.length === 0) {
     return {
-      hasFourEyes: null,
       status: null,
       prNumber: null,
       prUrl: null,
@@ -294,7 +278,6 @@ async function getExistingVerificationStatus(deploymentId: number): Promise<Exis
 
   const row = result.rows[0]
   return {
-    hasFourEyes: row.has_four_eyes,
     status: row.four_eyes_status,
     prNumber: row.github_pr_number,
     prUrl: row.github_pr_url,
@@ -318,13 +301,11 @@ export async function reverifyDeployment(deploymentId: number): Promise<{
   changed: boolean
   oldStatus: string | null
   newStatus: string
-  oldHasFourEyes: boolean | null
-  newHasFourEyes: boolean
 } | null> {
   // Get deployment with app context
   const row = await pool.query(
     `SELECT
-       d.id, d.commit_sha, d.four_eyes_status, d.has_four_eyes,
+       d.id, d.commit_sha, d.four_eyes_status,
        d.github_pr_number, d.environment_name, d.monitored_app_id,
        d.detected_github_owner, d.detected_github_repo_name,
        ma.default_branch, ma.audit_start_year
@@ -397,10 +378,8 @@ export async function reverifyDeployment(deploymentId: number): Promise<{
   const newResult = verifyDeployment(input)
 
   const statusChanged = dep.four_eyes_status !== newResult.status
-  const fourEyesChanged = dep.has_four_eyes !== newResult.hasFourEyes
-  const changed = statusChanged || fourEyesChanged
 
-  if (changed) {
+  if (statusChanged) {
     await storeVerificationResult(dep.id, newResult, { prSnapshotIds: [], commitSnapshotIds: [] }, 'reverification')
 
     // Propagate to sibling deployments in the same application group
@@ -408,10 +387,8 @@ export async function reverifyDeployment(deploymentId: number): Promise<{
   }
 
   return {
-    changed,
+    changed: statusChanged,
     oldStatus: dep.four_eyes_status,
     newStatus: newResult.status,
-    oldHasFourEyes: dep.has_four_eyes,
-    newHasFourEyes: newResult.hasFourEyes,
   }
 }

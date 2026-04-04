@@ -10,6 +10,7 @@ import { updateCommitPrVerification } from '~/db/commits.server'
 import { pool } from '~/db/connection.server'
 import { logStatusTransition } from '~/db/deployments.server'
 import { getAllLatestPrSnapshots, saveVerificationRun } from '~/db/github-data.server'
+import { type FourEyesStatus, isApprovedStatus } from '~/lib/four-eyes-status'
 import { buildGithubPrDataFromSnapshots } from './build-github-pr-data'
 import type {
   PrChecks,
@@ -73,41 +74,11 @@ async function updateDeploymentVerification(
   result: VerificationResult,
   changeSource?: string,
 ): Promise<void> {
-  // Determine the four_eyes value for the deployment
-  let fourEyesValue: boolean | null = null
+  // Derive has_four_eyes from status (kept in sync for backward compatibility)
+  if (result.status === 'manually_approved') return // Don't overwrite manual approval
+  if (result.status === 'legacy') return // Don't update legacy deployments
 
-  switch (result.status) {
-    case 'approved':
-      fourEyesValue = true
-      break
-    case 'implicitly_approved':
-      fourEyesValue = true
-      break
-    case 'unverified_commits':
-      fourEyesValue = false
-      break
-    case 'pending_baseline':
-      fourEyesValue = null
-      break
-    case 'no_changes':
-      fourEyesValue = true
-      break
-    case 'manually_approved':
-      // Don't overwrite manual approval
-      return
-    case 'legacy':
-      // Don't update legacy deployments
-      return
-    case 'error':
-      fourEyesValue = null
-      break
-    case 'unauthorized_repository':
-      fourEyesValue = false
-      break
-    case 'unauthorized_branch':
-      fourEyesValue = false
-      break
-  }
+  const fourEyesValue = !!isApprovedStatus(result.status as FourEyesStatus)
 
   // Build github_pr_data from snapshots if a PR was found
   let githubPrDataJson: string | null = null
@@ -159,15 +130,15 @@ async function updateDeploymentVerification(
   )
 
   // Log status transition if status changed
-  if (current.rows.length > 0 && fourEyesValue !== null) {
+  if (current.rows.length > 0) {
     const prev = current.rows[0]
     const newStatus = result.status
-    if (prev.four_eyes_status !== newStatus || prev.has_four_eyes !== (fourEyesValue === true)) {
+    if (prev.four_eyes_status !== newStatus) {
       await logStatusTransition(deploymentId, {
         fromStatus: prev.four_eyes_status,
         toStatus: newStatus,
         fromHasFourEyes: prev.has_four_eyes,
-        toHasFourEyes: fourEyesValue === true,
+        toHasFourEyes: fourEyesValue,
         changeSource: changeSource || 'verification',
       })
     }

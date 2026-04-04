@@ -25,6 +25,7 @@ import { pool } from '~/db/connection.server'
 import { getMonitoredApplicationByIdentity } from '~/db/monitored-applications.server'
 import { getLatestSyncJob, getSyncJobById } from '~/db/sync-jobs.server'
 import { requireAdmin } from '~/lib/auth.server'
+import { type FourEyesStatus, isApprovedStatus } from '~/lib/four-eyes-status'
 import { logger } from '~/lib/logger.server'
 import { reverifyDeployment } from '~/lib/verification'
 import type { Route } from './+types/$team.env.$env.app.$app.admin.verification-diff'
@@ -36,8 +37,6 @@ interface DeploymentDiff {
   createdAt: string
   oldStatus: string | null
   newStatus: string
-  oldHasFourEyes: boolean | null
-  newHasFourEyes: boolean
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
@@ -60,7 +59,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // Read pre-computed diffs from database
   const result = await pool.query(
     `SELECT vd.deployment_id, vd.old_status, vd.new_status,
-            vd.old_has_four_eyes, vd.new_has_four_eyes, vd.computed_at,
+            vd.computed_at,
             d.commit_sha, d.environment_name, d.created_at
      FROM verification_diffs vd
      JOIN deployments d ON vd.deployment_id = d.id
@@ -76,8 +75,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     createdAt: row.created_at.toISOString(),
     oldStatus: row.old_status,
     newStatus: row.new_status,
-    oldHasFourEyes: row.old_has_four_eyes,
-    newHasFourEyes: row.new_has_four_eyes,
   }))
 
   const lastComputed = result.rows.length > 0 ? result.rows[0].computed_at?.toISOString() : null
@@ -319,13 +316,17 @@ export default function VerificationDiffPage() {
                       </Tag>
                     </Table.DataCell>
                     <Table.DataCell>
-                      {diff.oldHasFourEyes !== diff.newHasFourEyes ? (
-                        <Tag variant="warning" size="small">
-                          {String(diff.oldHasFourEyes)} → {String(diff.newHasFourEyes)}
-                        </Tag>
-                      ) : (
-                        <BodyShort size="small">{String(diff.newHasFourEyes)}</BodyShort>
-                      )}
+                      {(() => {
+                        const oldApproved = diff.oldStatus ? isApprovedStatus(diff.oldStatus as FourEyesStatus) : false
+                        const newApproved = isApprovedStatus(diff.newStatus as FourEyesStatus)
+                        return oldApproved !== newApproved ? (
+                          <Tag variant="warning" size="small">
+                            {String(oldApproved)} → {String(newApproved)}
+                          </Tag>
+                        ) : (
+                          <BodyShort size="small">{String(newApproved)}</BodyShort>
+                        )
+                      })()}
                     </Table.DataCell>
                     <Table.DataCell>
                       <Form method="post">

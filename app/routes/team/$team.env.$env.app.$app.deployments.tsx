@@ -229,10 +229,7 @@ export default function AppDeployments() {
                       github_pr_number={deployment.github_pr_number}
                       four_eyes_status={deployment.four_eyes_status as FourEyesStatus}
                     />
-                    <StatusTag
-                      four_eyes_status={deployment.four_eyes_status as FourEyesStatus}
-                      has_four_eyes={deployment.has_four_eyes}
-                    />
+                    <StatusTag four_eyes_status={deployment.four_eyes_status as FourEyesStatus} />
                   </HStack>
                 </HStack>
 

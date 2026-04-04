@@ -174,8 +174,8 @@ export default function VerificationDiffDeploymentPage({ loaderData }: Route.Com
 function DebugResultView({ result }: { result: DebugVerificationResult }) {
   const { existingStatus, fetchedData, newResult, comparison } = result
 
-  const hasRealChange = comparison.statusChanged || comparison.hasFourEyesChanged
-  const onlyNameChange = comparison.statusEquivalent && !comparison.hasFourEyesChanged
+  const hasRealChange = comparison.statusChanged
+  const onlyNameChange = comparison.statusEquivalent
 
   return (
     <VStack gap="space-6">
@@ -186,8 +186,7 @@ function DebugResultView({ result }: { result: DebugVerificationResult }) {
               <>
                 <Tag variant="warning">Endring oppdaget</Tag>
                 <BodyShort>
-                  Status: {comparison.oldStatus || 'null'} → {comparison.newStatus} | Four eyes:{' '}
-                  {String(comparison.oldHasFourEyes)} → {String(comparison.newHasFourEyes)}
+                  Status: {comparison.oldStatus || 'null'} → {comparison.newStatus}
                 </BodyShort>
               </>
             ) : (
@@ -213,7 +212,6 @@ function DebugResultView({ result }: { result: DebugVerificationResult }) {
               Eksisterende status
             </Heading>
             <DataRow label="Status" value={existingStatus.status || 'null'} />
-            <DataRow label="Four eyes" value={String(existingStatus.hasFourEyes)} />
             <DataRow label="PR nummer" value={existingStatus.prNumber?.toString() || 'null'} />
             <DataRow label="Uverifiserte commits" value={existingStatus.unverifiedCommits?.length?.toString() || '0'} />
           </VStack>
@@ -225,11 +223,6 @@ function DebugResultView({ result }: { result: DebugVerificationResult }) {
               Nytt resultat (V2)
             </Heading>
             <DataRow label="Status" value={newResult.status} highlight={comparison.statusChanged} />
-            <DataRow
-              label="Four eyes"
-              value={String(newResult.hasFourEyes)}
-              highlight={comparison.hasFourEyesChanged}
-            />
             <DataRow label="PR nummer" value={newResult.deployedPr?.number?.toString() || 'null'} />
             <DataRow label="Uverifiserte commits" value={newResult.unverifiedCommits.length.toString()} />
             <DataRow label="Approval method" value={newResult.approvalDetails.method || 'null'} />

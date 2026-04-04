@@ -13,67 +13,57 @@ import { formatChangeSource, getFourEyesStatus } from '../status-display'
 describe('getFourEyesStatus — maps deployment status to user-visible label, variant and description', () => {
   const cases: Array<{
     status: string
-    hasFourEyes: boolean
     expectedText: string
     expectedVariant: string
   }> = [
-    { status: 'approved', hasFourEyes: false, expectedText: 'Godkjent', expectedVariant: 'success' },
-    { status: 'approved_pr', hasFourEyes: false, expectedText: 'Godkjent', expectedVariant: 'success' },
-    { status: 'baseline', hasFourEyes: false, expectedText: 'Baseline', expectedVariant: 'success' },
-    { status: 'pending_baseline', hasFourEyes: false, expectedText: 'Foreslått baseline', expectedVariant: 'warning' },
-    { status: 'no_changes', hasFourEyes: false, expectedText: 'Ingen endringer', expectedVariant: 'success' },
+    { status: 'approved', expectedText: 'Godkjent', expectedVariant: 'success' },
+    { status: 'approved_pr', expectedText: 'Godkjent', expectedVariant: 'success' },
+    { status: 'baseline', expectedText: 'Baseline', expectedVariant: 'success' },
+    { status: 'pending_baseline', expectedText: 'Foreslått baseline', expectedVariant: 'warning' },
+    { status: 'no_changes', expectedText: 'Ingen endringer', expectedVariant: 'success' },
     {
       status: 'unverified_commits',
-      hasFourEyes: false,
       expectedText: 'Ikke-verifiserte commits',
       expectedVariant: 'error',
     },
     {
       status: 'approved_pr_with_unreviewed',
-      hasFourEyes: false,
       expectedText: 'Ureviewed commits i merge',
       expectedVariant: 'error',
     },
-    { status: 'legacy', hasFourEyes: false, expectedText: 'Legacy', expectedVariant: 'success' },
-    { status: 'legacy_pending', hasFourEyes: false, expectedText: 'Legacy (venter)', expectedVariant: 'warning' },
-    { status: 'manually_approved', hasFourEyes: false, expectedText: 'Manuelt godkjent', expectedVariant: 'success' },
+    { status: 'legacy', expectedText: 'Legacy', expectedVariant: 'success' },
+    { status: 'legacy_pending', expectedText: 'Legacy (venter)', expectedVariant: 'warning' },
+    { status: 'manually_approved', expectedText: 'Manuelt godkjent', expectedVariant: 'success' },
     {
       status: 'implicitly_approved',
-      hasFourEyes: false,
       expectedText: 'Implisitt godkjent',
       expectedVariant: 'success',
     },
-    { status: 'direct_push', hasFourEyes: false, expectedText: 'Direct push', expectedVariant: 'warning' },
-    { status: 'missing', hasFourEyes: false, expectedText: 'Mangler godkjenning', expectedVariant: 'error' },
-    { status: 'error', hasFourEyes: false, expectedText: 'Feil ved verifisering', expectedVariant: 'error' },
-    { status: 'pending', hasFourEyes: false, expectedText: 'Venter på verifisering', expectedVariant: 'info' },
+    { status: 'direct_push', expectedText: 'Direct push', expectedVariant: 'warning' },
+    { status: 'missing', expectedText: 'Mangler godkjenning', expectedVariant: 'error' },
+    { status: 'error', expectedText: 'Feil ved verifisering', expectedVariant: 'error' },
+    { status: 'pending', expectedText: 'Venter på verifisering', expectedVariant: 'info' },
   ]
 
-  for (const { status, hasFourEyes, expectedText, expectedVariant } of cases) {
+  for (const { status, expectedText, expectedVariant } of cases) {
     it(`status "${status}" → text "${expectedText}", variant "${expectedVariant}"`, () => {
-      const result = getFourEyesStatus({ four_eyes_status: status, has_four_eyes: hasFourEyes })
+      const result = getFourEyesStatus({ four_eyes_status: status })
       expect(result.text).toBe(expectedText)
       expect(result.variant).toBe(expectedVariant)
       expect(result.description).toBeTruthy()
     })
   }
 
-  it('falls back to "Godkjent" when has_four_eyes=true but status is unknown', () => {
-    const result = getFourEyesStatus({ four_eyes_status: 'some_future_status', has_four_eyes: true })
-    expect(result.text).toBe('Godkjent')
-    expect(result.variant).toBe('success')
-  })
-
-  it('falls back to "Ukjent status" when both status and has_four_eyes are unrecognized', () => {
-    const result = getFourEyesStatus({ four_eyes_status: 'some_future_status', has_four_eyes: false })
+  it('falls back to "Ukjent status" for unknown statuses', () => {
+    const result = getFourEyesStatus({ four_eyes_status: 'some_future_status' })
     expect(result.text).toBe('Ukjent status')
     expect(result.variant).toBe('info')
     expect(result.description).toContain('some_future_status')
   })
 
   it('includes meaningful description for every status', () => {
-    for (const { status, hasFourEyes } of cases) {
-      const result = getFourEyesStatus({ four_eyes_status: status, has_four_eyes: hasFourEyes })
+    for (const { status } of cases) {
+      const result = getFourEyesStatus({ four_eyes_status: status })
       expect(result.description.length).toBeGreaterThan(10)
     }
   })

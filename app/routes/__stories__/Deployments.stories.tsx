@@ -15,7 +15,6 @@ type Deployment = {
   github_pr_number: number | null
   github_pr_url: string | null
   four_eyes_status: FourEyesStatus
-  has_four_eyes: boolean
   detected_github_owner: string
   detected_github_repo_name: string
 }
@@ -110,10 +109,7 @@ function DeploymentsPage({
                       github_pr_number={deployment.github_pr_number}
                       four_eyes_status={deployment.four_eyes_status}
                     />
-                    <StatusTag
-                      four_eyes_status={deployment.four_eyes_status}
-                      has_four_eyes={deployment.has_four_eyes}
-                    />
+                    <StatusTag four_eyes_status={deployment.four_eyes_status} />
                   </HStack>
                 </HStack>
 
@@ -189,7 +185,7 @@ const fullDeployments: Deployment[] = mockDeployments.map((d) => ({
   ...d,
   title: d.commit_message,
   deployer_username: d.deployer,
-  has_four_eyes: d.four_eyes_status === 'approved',
+
   detected_github_owner: d.github_owner,
   detected_github_repo_name: d.github_repo_name,
   github_pr_number: 42,
@@ -239,21 +235,19 @@ export const MixedStatuses: Story = {
   name: 'Blandet status',
   args: {
     deployments: [
-      { ...fullDeployments[0], four_eyes_status: 'approved', has_four_eyes: true },
-      { ...fullDeployments[1], four_eyes_status: 'direct_push', has_four_eyes: false },
-      { ...fullDeployments[2], four_eyes_status: 'pending', has_four_eyes: false },
+      { ...fullDeployments[0], four_eyes_status: 'approved' },
+      { ...fullDeployments[1], four_eyes_status: 'direct_push' },
+      { ...fullDeployments[2], four_eyes_status: 'pending' },
       {
         ...fullDeployments[0],
         id: 4,
         four_eyes_status: 'manually_approved',
-        has_four_eyes: true,
         title: 'Manuelt godkjent deployment',
       },
       {
         ...fullDeployments[0],
         id: 5,
         four_eyes_status: 'error',
-        has_four_eyes: false,
         title: 'Deployment med feil',
       },
     ],

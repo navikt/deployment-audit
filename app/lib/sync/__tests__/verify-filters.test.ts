@@ -7,17 +7,10 @@ import {
 } from '../verify-filters'
 
 function makeDeployment(
-  overrides: {
-    id?: number
-    has_four_eyes?: boolean | null
-    four_eyes_status?: string | null
-    created_at?: string
-    commit_sha?: string | null
-  } = {},
+  overrides: { id?: number; four_eyes_status?: string | null; created_at?: string; commit_sha?: string | null } = {},
 ) {
   return {
     id: 'id' in overrides ? (overrides.id as number) : 1,
-    has_four_eyes: 'has_four_eyes' in overrides ? (overrides.has_four_eyes ?? null) : null,
     four_eyes_status:
       'four_eyes_status' in overrides ? (overrides.four_eyes_status ?? null) : ('pending' as string | null),
     created_at: overrides.created_at ?? '2026-01-15T10:00:00Z',
@@ -37,7 +30,7 @@ describe('filterDeploymentsForVerification', () => {
   })
 
   it('excludes deployments with approved status', () => {
-    const deps = [makeDeployment({ four_eyes_status: 'approved', has_four_eyes: true })]
+    const deps = [makeDeployment({ four_eyes_status: 'approved' })]
     expect(filterDeploymentsForVerification(deps)).toHaveLength(0)
   })
 
@@ -61,8 +54,11 @@ describe('filterDeploymentsForVerification', () => {
     expect(filterDeploymentsForVerification(deps)).toHaveLength(0)
   })
 
-  it('excludes deployments that already have four_eyes even with pending status', () => {
-    const deps = [makeDeployment({ four_eyes_status: 'pending', has_four_eyes: true })]
+  it('excludes approved deployments with pending status', () => {
+    // Even if four_eyes_status says 'pending', if it's actually approved it should be excluded
+    // This can't happen in practice since approved statuses aren't 'pending',
+    // but test the filter logic
+    const deps = [makeDeployment({ four_eyes_status: 'approved' })]
     expect(filterDeploymentsForVerification(deps)).toHaveLength(0)
   })
 
@@ -74,7 +70,7 @@ describe('filterDeploymentsForVerification', () => {
   it('handles mixed batch correctly', () => {
     const deps = [
       makeDeployment({ id: 1, four_eyes_status: 'pending' }),
-      makeDeployment({ id: 2, four_eyes_status: 'approved', has_four_eyes: true }),
+      makeDeployment({ id: 2, four_eyes_status: 'approved' }),
       makeDeployment({ id: 3, four_eyes_status: 'error' }),
       makeDeployment({ id: 4, four_eyes_status: 'legacy' }),
       makeDeployment({ id: 5, four_eyes_status: 'direct_push' }),

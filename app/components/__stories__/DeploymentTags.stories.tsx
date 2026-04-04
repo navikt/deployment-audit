@@ -30,50 +30,50 @@ export const MethodTagVariants: Story = {
  */
 export const StatusTagApproved: Story = {
   name: 'StatusTag - Godkjent',
-  render: () => <StatusTag four_eyes_status="approved" has_four_eyes={true} />,
+  render: () => <StatusTag four_eyes_status="approved" />,
 }
 
 export const StatusTagPending: Story = {
   name: 'StatusTag - Venter',
-  render: () => <StatusTag four_eyes_status="pending" has_four_eyes={false} />,
+  render: () => <StatusTag four_eyes_status="pending" />,
 }
 
 export const StatusTagDirectPush: Story = {
   name: 'StatusTag - Direct Push (ikke godkjent)',
-  render: () => <StatusTag four_eyes_status="direct_push" has_four_eyes={false} />,
+  render: () => <StatusTag four_eyes_status="direct_push" />,
 }
 
 export const StatusTagUnverifiedCommits: Story = {
   name: 'StatusTag - Uverifiserte commits',
-  render: () => <StatusTag four_eyes_status="unverified_commits" has_four_eyes={false} />,
+  render: () => <StatusTag four_eyes_status="unverified_commits" />,
 }
 
 export const StatusTagUnreviewed: Story = {
   name: 'StatusTag - Godkjent PR med ureviewed commits',
-  render: () => <StatusTag four_eyes_status="approved_pr_with_unreviewed" has_four_eyes={false} />,
+  render: () => <StatusTag four_eyes_status="approved_pr_with_unreviewed" />,
 }
 
 export const StatusTagError: Story = {
   name: 'StatusTag - Feil',
-  render: () => <StatusTag four_eyes_status="error" has_four_eyes={false} />,
+  render: () => <StatusTag four_eyes_status="error" />,
 }
 
 export const StatusTagLegacy: Story = {
   name: 'StatusTag - Legacy',
-  render: () => <StatusTag four_eyes_status="legacy" has_four_eyes={false} />,
+  render: () => <StatusTag four_eyes_status="legacy" />,
 }
 
 export const AllStatusTags: Story = {
   name: 'StatusTag - Alle varianter',
   render: () => (
     <HStack gap="space-8" wrap>
-      <StatusTag four_eyes_status="approved" has_four_eyes={true} />
-      <StatusTag four_eyes_status="pending" has_four_eyes={false} />
-      <StatusTag four_eyes_status="direct_push" has_four_eyes={false} />
-      <StatusTag four_eyes_status="unverified_commits" has_four_eyes={false} />
-      <StatusTag four_eyes_status="approved_pr_with_unreviewed" has_four_eyes={false} />
-      <StatusTag four_eyes_status="error" has_four_eyes={false} />
-      <StatusTag four_eyes_status="legacy" has_four_eyes={false} />
+      <StatusTag four_eyes_status="approved" />
+      <StatusTag four_eyes_status="pending" />
+      <StatusTag four_eyes_status="direct_push" />
+      <StatusTag four_eyes_status="unverified_commits" />
+      <StatusTag four_eyes_status="approved_pr_with_unreviewed" />
+      <StatusTag four_eyes_status="error" />
+      <StatusTag four_eyes_status="legacy" />
     </HStack>
   ),
 }

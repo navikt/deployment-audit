@@ -1,3 +1,4 @@
+import { APPROVED_STATUSES_SQL } from '~/lib/four-eyes-status'
 import { pool } from './connection.server'
 
 export interface SectionOverallStats {
@@ -57,7 +58,7 @@ export async function getSectionOverallStats(
   const result = await pool.query(
     `SELECT
        COUNT(d.id)::int AS total_deployments,
-       COUNT(d.id) FILTER (WHERE d.has_four_eyes = true)::int AS with_four_eyes,
+       COUNT(d.id) FILTER (WHERE d.four_eyes_status IN (${APPROVED_STATUSES_SQL}))::int AS with_four_eyes,
        COUNT(d.id) FILTER (WHERE d.four_eyes_status IN ('direct_push', 'unverified_commits', 'approved_pr_with_unreviewed', 'unauthorized_repository', 'unauthorized_branch'))::int AS without_four_eyes,
        COUNT(d.id) FILTER (WHERE d.four_eyes_status IN ('pending', 'pending_baseline', 'pending_approval', 'unknown'))::int AS pending_verification,
        COUNT(DISTINCT dgl.deployment_id)::int AS linked_to_goal
@@ -110,7 +111,7 @@ export async function getSectionDashboardStats(
      deployment_stats AS (
        SELECT ta.dev_team_id,
               COUNT(d.id) AS total_deployments,
-              COUNT(d.id) FILTER (WHERE d.has_four_eyes = true) AS with_four_eyes,
+              COUNT(d.id) FILTER (WHERE d.four_eyes_status IN (${APPROVED_STATUSES_SQL})) AS with_four_eyes,
               COUNT(d.id) FILTER (WHERE d.four_eyes_status IN ('direct_push', 'unverified_commits', 'approved_pr_with_unreviewed', 'unauthorized_repository', 'unauthorized_branch')) AS without_four_eyes,
               COUNT(d.id) FILTER (WHERE d.four_eyes_status IN ('pending', 'pending_baseline', 'pending_approval', 'unknown')) AS pending_verification,
               COUNT(DISTINCT dgl.deployment_id) AS linked_to_goal
@@ -170,7 +171,7 @@ export async function getDevTeamSummaryStats(
      app_stats AS (
        SELECT d.monitored_app_id,
               COUNT(d.id) AS total_deployments,
-              COUNT(d.id) FILTER (WHERE d.has_four_eyes = true) AS with_four_eyes,
+              COUNT(d.id) FILTER (WHERE d.four_eyes_status IN (${APPROVED_STATUSES_SQL})) AS with_four_eyes,
               COUNT(d.id) FILTER (WHERE d.four_eyes_status IN ('direct_push', 'unverified_commits', 'approved_pr_with_unreviewed', 'unauthorized_repository', 'unauthorized_branch')) AS without_four_eyes,
               COUNT(d.id) FILTER (WHERE d.four_eyes_status IN ('pending', 'pending_baseline', 'pending_approval', 'unknown')) AS pending_verification
        FROM team_apps ta

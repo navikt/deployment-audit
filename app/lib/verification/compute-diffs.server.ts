@@ -16,6 +16,7 @@ import {
   getPreviousDeploymentForDiff,
   getPrSnapshotsForDiff,
 } from '~/db/verification-diff.server'
+import { type FourEyesStatus, isApprovedStatus } from '~/lib/four-eyes-status'
 import { logger } from '~/lib/logger.server'
 import { buildCommitsBetweenFromCache } from './fetch-data.server'
 import type { CompareData, PrCommit, PrMetadata, PrReview, VerificationInput } from './types'
@@ -66,8 +67,6 @@ export async function computeVerificationDiffs(
     deploymentId: number
     oldStatus: string | null
     newStatus: string
-    oldHasFourEyes: boolean | null
-    newHasFourEyes: boolean
   }> = []
 
   for (const row of deployments) {
@@ -135,15 +134,12 @@ export async function computeVerificationDiffs(
       const normalizedOldStatus = normalizeStatus(row.four_eyes_status)
       const normalizedNewStatus = normalizeStatus(newResult.status)
       const statusDifferent = normalizedOldStatus !== normalizedNewStatus
-      const fourEyesDifferent = row.has_four_eyes !== newResult.hasFourEyes
 
-      if (statusDifferent || fourEyesDifferent) {
+      if (statusDifferent) {
         diffs.push({
           deploymentId: row.id,
           oldStatus: row.four_eyes_status,
           newStatus: newResult.status,
-          oldHasFourEyes: row.has_four_eyes,
-          newHasFourEyes: newResult.hasFourEyes,
         })
       }
 
@@ -163,11 +159,13 @@ export async function computeVerificationDiffs(
     await client.query('DELETE FROM verification_diffs WHERE monitored_app_id = $1', [monitoredAppId])
 
     for (const diff of diffs) {
+      const oldApproved = diff.oldStatus ? isApprovedStatus(diff.oldStatus as FourEyesStatus) : false
+      const newApproved = isApprovedStatus(diff.newStatus as FourEyesStatus)
       await client.query(
         `INSERT INTO verification_diffs 
            (monitored_app_id, deployment_id, old_status, new_status, old_has_four_eyes, new_has_four_eyes, computed_at)
          VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-        [monitoredAppId, diff.deploymentId, diff.oldStatus, diff.newStatus, diff.oldHasFourEyes, diff.newHasFourEyes],
+        [monitoredAppId, diff.deploymentId, diff.oldStatus, diff.newStatus, oldApproved, newApproved],
       )
     }
 

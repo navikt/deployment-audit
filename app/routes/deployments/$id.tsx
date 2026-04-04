@@ -63,6 +63,7 @@ import {
   DEVIATION_INTENT_LABELS,
   DEVIATION_SEVERITY_LABELS,
 } from '~/lib/deviation-constants'
+import { type FourEyesStatus, isApprovedStatus } from '~/lib/four-eyes-status'
 import { formatChangeSource, getFourEyesStatus } from '~/lib/status-display'
 import { getDateRangeForPeriod, type TimePeriod } from '~/lib/time-periods'
 import { getUserDisplayName, serializeUserMappings } from '~/lib/user-display'
@@ -390,9 +391,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           </Heading>
           <HStack gap="space-8" align="center">
             {/* Godkjenning status tag (only shown for OK/approved states) */}
-            {(deployment.four_eyes_status === 'approved' ||
-              deployment.four_eyes_status === 'manually_approved' ||
-              deployment.four_eyes_status === 'implicitly_approved') && (
+            {isApprovedStatus((deployment.four_eyes_status ?? '') as FourEyesStatus) && (
               <Tag data-color="success" variant="outline" size="small">
                 {deployment.four_eyes_status === 'implicitly_approved' ? 'Implisitt godkjent' : 'Godkjent'}
               </Tag>
@@ -474,74 +473,72 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
       </div>
       <ActionAlert data={actionData} />
       {/* Four-eyes Alert - only shown for non-OK states */}
-      {deployment.four_eyes_status !== 'approved' &&
-        deployment.four_eyes_status !== 'manually_approved' &&
-        deployment.four_eyes_status !== 'implicitly_approved' && (
-          <Alert variant={status.variant}>
-            <Heading size="small" level="3" spacing>
-              {status.text}
-            </Heading>
-            <BodyShort>
-              {status.description}
-              {(deployment.four_eyes_status === 'unverified_commits' ||
-                deployment.four_eyes_status === 'approved_pr_with_unreviewed') &&
-                previousDeploymentForDiff?.commit_sha &&
-                deployment.commit_sha && (
-                  <>
-                    {' '}
-                    <a
-                      href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/compare/${previousDeploymentForDiff.commit_sha}...${deployment.commit_sha}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Se endringer på GitHub <ExternalLinkIcon title="Åpnes i ny fane" fontSize="1em" />
-                    </a>
-                  </>
-                )}
-            </BodyShort>
-            {deployment.four_eyes_status === 'error' && (
-              <VStack gap="space-8" marginBlock="space-8 space-0">
-                {isAdmin && verificationRun?.result && (
-                  <BodyShort>
-                    <strong>Årsak:</strong>{' '}
-                    {(verificationRun.result as { approvalDetails?: { reason?: string } })?.approvalDetails?.reason ??
-                      'Ukjent'}
-                  </BodyShort>
-                )}
-                <ReadMore header="Kan dette skyldes manglende GitHub App-tilgang?">
-                  <VStack gap="space-8">
-                    <BodyLong>
-                      Deployment Audit bruker en GitHub App for å hente commit-historikk og PR-data fra GitHub. Hvis
-                      appen ikke har tilgang til repoet{' '}
-                      <strong>
-                        {deployment.detected_github_owner}/{deployment.detected_github_repo_name}
-                      </strong>
-                      , vil sammenligningen av commits feile med 404.
-                    </BodyLong>
-                    <BodyLong>
-                      <strong>Slik gir du appen tilgang:</strong>
-                    </BodyLong>
-                    <ol style={{ margin: 0, paddingLeft: '1.5rem' }}>
-                      <li>
-                        Gå til{' '}
-                        <a
-                          href={`https://github.com/organizations/${deployment.detected_github_owner}/settings/apps`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          GitHub → Organization settings → GitHub Apps
-                        </a>
-                      </li>
-                      <li>Finn appen «Pensjon Deployment Audit» og klikk «Configure»</li>
-                      <li>Under «Repository access», legg til repoet i listen over godkjente repos</li>
-                      <li>Kjør re-verifisering av dette deploymentet etterpå</li>
-                    </ol>
-                  </VStack>
-                </ReadMore>
-              </VStack>
-            )}
-          </Alert>
-        )}
+      {!isApprovedStatus((deployment.four_eyes_status ?? '') as FourEyesStatus) && (
+        <Alert variant={status.variant}>
+          <Heading size="small" level="3" spacing>
+            {status.text}
+          </Heading>
+          <BodyShort>
+            {status.description}
+            {(deployment.four_eyes_status === 'unverified_commits' ||
+              deployment.four_eyes_status === 'approved_pr_with_unreviewed') &&
+              previousDeploymentForDiff?.commit_sha &&
+              deployment.commit_sha && (
+                <>
+                  {' '}
+                  <a
+                    href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/compare/${previousDeploymentForDiff.commit_sha}...${deployment.commit_sha}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Se endringer på GitHub <ExternalLinkIcon title="Åpnes i ny fane" fontSize="1em" />
+                  </a>
+                </>
+              )}
+          </BodyShort>
+          {deployment.four_eyes_status === 'error' && (
+            <VStack gap="space-8" marginBlock="space-8 space-0">
+              {isAdmin && verificationRun?.result && (
+                <BodyShort>
+                  <strong>Årsak:</strong>{' '}
+                  {(verificationRun.result as { approvalDetails?: { reason?: string } })?.approvalDetails?.reason ??
+                    'Ukjent'}
+                </BodyShort>
+              )}
+              <ReadMore header="Kan dette skyldes manglende GitHub App-tilgang?">
+                <VStack gap="space-8">
+                  <BodyLong>
+                    Deployment Audit bruker en GitHub App for å hente commit-historikk og PR-data fra GitHub. Hvis appen
+                    ikke har tilgang til repoet{' '}
+                    <strong>
+                      {deployment.detected_github_owner}/{deployment.detected_github_repo_name}
+                    </strong>
+                    , vil sammenligningen av commits feile med 404.
+                  </BodyLong>
+                  <BodyLong>
+                    <strong>Slik gir du appen tilgang:</strong>
+                  </BodyLong>
+                  <ol style={{ margin: 0, paddingLeft: '1.5rem' }}>
+                    <li>
+                      Gå til{' '}
+                      <a
+                        href={`https://github.com/organizations/${deployment.detected_github_owner}/settings/apps`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        GitHub → Organization settings → GitHub Apps
+                      </a>
+                    </li>
+                    <li>Finn appen «Pensjon Deployment Audit» og klikk «Configure»</li>
+                    <li>Under «Repository access», legg til repoet i listen over godkjente repos</li>
+                    <li>Kjør re-verifisering av dette deploymentet etterpå</li>
+                  </ol>
+                </VStack>
+              </ReadMore>
+            </VStack>
+          )}
+        </Alert>
+      )}
       {/* Unverified commits section */}
       {(() => {
         // Filter out commits that are already shown in the PR commits accordion or are the merge commit
@@ -1311,7 +1308,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
         slackConfig?.enabled &&
         slackConfig?.channelId &&
         !slackConfig?.alreadySent &&
-        !deployment.has_four_eyes && (
+        !isApprovedStatus((deployment.four_eyes_status ?? '') as FourEyesStatus) && (
           <Box background="info-moderate" padding="space-24" borderRadius="8">
             <VStack gap="space-16">
               <Heading size="small" level="3">
@@ -1696,7 +1693,10 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                   <BodyShort size="small">
                     {transition.from_status ? (
                       <>
-                        <Tag variant={transition.from_has_four_eyes ? 'success' : 'warning'} size="xsmall">
+                        <Tag
+                          variant={isApprovedStatus(transition.from_status as FourEyesStatus) ? 'success' : 'warning'}
+                          size="xsmall"
+                        >
                           {transition.from_status}
                         </Tag>
                         {' → '}
@@ -1704,7 +1704,10 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                     ) : (
                       'Satt til '
                     )}
-                    <Tag variant={transition.to_has_four_eyes ? 'success' : 'warning'} size="xsmall">
+                    <Tag
+                      variant={isApprovedStatus(transition.to_status as FourEyesStatus) ? 'success' : 'warning'}
+                      size="xsmall"
+                    >
                       {transition.to_status}
                     </Tag>
                   </BodyShort>

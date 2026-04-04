@@ -159,8 +159,7 @@ export async function getIssueDeploymentsPerApp(
      FROM deployments d
      JOIN monitored_applications ma ON d.monitored_app_id = ma.id
      WHERE ma.is_active = true
-       AND d.has_four_eyes = false
-       AND d.four_eyes_status NOT IN ('legacy', 'legacy_pending', 'pending_baseline')
+       AND d.four_eyes_status NOT IN ('approved', 'approved_pr', 'implicitly_approved', 'manually_approved', 'no_changes', 'legacy', 'legacy_pending', 'pending_baseline')
        AND (ma.audit_start_year IS NULL OR d.created_at >= make_date(ma.audit_start_year, 1, 1))
      ORDER BY d.created_at DESC`,
   )

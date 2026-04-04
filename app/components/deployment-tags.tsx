@@ -1,11 +1,10 @@
 import { CheckmarkIcon, ExclamationmarkTriangleIcon, XMarkIcon } from '@navikt/aksel-icons'
 import { Tag } from '@navikt/ds-react'
-import { type FourEyesStatus, isLegacyStatus, isPendingStatus } from '~/lib/four-eyes-status'
+import { type FourEyesStatus, isApprovedStatus, isLegacyStatus, isPendingStatus } from '~/lib/four-eyes-status'
 
 interface DeploymentTagProps {
   github_pr_number: number | null
   four_eyes_status: FourEyesStatus
-  has_four_eyes: boolean
 }
 
 export function MethodTag({
@@ -40,12 +39,8 @@ export function MethodTag({
   )
 }
 
-export function StatusTag({
-  four_eyes_status,
-  has_four_eyes,
-}: Pick<DeploymentTagProps, 'four_eyes_status' | 'has_four_eyes'>) {
-  // Godkjent - har passert fire-øyne prinsippet
-  if (has_four_eyes) {
+export function StatusTag({ four_eyes_status }: Pick<DeploymentTagProps, 'four_eyes_status'>) {
+  if (isApprovedStatus(four_eyes_status)) {
     return (
       <Tag data-color="success" variant="outline" size="small" icon={<CheckmarkIcon aria-hidden />}>
         Godkjent
