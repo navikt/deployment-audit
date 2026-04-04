@@ -14,7 +14,9 @@ import {
   forceReleaseSyncJob,
   getSyncJobById,
   getSyncJobOptions,
+  heartbeatSyncJob,
   releaseSyncLock,
+  updateSyncJobProgress,
 } from '~/db/sync-jobs.server'
 import { generateAuditReportPdf } from '~/lib/audit-report-pdf'
 import { requireAdmin } from '~/lib/auth.server'
@@ -54,7 +56,15 @@ async function processFetchDataJobAsync(jobId: number, appId: number) {
 async function processComputeDiffsJobAsync(jobId: number, appId: number) {
   await runWithJobContext(jobId, false, async () => {
     try {
-      const result = await computeVerificationDiffs(appId, { jobId })
+      const result = await computeVerificationDiffs(appId, {
+        jobId,
+        onProgress: async (processed, total, diffsFound) => {
+          await updateSyncJobProgress(jobId, { processed, total, diffsFound })
+          if (processed % 10 === 0) {
+            await heartbeatSyncJob(jobId)
+          }
+        },
+      })
       const job = await getSyncJobById(jobId)
       if (job?.status === 'cancelled') return
       await releaseSyncLock(jobId, 'completed', result as unknown as Record<string, unknown>)

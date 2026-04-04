@@ -23,7 +23,7 @@ import { verifyDeployment } from './verify'
 
 interface ComputeDiffsOptions {
   jobId?: number
-  onProgress?: (processed: number, total: number, diffsFound: number) => void
+  onProgress?: (processed: number, total: number, diffsFound: number) => void | Promise<void>
 }
 
 interface ComputeDiffsResult {
@@ -153,7 +153,7 @@ export async function computeVerificationDiffs(
       }
 
       result.deploymentsChecked++
-      options.onProgress?.(result.deploymentsChecked, deployments.length, diffs.length)
+      await options.onProgress?.(result.deploymentsChecked, deployments.length, diffs.length)
     } catch (err) {
       logger.error(`Error computing diff for deployment ${row.id}`, err instanceof Error ? err : new Error(String(err)))
       result.errors++

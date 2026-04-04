@@ -188,14 +188,26 @@ export default function VerificationDiffPage() {
   }, [activeJobId])
 
   // Handle poll responses
+  const [jobProgress, setJobProgress] = useState<{ processed: number; total: number; diffsFound: number } | null>(null)
   useEffect(() => {
-    const data = computeFetcher.data as { computeJobStatus?: { status: string } } | undefined
+    const data = computeFetcher.data as
+      | {
+          computeJobStatus?: { status: string; result?: { processed?: number; total?: number; diffsFound?: number } }
+        }
+      | undefined
     if (data?.computeJobStatus) {
-      const status = data.computeJobStatus.status
+      const { status, result: jobResult } = data.computeJobStatus
       if (status === 'completed' || status === 'failed' || status === 'cancelled') {
         setActiveJobId(null)
+        setJobProgress(null)
         if (pollInterval.current) clearInterval(pollInterval.current)
         revalidatorRef.current.revalidate()
+      } else if (jobResult?.processed != null && jobResult?.total != null) {
+        setJobProgress({
+          processed: jobResult.processed,
+          total: jobResult.total,
+          diffsFound: jobResult.diffsFound ?? 0,
+        })
       }
     }
   }, [computeFetcher.data])
@@ -247,10 +259,16 @@ export default function VerificationDiffPage() {
             )}
           </HStack>
           {isComputing && (
-            <HStack gap="space-2" align="center">
-              <Loader size="xsmall" />
-              <Detail>Beregner avvik i bakgrunnen…</Detail>
-            </HStack>
+            <Box marginBlock="space-2 space-0">
+              <HStack gap="space-2" align="center">
+                <Loader size="xsmall" />
+                <Detail>
+                  {jobProgress
+                    ? `Sjekker deployment ${jobProgress.processed} av ${jobProgress.total}${jobProgress.diffsFound > 0 ? ` — ${jobProgress.diffsFound} avvik funnet` : ''}…`
+                    : 'Beregner avvik i bakgrunnen…'}
+                </Detail>
+              </HStack>
+            </Box>
           )}
         </Box>
 
