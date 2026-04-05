@@ -283,13 +283,66 @@ describe('verifyDeployment - Case 2b: compare error (different SHAs, 0 commits)'
         createdAt: '2026-02-26T10:00:00Z',
       },
       commitsBetween: [],
-      // No nearbyApprovedDeployWithSameCommit
+      // No nearbyApprovedDeployWithSameCommit and no nearbyApprovedDeploy
     })
 
     const result = verifyDeployment(input)
 
     expect(result.status).toBe('error')
     expect(result.hasFourEyes).toBe(false)
+  })
+
+  it('should return no_changes when superseded by nearby approved deploy (ancestor scenario)', () => {
+    const input = makeBaseInput({
+      commitSha: 'ec3489c',
+      previousDeployment: {
+        id: 10450,
+        commitSha: 'ab169e8',
+        createdAt: '2026-02-19T07:46:34Z',
+      },
+      commitsBetween: [],
+      // No same-commit sibling, but a nearby approved deploy with different commit
+      nearbyApprovedDeploy: {
+        deploymentId: 10450,
+        commitSha: 'ab169e8',
+        status: 'approved',
+      },
+    })
+
+    const result = verifyDeployment(input)
+
+    expect(result.status).toBe('no_changes')
+    expect(result.hasFourEyes).toBe(true)
+    expect(result.approvalDetails.reason).toContain('Superseded deploy')
+    expect(result.approvalDetails.reason).toContain('#10450')
+    expect(result.approvalDetails.reason).toContain('ab169e8')
+  })
+
+  it('should prefer same-commit sibling over superseded deploy', () => {
+    const input = makeBaseInput({
+      commitSha: 'deploy-sha-new',
+      previousDeployment: {
+        id: 999,
+        commitSha: 'deploy-sha-old',
+        createdAt: '2026-02-26T10:00:00Z',
+      },
+      commitsBetween: [],
+      nearbyApprovedDeployWithSameCommit: {
+        deploymentId: 1001,
+        status: 'approved',
+      },
+      nearbyApprovedDeploy: {
+        deploymentId: 1002,
+        commitSha: 'other-sha',
+        status: 'approved',
+      },
+    })
+
+    const result = verifyDeployment(input)
+
+    expect(result.status).toBe('no_changes')
+    expect(result.approvalDetails.reason).toContain('retry/duplicate')
+    expect(result.approvalDetails.reason).not.toContain('Superseded')
   })
 })
 

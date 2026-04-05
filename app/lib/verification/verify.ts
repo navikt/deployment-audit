@@ -81,6 +81,21 @@ export function verifyDeployment(input: VerificationInput): VerificationResult {
         },
       })
     }
+    // If ANY nearby deployment is approved (different commit), this deploy's commit
+    // is an ancestor of the approved deploy (GitHub compare returned 0 commits from
+    // the approved commit to this one). The approved deploy already includes all code
+    // from this commit, so this is a superseded deploy and safe to approve.
+    if (input.nearbyApprovedDeploy) {
+      return buildResult(input, {
+        hasFourEyes: true,
+        status: 'no_changes',
+        approvalDetails: {
+          method: 'no_changes',
+          approvers: [],
+          reason: `Superseded deploy — commit is ancestor of nearby approved deployment #${input.nearbyApprovedDeploy.deploymentId} (${input.nearbyApprovedDeploy.commitSha.substring(0, 7)}, status: ${input.nearbyApprovedDeploy.status}). All code in this deploy is already included in the approved deploy.`,
+        },
+      })
+    }
     return handleCompareError(
       input,
       `Commit SHAs differ (${input.previousDeployment.commitSha.substring(0, 7)}→${input.commitSha.substring(0, 7)}) but GitHub compare returned 0 commits. Possible rollback or branch divergence.`,

@@ -458,6 +458,15 @@ export interface VerificationInput {
     deploymentId: number
     status: string
   }
+
+  // Nearby deployment with ANY approved status (within ±30 min), regardless of commit SHA.
+  // Used to handle superseded deploys: when compare returns 0 commits between different SHAs,
+  // and a nearby approved deploy exists, this deploy's commit is an ancestor of the approved one.
+  nearbyApprovedDeploy?: {
+    deploymentId: number
+    commitSha: string
+    status: string
+  }
 }
 
 /**

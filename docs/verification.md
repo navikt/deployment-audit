@@ -134,7 +134,10 @@ Hvis dette er **første gang** applikasjonen deployes (ingen tidligere deploymen
 Systemet henter listen over commits mellom forrige deployment sin commit-SHA og nåværende deployment sin commit-SHA via GitHub API.
 
 - **Samme commit-SHA** og tom commit-liste: Deploymentet er en **re-deploy** av eksakt samme kode. Status: **`no_changes`**.
-- **Forskjellig commit-SHA** men tom commit-liste: GitHub compare returnerte 0 commits til tross for ulike SHAer. Dette kan skyldes rollback (eldre commit deployet på nytt), branch-divergens, eller API-feil. Hvis det finnes en **nærliggende deployment** (±30 min) med samme commit-SHA som allerede er godkjent, behandles dette som en retry/duplikat og får status **`no_changes`**. Ellers: Status: **`error`**. Krever manuell vurdering.
+- **Forskjellig commit-SHA** men tom commit-liste: GitHub compare returnerte 0 commits til tross for ulike SHAer. Dette kan skyldes rollback (eldre commit deployet på nytt), branch-divergens, eller API-feil. Sjekkes i rekkefølge:
+  1. **Nærliggende deployment med samme commit-SHA** (±30 min) som allerede er godkjent → behandles som retry/duplikat, status: **`no_changes`**.
+  2. **Nærliggende deployment med annen commit-SHA** (±30 min) som er godkjent → dette er en *superseded deploy*: commit-en er en ancestor av den godkjente deployen (all kode er allerede inkludert), status: **`no_changes`**. Typisk ved rapid-fire deploys der webhook-rekkefølge ikke matcher merge-rekkefølge.
+  3. Ingen nærliggende godkjent deployment → Status: **`error`**. Krever manuell vurdering.
 
 #### Steg 3: Sjekk hver commit individuelt
 
