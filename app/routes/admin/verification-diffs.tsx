@@ -21,7 +21,6 @@ import {
   VStack,
 } from '@navikt/ds-react'
 import { useEffect, useRef, useState } from 'react'
-import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from 'react-router'
 import { Form, Link, useFetcher, useLoaderData, useNavigation, useRevalidator } from 'react-router'
 import { pool } from '~/db/connection.server'
 import { getAllMonitoredApplications } from '~/db/monitored-applications.server'
@@ -31,6 +30,7 @@ import { type FourEyesStatus, isApprovedStatus } from '~/lib/four-eyes-status'
 import { logger } from '~/lib/logger.server'
 import { reverifyDeployment } from '~/lib/verification'
 import { computeVerificationDiffs } from '~/lib/verification/compute-diffs.server'
+import type { Route } from './+types/verification-diffs'
 
 interface DiffWithApp {
   id: number
@@ -44,11 +44,11 @@ interface DiffWithApp {
   monitoredAppId: number
 }
 
-export const meta: MetaFunction = () => {
+export function meta(_args: Route.MetaArgs) {
   return [{ title: 'Verifiseringsavvik (alle apper) - Admin' }]
 }
 
-export async function loader({ request }: LoaderFunctionArgs) {
+export async function loader({ request }: Route.LoaderArgs) {
   await requireAdmin(request)
 
   // Get all diffs across all apps
@@ -101,7 +101,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   return { diffs, appCount: apps.length, latestJob }
 }
 
-export async function action({ request }: ActionFunctionArgs) {
+export async function action({ request }: Route.ActionArgs) {
   await requireAdmin(request)
 
   const formData = await request.formData()
