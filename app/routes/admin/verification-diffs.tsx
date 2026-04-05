@@ -22,6 +22,7 @@ import {
 } from '@navikt/ds-react'
 import { useEffect, useRef, useState } from 'react'
 import { Form, Link, useFetcher, useLoaderData, useNavigation, useRevalidator } from 'react-router'
+import { ErrorReasonWithLink } from '~/components/ErrorReasonWithLink'
 import { pool } from '~/db/connection.server'
 import { getAllMonitoredApplications } from '~/db/monitored-applications.server'
 import { getSyncJobById } from '~/db/sync-jobs.server'
@@ -43,6 +44,8 @@ interface DiffWithApp {
   teamSlug: string
   appName: string
   monitoredAppId: number
+  githubOwner: string | null
+  githubRepoName: string | null
 }
 
 export function meta(_args: Route.MetaArgs) {
@@ -56,7 +59,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   const result = await pool.query(
     `SELECT vd.deployment_id, vd.old_status, vd.new_status, vd.error_reason, vd.monitored_app_id,
             d.commit_sha, d.environment_name, d.created_at,
-            d.team_slug, d.app_name
+            d.team_slug, d.app_name,
+            d.detected_github_owner, d.detected_github_repo_name
      FROM verification_diffs vd
      JOIN deployments d ON vd.deployment_id = d.id
      ORDER BY d.team_slug, d.app_name, d.created_at DESC`,
@@ -74,6 +78,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       team_slug: string
       app_name: string
       monitored_app_id: number
+      detected_github_owner: string | null
+      detected_github_repo_name: string | null
     }) => ({
       id: row.deployment_id,
       commitSha: row.commit_sha,
@@ -85,6 +91,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       teamSlug: row.team_slug,
       appName: row.app_name,
       monitoredAppId: row.monitored_app_id,
+      githubOwner: row.detected_github_owner,
+      githubRepoName: row.detected_github_repo_name,
     }),
   )
 
@@ -449,9 +457,11 @@ export default function GlobalVerificationDiffsPage() {
                       {getFourEyesStatusLabel(diff.newStatus)}
                     </Tag>
                     {diff.errorReason && (
-                      <Detail textColor="subtle" className="mt-1">
-                        {diff.errorReason}
-                      </Detail>
+                      <ErrorReasonWithLink
+                        errorReason={diff.errorReason}
+                        githubOwner={diff.githubOwner}
+                        githubRepoName={diff.githubRepoName}
+                      />
                     )}
                   </Table.DataCell>
                   <Table.DataCell>

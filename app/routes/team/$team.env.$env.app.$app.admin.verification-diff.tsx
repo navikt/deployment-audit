@@ -22,6 +22,7 @@ import {
 } from '@navikt/ds-react'
 import { useEffect, useRef, useState } from 'react'
 import { Form, Link, useFetcher, useLoaderData, useNavigation, useRevalidator } from 'react-router'
+import { ErrorReasonWithLink } from '~/components/ErrorReasonWithLink'
 import { pool } from '~/db/connection.server'
 import { getMonitoredApplicationByIdentity } from '~/db/monitored-applications.server'
 import { getLatestSyncJob, getSyncJobById } from '~/db/sync-jobs.server'
@@ -39,6 +40,8 @@ interface DeploymentDiff {
   oldStatus: string | null
   newStatus: string
   errorReason: string | null
+  githubOwner: string | null
+  githubRepoName: string | null
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
@@ -62,7 +65,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const result = await pool.query(
     `SELECT vd.deployment_id, vd.old_status, vd.new_status, vd.error_reason,
             vd.computed_at,
-            d.commit_sha, d.environment_name, d.created_at
+            d.commit_sha, d.environment_name, d.created_at,
+            d.detected_github_owner, d.detected_github_repo_name
      FROM verification_diffs vd
      JOIN deployments d ON vd.deployment_id = d.id
      WHERE vd.monitored_app_id = $1
@@ -78,6 +82,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     oldStatus: row.old_status,
     newStatus: row.new_status,
     errorReason: row.error_reason,
+    githubOwner: row.detected_github_owner,
+    githubRepoName: row.detected_github_repo_name,
   }))
 
   // Get last computation time from the latest completed job, not from diffs
@@ -388,9 +394,11 @@ export default function VerificationDiffPage() {
                         {getFourEyesStatusLabel(diff.newStatus)}
                       </Tag>
                       {diff.errorReason && (
-                        <Detail textColor="subtle" className="mt-1">
-                          {diff.errorReason}
-                        </Detail>
+                        <ErrorReasonWithLink
+                          errorReason={diff.errorReason}
+                          githubOwner={diff.githubOwner}
+                          githubRepoName={diff.githubRepoName}
+                        />
                       )}
                     </Table.DataCell>
                     <Table.DataCell>
