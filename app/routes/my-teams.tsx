@@ -233,6 +233,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
           {/* Navigation links per team */}
           <HStack gap="space-8" wrap>
+            <Button as={Link} to="/my-apps" size="small" variant="primary">
+              Alle mine applikasjoner
+            </Button>
             {selectedDevTeams.map((team) => (
               <Button
                 key={team.id}
