@@ -42,6 +42,7 @@ import { ActionAlert } from '~/components/ActionAlert'
 import { CheckAnnotations } from '~/components/CheckAnnotations'
 import { CheckLogViewer } from '~/components/CheckLogViewer'
 import { GoalLinksSection } from '~/components/GoalLinksSection'
+import { UserName } from '~/components/UserName'
 import { getBoardsWithGoalsForDevTeam } from '~/db/boards.server'
 import { getCommentsByDeploymentId, getLegacyInfo, getManualApproval } from '~/db/comments.server'
 import { pool } from '~/db/connection.server'
@@ -140,9 +141,44 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     app.audit_start_year,
   )
 
+  // Fetch nearby deployments (±30 min) for error status to provide context
+  let nearbyDeployments: Array<{
+    id: number
+    commit_sha: string
+    created_at: string
+    four_eyes_status: string
+    deployer_username: string | null
+    title: string | null
+  }> = []
+  if (deployment.four_eyes_status === 'error') {
+    const nearbyResult = await pool.query(
+      `SELECT d.id, d.commit_sha, d.created_at, d.four_eyes_status, d.deployer_username, d.title
+       FROM deployments d
+       WHERE d.monitored_app_id = $1
+         AND d.id != $2
+         AND d.created_at BETWEEN ($3::timestamptz - interval '30 minutes') AND ($3::timestamptz + interval '30 minutes')
+       ORDER BY d.created_at`,
+      [deployment.monitored_app_id, deploymentId, deployment.created_at],
+    )
+    nearbyDeployments = nearbyResult.rows.map((row) => ({
+      id: row.id,
+      commit_sha: row.commit_sha,
+      created_at: row.created_at.toISOString(),
+      four_eyes_status: row.four_eyes_status,
+      deployer_username: row.deployer_username,
+      title: row.title,
+    }))
+  }
+
   // Collect all GitHub usernames we need to look up
   const usernames: string[] = []
   if (deployment.deployer_username) usernames.push(deployment.deployer_username)
+  // Include nearby deployment deployers
+  for (const nd of nearbyDeployments) {
+    if (nd.deployer_username && !usernames.includes(nd.deployer_username)) {
+      usernames.push(nd.deployer_username)
+    }
+  }
   if (deployment.github_pr_data?.creator?.username) usernames.push(deployment.github_pr_data.creator.username)
   if (deployment.github_pr_data?.merger?.username) usernames.push(deployment.github_pr_data.merger.username)
   // Include assignees
@@ -230,35 +266,6 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 
   // Fetch verification run data for admin download
   const verificationRun = isAdmin ? await getLatestVerificationRun(deploymentId) : null
-
-  // Fetch nearby deployments (±30 min) for error status to provide context
-  let nearbyDeployments: Array<{
-    id: number
-    commit_sha: string
-    created_at: string
-    four_eyes_status: string
-    deployer_username: string | null
-    title: string | null
-  }> = []
-  if (deployment.four_eyes_status === 'error') {
-    const nearbyResult = await pool.query(
-      `SELECT d.id, d.commit_sha, d.created_at, d.four_eyes_status, d.deployer_username, d.title
-       FROM deployments d
-       WHERE d.monitored_app_id = $1
-         AND d.id != $2
-         AND d.created_at BETWEEN ($3::timestamptz - interval '30 minutes') AND ($3::timestamptz + interval '30 minutes')
-       ORDER BY d.created_at`,
-      [deployment.monitored_app_id, deploymentId, deployment.created_at],
-    )
-    nearbyDeployments = nearbyResult.rows.map((row) => ({
-      id: row.id,
-      commit_sha: row.commit_sha,
-      created_at: row.created_at.toISOString(),
-      four_eyes_status: row.four_eyes_status,
-      deployer_username: row.deployer_username,
-      title: row.title,
-    }))
-  }
 
   return {
     deployment,
@@ -632,7 +639,9 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                                 {getFourEyesStatusLabel(nd.four_eyes_status)}
                               </Tag>
                             </Table.DataCell>
-                            <Table.DataCell>{nd.deployer_username ?? '—'}</Table.DataCell>
+                            <Table.DataCell>
+                              <UserName username={nd.deployer_username} userMappings={userMappings} link={false} />
+                            </Table.DataCell>
                           </Table.Row>
                         ))}
                       </Table.Body>
@@ -707,13 +716,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
         <VStack gap="space-4">
           <Detail>Deployer</Detail>
           <BodyShort>
-            {deployment.deployer_username ? (
-              <a href={`https://github.com/${deployment.deployer_username}`} target="_blank" rel="noopener noreferrer">
-                {getUserDisplay(deployment.deployer_username)}
-              </a>
-            ) : (
-              '(ukjent)'
-            )}
+            <UserName username={deployment.deployer_username} userMappings={userMappings} link="github" />
           </BodyShort>
         </VStack>
 
@@ -803,17 +806,11 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
             <VStack gap="space-4">
               <Detail>PR Opprettet av</Detail>
               <BodyShort>
-                {deployment.github_pr_data.creator?.username ? (
-                  <a
-                    href={`https://github.com/${deployment.github_pr_data.creator.username}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {getUserDisplay(deployment.github_pr_data.creator.username)}
-                  </a>
-                ) : (
-                  'ukjent'
-                )}
+                <UserName
+                  username={deployment.github_pr_data.creator?.username}
+                  userMappings={userMappings}
+                  link="github"
+                />
               </BodyShort>
             </VStack>
 
@@ -821,13 +818,11 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
               <VStack gap="space-4">
                 <Detail>Merget av</Detail>
                 <BodyShort>
-                  <a
-                    href={`https://github.com/${deployment.github_pr_data.merger.username}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {getUserDisplay(deployment.github_pr_data.merger.username)}
-                  </a>
+                  <UserName
+                    username={deployment.github_pr_data.merger.username}
+                    userMappings={userMappings}
+                    link="github"
+                  />
                 </BodyShort>
               </VStack>
             )}

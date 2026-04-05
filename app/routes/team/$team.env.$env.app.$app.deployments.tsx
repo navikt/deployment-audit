@@ -3,6 +3,7 @@ import { BodyShort, Box, Button, Detail, Hide, HStack, Select, Show, Tag, TextFi
 import { Form, Link, redirect, useLoaderData, useSearchParams } from 'react-router'
 import { MethodTag, StatusTag } from '~/components/deployment-tags'
 import { ErrorReasonWithLink } from '~/components/ErrorReasonWithLink'
+import { UserName } from '~/components/UserName'
 import { getSiblingApps } from '~/db/application-groups.server'
 import { pool } from '~/db/connection.server'
 import { type DeploymentFilters, getDeploymentsPaginated } from '~/db/deployments.server'
@@ -11,7 +12,7 @@ import { getUserMappings } from '~/db/user-mappings.server'
 import type { FourEyesStatus } from '~/lib/four-eyes-status'
 import { requireTeamEnvAppParams } from '~/lib/route-params.server'
 import { getDateRangeForPeriod, TIME_PERIOD_OPTIONS, type TimePeriod } from '~/lib/time-periods'
-import { getUserDisplayName, serializeUserMappings } from '~/lib/user-display'
+import { serializeUserMappings } from '~/lib/user-display'
 import styles from '~/styles/common.module.css'
 import type { Route } from './+types/$team.env.$env.app.$app.deployments'
 
@@ -264,13 +265,7 @@ export default function AppDeployments() {
                 <HStack gap="space-16" align="center" justify="space-between" wrap>
                   <HStack gap="space-16" wrap>
                     <Detail textColor="subtle">
-                      {deployment.deployer_username ? (
-                        <Link to={`/users/${deployment.deployer_username}`}>
-                          {getUserDisplayName(deployment.deployer_username, userMappings)}
-                        </Link>
-                      ) : (
-                        '(ukjent)'
-                      )}
+                      <UserName username={deployment.deployer_username} userMappings={userMappings} />
                     </Detail>
                     <Detail textColor="subtle">
                       {deployment.commit_sha ? (

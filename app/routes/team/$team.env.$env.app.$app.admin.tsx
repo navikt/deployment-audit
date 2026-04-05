@@ -19,6 +19,7 @@ import {
 } from '@navikt/ds-react'
 import { useEffect, useRef, useState } from 'react'
 import { Form, Link, useFetcher, useNavigation, useRevalidator } from 'react-router'
+import { UserName } from '~/components/UserName'
 import { getAppConfigAuditLog, getImplicitApprovalSettings } from '~/db/app-settings.server'
 import { getAuditReportsForApp } from '~/db/audit-reports.server'
 import { getGitHubDataStatsForApp } from '~/db/github-data.server'
@@ -27,6 +28,7 @@ import { getLatestSyncJob, type SyncJob } from '~/db/sync-jobs.server'
 import { requireAdmin } from '~/lib/auth.server'
 import { getFourEyesStatusLabel } from '~/lib/four-eyes-status'
 import { getCompletedPeriods, REPORT_PERIOD_TYPE_LABELS, type ReportPeriodType } from '~/lib/report-periods'
+import type { UserMappings } from '~/lib/user-display'
 import type { Route } from './+types/$team.env.$env.app.$app.admin'
 
 export { action } from './$team.env.$env.app.$app.admin.actions.server'
@@ -106,6 +108,7 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
 
   // Use action data for readiness (checked on demand)
   const readinessData = actionData?.readiness
+  const readinessUserMappings = (actionData?.userMappings as UserMappings) ?? {}
 
   // Start polling when fetch job is started
   useEffect(() => {
@@ -372,8 +375,13 @@ export default function AppAdmin({ loaderData, actionData }: Route.ComponentProp
                                   {d.commit_sha?.substring(0, 7) || 'N/A'}
                                 </AkselLink>
                                 <BodyShort size="small">
-                                  {new Date(d.created_at).toLocaleDateString('no-NO')} • {d.deployer_username} •{' '}
-                                  {getFourEyesStatusLabel(d.four_eyes_status)}
+                                  {new Date(d.created_at).toLocaleDateString('no-NO')} •{' '}
+                                  <UserName
+                                    username={d.deployer_username}
+                                    userMappings={readinessUserMappings}
+                                    link={false}
+                                  />{' '}
+                                  • {getFourEyesStatusLabel(d.four_eyes_status)}
                                 </BodyShort>
                               </HStack>
                             ))}

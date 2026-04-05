@@ -195,3 +195,26 @@ Renders success/error alerts from action data. Replaces the common pattern:
 // After
 <ActionAlert data={actionData} />
 ```
+
+### UserName Component (`app/components/UserName.tsx`)
+
+Renders a GitHub username as a display name (full name from user mappings, with fallback to GitHub username). Use this component whenever displaying a person's identity in deployment/commit contexts (deployer, PR creator, PR merger, reviewers, nearby deploys).
+
+```tsx
+import { UserName } from '~/components/UserName'
+
+// Internal link to /users/:username (default)
+<UserName username={deployer} userMappings={userMappings} />
+
+// External link to GitHub profile
+<UserName username={deployer} userMappings={userMappings} link="github" />
+
+// No link (plain text)
+<UserName username={deployer} userMappings={userMappings} link={false} />
+```
+
+**When to use `UserName` vs `getUserDisplayName()`:**
+- Use `<UserName>` in JSX for rendering a single user identity
+- Use `getUserDisplayName()` for complex cases: alt text, `.map().join()`, string concatenation, or anywhere a React component cannot be used
+
+**Do NOT** display raw GitHub usernames (`deployer_username`) directly in deployment/commit UI. Always resolve through `UserName` or `getUserDisplayName()`. Raw usernames are appropriate only on user mapping/admin pages where the GitHub identity itself is the relevant information.

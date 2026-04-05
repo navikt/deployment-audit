@@ -18,11 +18,13 @@ import {
   releaseSyncLock,
   updateSyncJobProgress,
 } from '~/db/sync-jobs.server'
+import { getUserMappings } from '~/db/user-mappings.server'
 import { generateAuditReportPdf } from '~/lib/audit-report-pdf'
 import { requireAdmin } from '~/lib/auth.server'
 import { isValidSlackChannel } from '~/lib/form-validators'
 import { logger, runWithJobContext } from '~/lib/logger.server'
 import type { ReportPeriodType } from '~/lib/report-periods'
+import { serializeUserMappings } from '~/lib/user-display'
 import { fetchVerificationDataForAllDeployments } from '~/lib/verification'
 import { computeVerificationDiffs } from '~/lib/verification/compute-diffs.server'
 
@@ -208,7 +210,12 @@ export async function action({ request }: { request: Request; params: Record<str
       return { error: 'Mangler app eller periode' }
     }
     const readiness = await checkAuditReadiness(appId, new Date(periodStart), new Date(periodEnd))
-    return { readiness }
+
+    // Resolve display names for pending deployment deployers
+    const deployerUsernames = readiness.pending_deployments.map((d) => d.deployer_username).filter(Boolean) as string[]
+    const userMappings = deployerUsernames.length > 0 ? await getUserMappings(deployerUsernames) : new Map()
+
+    return { readiness, userMappings: serializeUserMappings(userMappings) }
   }
 
   if (action === 'generate_report') {
