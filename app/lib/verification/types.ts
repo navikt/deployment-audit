@@ -451,6 +451,13 @@ export interface VerificationInput {
 
   // Whether the GitHub compare API failed (404, network error, etc.)
   compareFailed?: boolean
+
+  // Nearby deployment with the same commit SHA that has approved status (within ±30 min)
+  // Used to handle rapid-fire deploys where GitHub compare transiently returns 0 commits
+  nearbyApprovedDeployWithSameCommit?: {
+    deploymentId: number
+    status: string
+  }
 }
 
 /**

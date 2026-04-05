@@ -68,6 +68,19 @@ export function verifyDeployment(input: VerificationInput): VerificationResult {
     if (input.commitSha === input.previousDeployment.commitSha) {
       return handleNoChanges(input)
     }
+    // If a nearby deployment with the same commit was already approved,
+    // this is likely a retry/duplicate deploy where GitHub compare transiently failed.
+    if (input.nearbyApprovedDeployWithSameCommit) {
+      return buildResult(input, {
+        hasFourEyes: true,
+        status: 'no_changes',
+        approvalDetails: {
+          method: 'no_changes',
+          approvers: [],
+          reason: `Same commit verified in nearby deployment #${input.nearbyApprovedDeployWithSameCommit.deploymentId} (status: ${input.nearbyApprovedDeployWithSameCommit.status}). GitHub compare returned 0 commits — likely a retry/duplicate deploy.`,
+        },
+      })
+    }
     return handleCompareError(
       input,
       `Commit SHAs differ (${input.previousDeployment.commitSha.substring(0, 7)}→${input.commitSha.substring(0, 7)}) but GitHub compare returned 0 commits. Possible rollback or branch divergence.`,

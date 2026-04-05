@@ -250,6 +250,47 @@ describe('verifyDeployment - Case 2b: compare error (different SHAs, 0 commits)'
     expect(result.status).toBe('error')
     expect(result.approvalDetails.reason).toContain('GitHub compare API failed')
   })
+
+  it('should return no_changes when nearby approved deploy with same commit exists', () => {
+    const input = makeBaseInput({
+      commitSha: 'deploy-sha-new',
+      previousDeployment: {
+        id: 999,
+        commitSha: 'deploy-sha-old',
+        createdAt: '2026-02-26T10:00:00Z',
+      },
+      commitsBetween: [],
+      nearbyApprovedDeployWithSameCommit: {
+        deploymentId: 1001,
+        status: 'approved',
+      },
+    })
+
+    const result = verifyDeployment(input)
+
+    expect(result.status).toBe('no_changes')
+    expect(result.hasFourEyes).toBe(true)
+    expect(result.approvalDetails.reason).toContain('nearby deployment #1001')
+    expect(result.approvalDetails.reason).toContain('retry/duplicate')
+  })
+
+  it('should still return error when no nearby approved deploy exists', () => {
+    const input = makeBaseInput({
+      commitSha: 'deploy-sha-new',
+      previousDeployment: {
+        id: 999,
+        commitSha: 'deploy-sha-old',
+        createdAt: '2026-02-26T10:00:00Z',
+      },
+      commitsBetween: [],
+      // No nearbyApprovedDeployWithSameCommit
+    })
+
+    const result = verifyDeployment(input)
+
+    expect(result.status).toBe('error')
+    expect(result.hasFourEyes).toBe(false)
+  })
 })
 
 // =============================================================================

@@ -134,7 +134,7 @@ Hvis dette er **første gang** applikasjonen deployes (ingen tidligere deploymen
 Systemet henter listen over commits mellom forrige deployment sin commit-SHA og nåværende deployment sin commit-SHA via GitHub API.
 
 - **Samme commit-SHA** og tom commit-liste: Deploymentet er en **re-deploy** av eksakt samme kode. Status: **`no_changes`**.
-- **Forskjellig commit-SHA** men tom commit-liste: GitHub compare returnerte 0 commits til tross for ulike SHAer. Dette kan skyldes rollback (eldre commit deployet på nytt), branch-divergens, eller API-feil. Status: **`error`**. Krever manuell vurdering.
+- **Forskjellig commit-SHA** men tom commit-liste: GitHub compare returnerte 0 commits til tross for ulike SHAer. Dette kan skyldes rollback (eldre commit deployet på nytt), branch-divergens, eller API-feil. Hvis det finnes en **nærliggende deployment** (±30 min) med samme commit-SHA som allerede er godkjent, behandles dette som en retry/duplikat og får status **`no_changes`**. Ellers: Status: **`error`**. Krever manuell vurdering.
 
 #### Steg 3: Sjekk hver commit individuelt
 

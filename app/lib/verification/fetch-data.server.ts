@@ -109,6 +109,39 @@ export async function fetchVerificationData(
     }
   }
 
+  // Check for nearby approved deploy with same commit when compare returns 0 commits
+  // between different SHAs (possible transient GitHub API failure during rapid deploys)
+  let nearbyApprovedDeployWithSameCommit: VerificationInput['nearbyApprovedDeployWithSameCommit']
+  if (
+    previousDeployment &&
+    commitsBetween.length === 0 &&
+    !compareFailed &&
+    commitSha !== previousDeployment.commitSha
+  ) {
+    const nearbyResult = await pool.query(
+      `SELECT d.id, d.four_eyes_status
+       FROM deployments d
+       WHERE d.monitored_app_id = (SELECT monitored_app_id FROM deployments WHERE id = $1)
+         AND d.id != $1
+         AND d.commit_sha = $2
+         AND d.four_eyes_status IN ('approved', 'implicitly_approved', 'no_changes', 'manually_approved')
+         AND d.created_at BETWEEN (
+           (SELECT created_at FROM deployments WHERE id = $1) - interval '30 minutes'
+         ) AND (
+           (SELECT created_at FROM deployments WHERE id = $1) + interval '30 minutes'
+         )
+       ORDER BY d.created_at DESC
+       LIMIT 1`,
+      [deploymentId, commitSha],
+    )
+    if (nearbyResult.rows.length > 0) {
+      nearbyApprovedDeployWithSameCommit = {
+        deploymentId: nearbyResult.rows[0].id,
+        status: nearbyResult.rows[0].four_eyes_status,
+      }
+    }
+  }
+
   return {
     deploymentId,
     commitSha,
@@ -123,6 +156,7 @@ export async function fetchVerificationData(
     deployedPr,
     commitsBetween,
     compareFailed,
+    nearbyApprovedDeployWithSameCommit,
     dataFreshness: {
       deployedPrFetchedAt: deployedPr ? new Date() : null,
       commitsFetchedAt: commitsBetween.length > 0 ? new Date() : null,
