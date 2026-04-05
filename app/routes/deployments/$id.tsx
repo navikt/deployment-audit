@@ -30,6 +30,7 @@ import {
   RadioGroup,
   ReadMore,
   Select,
+  Table,
   Tag,
   Textarea,
   TextField,
@@ -43,6 +44,7 @@ import { CheckLogViewer } from '~/components/CheckLogViewer'
 import { GoalLinksSection } from '~/components/GoalLinksSection'
 import { getBoardsWithGoalsForDevTeam } from '~/db/boards.server'
 import { getCommentsByDeploymentId, getLegacyInfo, getManualApproval } from '~/db/comments.server'
+import { pool } from '~/db/connection.server'
 import { getLinksForDeployment } from '~/db/deployment-goal-links.server'
 import {
   type DeploymentNavFilters,
@@ -63,7 +65,7 @@ import {
   DEVIATION_INTENT_LABELS,
   DEVIATION_SEVERITY_LABELS,
 } from '~/lib/deviation-constants'
-import { type FourEyesStatus, isApprovedStatus } from '~/lib/four-eyes-status'
+import { type FourEyesStatus, getFourEyesStatusLabel, isApprovedStatus } from '~/lib/four-eyes-status'
 import { formatChangeSource, getFourEyesStatus } from '~/lib/status-display'
 import { getDateRangeForPeriod, type TimePeriod } from '~/lib/time-periods'
 import { getUserDisplayName, serializeUserMappings } from '~/lib/user-display'
@@ -229,6 +231,35 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   // Fetch verification run data for admin download
   const verificationRun = isAdmin ? await getLatestVerificationRun(deploymentId) : null
 
+  // Fetch nearby deployments (±30 min) for error status to provide context
+  let nearbyDeployments: Array<{
+    id: number
+    commit_sha: string
+    created_at: string
+    four_eyes_status: string
+    deployer_username: string | null
+    title: string | null
+  }> = []
+  if (deployment.four_eyes_status === 'error') {
+    const nearbyResult = await pool.query(
+      `SELECT d.id, d.commit_sha, d.created_at, d.four_eyes_status, d.deployer_username, d.title
+       FROM deployments d
+       WHERE d.monitored_app_id = $1
+         AND d.id != $2
+         AND d.created_at BETWEEN ($3::timestamptz - interval '30 minutes') AND ($3::timestamptz + interval '30 minutes')
+       ORDER BY d.created_at`,
+      [deployment.monitored_app_id, deploymentId, deployment.created_at],
+    )
+    nearbyDeployments = nearbyResult.rows.map((row) => ({
+      id: row.id,
+      commit_sha: row.commit_sha,
+      created_at: row.created_at.toISOString(),
+      four_eyes_status: row.four_eyes_status,
+      deployer_username: row.deployer_username,
+      title: row.title,
+    }))
+  }
+
   return {
     deployment,
     comments,
@@ -249,6 +280,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     isDebugMode: isVerificationDebugMode || isAdmin,
     isAdmin,
     verificationRun,
+    nearbyDeployments,
     slackConfig: {
       enabled: app.slack_notifications_enabled,
       channelId: app.slack_channel_id,
@@ -282,6 +314,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
     isDebugMode,
     isAdmin,
     verificationRun,
+    nearbyDeployments,
     slackConfig,
   } = loaderData
   const [searchParams] = useSearchParams()
@@ -554,6 +587,59 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                   </ol>
                 </VStack>
               </ReadMore>
+              {nearbyDeployments.length > 0 && (
+                <ReadMore header={`Nærliggende deploys (±30 min, ${nearbyDeployments.length} stk)`}>
+                  <VStack gap="space-8">
+                    <BodyLong>
+                      Følgende deploys til samme app skjedde innenfor 30 minutter. Hvis denne feilen skyldes en
+                      midlertidig GitHub API-feil, kan en av disse ha samme commit og gyldig verifisering.
+                    </BodyLong>
+                    <Table size="small">
+                      <Table.Header>
+                        <Table.Row>
+                          <Table.HeaderCell>Tidspunkt</Table.HeaderCell>
+                          <Table.HeaderCell>Commit</Table.HeaderCell>
+                          <Table.HeaderCell>Status</Table.HeaderCell>
+                          <Table.HeaderCell>Deployer</Table.HeaderCell>
+                        </Table.Row>
+                      </Table.Header>
+                      <Table.Body>
+                        {nearbyDeployments.map((nd) => (
+                          <Table.Row key={nd.id}>
+                            <Table.DataCell>
+                              <Link to={`${appUrl}/deployments/${nd.id}`} style={{ whiteSpace: 'nowrap' }}>
+                                {new Date(nd.created_at).toLocaleString('no-NO', {
+                                  dateStyle: 'short',
+                                  timeStyle: 'medium',
+                                })}
+                              </Link>
+                            </Table.DataCell>
+                            <Table.DataCell style={{ fontFamily: 'monospace' }}>
+                              {nd.commit_sha?.substring(0, 7) ?? '—'}
+                              {nd.commit_sha === deployment.commit_sha && (
+                                <Tag variant="info" size="xsmall" style={{ marginLeft: '0.5rem' }}>
+                                  same
+                                </Tag>
+                              )}
+                            </Table.DataCell>
+                            <Table.DataCell>
+                              <Tag
+                                variant={
+                                  isApprovedStatus(nd.four_eyes_status as FourEyesStatus) ? 'success' : 'neutral'
+                                }
+                                size="xsmall"
+                              >
+                                {getFourEyesStatusLabel(nd.four_eyes_status)}
+                              </Tag>
+                            </Table.DataCell>
+                            <Table.DataCell>{nd.deployer_username ?? '—'}</Table.DataCell>
+                          </Table.Row>
+                        ))}
+                      </Table.Body>
+                    </Table>
+                  </VStack>
+                </ReadMore>
+              )}
             </VStack>
           )}
         </Alert>

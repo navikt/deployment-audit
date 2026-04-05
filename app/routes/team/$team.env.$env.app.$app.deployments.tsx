@@ -2,7 +2,9 @@ import { ChevronLeftIcon, ChevronRightIcon } from '@navikt/aksel-icons'
 import { BodyShort, Box, Button, Detail, Hide, HStack, Select, Show, Tag, TextField, VStack } from '@navikt/ds-react'
 import { Form, Link, redirect, useLoaderData, useSearchParams } from 'react-router'
 import { MethodTag, StatusTag } from '~/components/deployment-tags'
+import { ErrorReasonWithLink } from '~/components/ErrorReasonWithLink'
 import { getSiblingApps } from '~/db/application-groups.server'
+import { pool } from '~/db/connection.server'
 import { type DeploymentFilters, getDeploymentsPaginated } from '~/db/deployments.server'
 import { getMonitoredApplicationByIdentity } from '~/db/monitored-applications.server'
 import { getUserMappings } from '~/db/user-mappings.server'
@@ -63,6 +65,25 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     throw redirect(url.pathname + url.search)
   }
 
+  // Fetch error reasons from latest verification runs for error deployments
+  const errorDeploymentIds = result.deployments.filter((d) => d.four_eyes_status === 'error').map((d) => d.id)
+
+  let errorReasons: Record<number, string> = {}
+  if (errorDeploymentIds.length > 0) {
+    const errorResult = await pool.query(
+      `SELECT DISTINCT ON (deployment_id) deployment_id, result
+       FROM verification_runs
+       WHERE deployment_id = ANY($1)
+       ORDER BY deployment_id, run_at DESC`,
+      [errorDeploymentIds],
+    )
+    errorReasons = Object.fromEntries(
+      errorResult.rows
+        .filter((row) => row.result?.approvalDetails?.reason)
+        .map((row) => [row.deployment_id, row.result.approvalDetails.reason as string]),
+    )
+  }
+
   // Get display names for deployers
   const deployerUsernames = [...new Set(result.deployments.map((d) => d.deployer_username).filter(Boolean))] as string[]
   const userMappings = await getUserMappings(deployerUsernames)
@@ -72,12 +93,13 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     userMappings: serializeUserMappings(userMappings),
     hasGroup,
     showGroup: showGroup && hasGroup,
+    errorReasons,
     ...result,
   }
 }
 
 export default function AppDeployments() {
-  const { app, deployments, total, page, total_pages, userMappings, hasGroup, showGroup } =
+  const { app, deployments, total, page, total_pages, userMappings, hasGroup, showGroup, errorReasons } =
     useLoaderData<typeof loader>()
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -281,6 +303,15 @@ export default function AppDeployments() {
                     Vis
                   </Button>
                 </HStack>
+
+                {/* Error reason for deployments with error status */}
+                {errorReasons[deployment.id] && (
+                  <ErrorReasonWithLink
+                    errorReason={errorReasons[deployment.id]}
+                    githubOwner={deployment.detected_github_owner}
+                    githubRepoName={deployment.detected_github_repo_name}
+                  />
+                )}
               </VStack>
             </Box>
           ))
