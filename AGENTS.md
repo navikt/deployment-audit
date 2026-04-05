@@ -138,6 +138,25 @@ Large route files split their action handlers into `*.actions.server.ts` files:
 
 The route re-exports: `export { action } from './$id.actions.server'`
 
+### Route Registration (CRITICAL)
+
+This app uses **explicit route definitions** in `app/routes.ts` — routes are **NOT** auto-discovered from the file system. When creating a new route file under `app/routes/`, you **must** also add a corresponding `route()` entry in `app/routes.ts`, or the route will 404 in production.
+
+After adding the route entry, run `npx react-router typegen` to generate the `+types/` file, then import the generated `Route` type in the new route file:
+
+```ts
+import type { Route } from './+types/my-new-route'
+```
+
+### New Route Testing Requirement
+
+When adding a new route, verify it is covered by the existing route tests in `app/lib/__tests__/routes.test.ts`. This test suite automatically validates all routes registered in `app/routes.ts`:
+
+1. **File exists on disk** — the route file referenced in `routes.ts` must exist
+2. **Has exports** — the route file must export a `default` component, `loader`, or `action`
+
+Since the test iterates over `app/routes.ts`, registering the route there is sufficient for test coverage. However, if the route has non-trivial loader/action logic, add dedicated unit or integration tests for that logic.
+
 ## Shared Route Utilities
 
 ### Form Validators (`app/lib/form-validators.ts`)
