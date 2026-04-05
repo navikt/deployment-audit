@@ -595,7 +595,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                 </VStack>
               </ReadMore>
               {nearbyDeployments.length > 0 && (
-                <ReadMore header={`Nærliggende deploys (±30 min, ${nearbyDeployments.length} stk)`}>
+                <ReadMore header={`Nærliggende deploys (±30 min, ${nearbyDeployments.length + 1} stk)`}>
                   <VStack gap="space-8">
                     <BodyLong>
                       Følgende deploys til samme app skjedde innenfor 30 minutter. Hvis denne feilen skyldes en
@@ -611,39 +611,75 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                         </Table.Row>
                       </Table.Header>
                       <Table.Body>
-                        {nearbyDeployments.map((nd) => (
-                          <Table.Row key={nd.id}>
-                            <Table.DataCell>
-                              <Link to={`${appUrl}/deployments/${nd.id}`} style={{ whiteSpace: 'nowrap' }}>
-                                {new Date(nd.created_at).toLocaleString('no-NO', {
-                                  dateStyle: 'short',
-                                  timeStyle: 'medium',
-                                })}
-                              </Link>
-                            </Table.DataCell>
-                            <Table.DataCell style={{ fontFamily: 'monospace' }}>
-                              {nd.commit_sha?.substring(0, 7) ?? '—'}
-                              {nd.commit_sha === deployment.commit_sha && (
-                                <Tag variant="info" size="xsmall" style={{ marginLeft: '0.5rem' }}>
-                                  same
-                                </Tag>
-                              )}
-                            </Table.DataCell>
-                            <Table.DataCell>
-                              <Tag
-                                variant={
-                                  isApprovedStatus(nd.four_eyes_status as FourEyesStatus) ? 'success' : 'neutral'
-                                }
-                                size="xsmall"
+                        {[
+                          ...nearbyDeployments,
+                          {
+                            id: deployment.id,
+                            commit_sha: deployment.commit_sha,
+                            created_at: deployment.created_at,
+                            four_eyes_status: deployment.four_eyes_status,
+                            deployer_username: deployment.deployer_username,
+                            isCurrent: true,
+                          },
+                        ]
+                          .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+                          .map((nd) => {
+                            const isCurrent = 'isCurrent' in nd
+                            return (
+                              <Table.Row
+                                key={nd.id}
+                                style={isCurrent ? { background: 'var(--ax-bg-neutral-softA)' } : undefined}
                               >
-                                {getFourEyesStatusLabel(nd.four_eyes_status)}
-                              </Tag>
-                            </Table.DataCell>
-                            <Table.DataCell>
-                              <UserName username={nd.deployer_username} userMappings={userMappings} link={false} />
-                            </Table.DataCell>
-                          </Table.Row>
-                        ))}
+                                <Table.DataCell>
+                                  {isCurrent ? (
+                                    <BodyShort size="small" weight="semibold" style={{ whiteSpace: 'nowrap' }}>
+                                      {new Date(nd.created_at).toLocaleString('no-NO', {
+                                        dateStyle: 'short',
+                                        timeStyle: 'medium',
+                                      })}
+                                    </BodyShort>
+                                  ) : (
+                                    <Link to={`${appUrl}/deployments/${nd.id}`} style={{ whiteSpace: 'nowrap' }}>
+                                      {new Date(nd.created_at).toLocaleString('no-NO', {
+                                        dateStyle: 'short',
+                                        timeStyle: 'medium',
+                                      })}
+                                    </Link>
+                                  )}
+                                </Table.DataCell>
+                                <Table.DataCell style={{ fontFamily: 'monospace' }}>
+                                  {nd.commit_sha?.substring(0, 7) ?? '—'}
+                                  {isCurrent && (
+                                    <Tag variant="neutral" size="xsmall" style={{ marginLeft: '0.5rem' }}>
+                                      denne
+                                    </Tag>
+                                  )}
+                                  {!isCurrent && nd.commit_sha === deployment.commit_sha && (
+                                    <Tag variant="info" size="xsmall" style={{ marginLeft: '0.5rem' }}>
+                                      same
+                                    </Tag>
+                                  )}
+                                </Table.DataCell>
+                                <Table.DataCell>
+                                  <Tag
+                                    variant={
+                                      isApprovedStatus(nd.four_eyes_status as FourEyesStatus)
+                                        ? 'success'
+                                        : isCurrent
+                                          ? 'error'
+                                          : 'neutral'
+                                    }
+                                    size="xsmall"
+                                  >
+                                    {getFourEyesStatusLabel(nd.four_eyes_status)}
+                                  </Tag>
+                                </Table.DataCell>
+                                <Table.DataCell>
+                                  <UserName username={nd.deployer_username} userMappings={userMappings} link={false} />
+                                </Table.DataCell>
+                              </Table.Row>
+                            )
+                          })}
                       </Table.Body>
                     </Table>
                   </VStack>
