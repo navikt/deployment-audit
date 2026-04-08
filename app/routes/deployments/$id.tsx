@@ -59,6 +59,7 @@ import { getDevTeamsForApp } from '~/db/dev-teams.server'
 import { getDeviationsByDeploymentId } from '~/db/deviations.server'
 import { getLatestVerificationRun } from '~/db/github-data.server'
 import { getMonitoredApplicationById } from '~/db/monitored-applications.server'
+import { getUserDevTeams } from '~/db/user-dev-team-preference.server'
 import { getUserMappings } from '~/db/user-mappings.server'
 import { getUserIdentity } from '~/lib/auth.server'
 import {
@@ -126,9 +127,22 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const deviations = await getDeviationsByDeploymentId(deploymentId)
   const goalLinks = await getLinksForDeployment(deploymentId)
 
-  // Get available boards/goals for goal linking UI (scoped to deployment date)
-  const devTeams = await getDevTeamsForApp(deployment.monitored_app_id, app.team_slug)
+  // Get available boards/goals for goal linking UI (scoped to deployment date + user's teams)
+  const currentUser = await getUserIdentity(request)
+  const allDevTeams = await getDevTeamsForApp(deployment.monitored_app_id, app.team_slug)
   const deploymentDate = new Date(deployment.created_at).toISOString().split('T')[0]
+
+  // Filter to teams the current user belongs to (if they have team preferences)
+  let devTeams = allDevTeams
+  if (currentUser?.navIdent) {
+    const userTeams = await getUserDevTeams(currentUser.navIdent)
+    const userTeamIds = new Set(userTeams.map((t) => t.id))
+    const filtered = allDevTeams.filter((dt) => userTeamIds.has(dt.id))
+    if (filtered.length > 0) {
+      devTeams = filtered
+    }
+  }
+
   const boardsPerTeam = await Promise.all(devTeams.map((dt) => getBoardsWithGoalsForDevTeam(dt.id, deploymentDate)))
   const availableBoards = boardsPerTeam.flatMap((boards, i) =>
     boards.map((b) => ({ ...b, dev_team_name: devTeams[i].name })),
@@ -238,7 +252,6 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const userMappings = await getUserMappings(usernames)
 
   // Check if current user is involved in this deployment (for four-eyes validation)
-  const currentUser = await getUserIdentity(request)
   let isCurrentUserInvolved = false
   let involvementReason: string | null = null
 
