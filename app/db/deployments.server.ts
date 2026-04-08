@@ -1180,6 +1180,7 @@ export interface AppWithIssues {
   without_four_eyes: number
   pending_verification: number
   alert_count: number
+  missing_goal_links: number
 }
 
 export interface IssueDeployment {

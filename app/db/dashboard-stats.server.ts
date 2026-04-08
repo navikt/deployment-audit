@@ -201,7 +201,7 @@ export async function getDevTeamSummaryStats(
        COALESCE(SUM(s.without_four_eyes), 0)::int AS without_four_eyes,
        COALESCE(SUM(s.pending_verification), 0)::int AS pending_verification,
        COALESCE(SUM(s.linked_to_goal), 0)::int AS linked_to_goal,
-       COUNT(*) FILTER (WHERE COALESCE(s.without_four_eyes, 0) > 0 OR COALESCE(s.pending_verification, 0) > 0 OR COALESCE(a.alert_count, 0) > 0)::int AS apps_with_issues
+       COUNT(*) FILTER (WHERE COALESCE(s.without_four_eyes, 0) > 0 OR COALESCE(s.pending_verification, 0) > 0 OR COALESCE(a.alert_count, 0) > 0 OR (COALESCE(s.total_deployments, 0) > 0 AND COALESCE(s.linked_to_goal, 0) < COALESCE(s.total_deployments, 0)))::int AS apps_with_issues
      FROM team_apps ta
      LEFT JOIN app_stats s ON s.monitored_app_id = ta.id
      LEFT JOIN app_alerts a ON a.monitored_app_id = ta.id`,

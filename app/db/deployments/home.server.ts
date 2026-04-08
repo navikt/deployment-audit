@@ -20,12 +20,14 @@ export async function getDevTeamAppsWithIssues(
       ma.environment_name,
       COALESCE(dep.without_four_eyes, 0)::integer as without_four_eyes,
       COALESCE(dep.pending_verification, 0)::integer as pending_verification,
-      COALESCE(alerts.count, 0)::integer as alert_count
+      COALESCE(alerts.count, 0)::integer as alert_count,
+      COALESCE(dep.missing_goal_links, 0)::integer as missing_goal_links
     FROM monitored_applications ma
     LEFT JOIN LATERAL (
       SELECT 
         SUM(CASE WHEN d.four_eyes_status = ANY($1) THEN 1 ELSE 0 END) as without_four_eyes,
-        SUM(CASE WHEN d.four_eyes_status = ANY($2) THEN 1 ELSE 0 END) as pending_verification
+        SUM(CASE WHEN d.four_eyes_status = ANY($2) THEN 1 ELSE 0 END) as pending_verification,
+        SUM(CASE WHEN NOT EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = d.id) THEN 1 ELSE 0 END) as missing_goal_links
       FROM deployments d
       WHERE d.monitored_app_id = ma.id
         AND (ma.audit_start_year IS NULL OR d.created_at >= make_date(ma.audit_start_year, 1, 1))
@@ -44,8 +46,9 @@ export async function getDevTeamAppsWithIssues(
       )
       AND (COALESCE(dep.without_four_eyes, 0) > 0 
         OR COALESCE(dep.pending_verification, 0) > 0 
-        OR COALESCE(alerts.count, 0) > 0)
-    ORDER BY COALESCE(dep.without_four_eyes, 0) DESC, COALESCE(alerts.count, 0) DESC
+        OR COALESCE(alerts.count, 0) > 0
+        OR COALESCE(dep.missing_goal_links, 0) > 0)
+    ORDER BY COALESCE(dep.without_four_eyes, 0) DESC, COALESCE(dep.missing_goal_links, 0) DESC, COALESCE(alerts.count, 0) DESC
   `,
     [NOT_APPROVED_STATUSES, PENDING_STATUSES, naisTeamSlugs, useDirectApps ?? false, directAppIds ?? []],
   )

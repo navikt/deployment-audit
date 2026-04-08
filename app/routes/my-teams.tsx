@@ -84,11 +84,15 @@ export async function loader({ request }: Route.LoaderArgs) {
       ? await getAppDeploymentStatsBatch(matchingApps.map((a) => ({ id: a.id, audit_start_year: a.audit_start_year })))
       : new Map()
 
+  // Build a map of missing_goal_links from the issue query
+  const missingGoalsByKey = new Map<string, number>()
+  for (const a of issueApps) {
+    missingGoalsByKey.set(`${a.team_slug}/${a.environment_name}/${a.app_name}`, a.missing_goal_links)
+  }
+
   const issueAppCards = groupAppCards(
-    matchingApps.map((app) => ({
-      ...app,
-      active_repo: activeReposByApp.get(app.id) || null,
-      stats: statsByApp.get(app.id) || {
+    matchingApps.map((app) => {
+      const baseStats = statsByApp.get(app.id) || {
         total: 0,
         with_four_eyes: 0,
         without_four_eyes: 0,
@@ -96,14 +100,22 @@ export async function loader({ request }: Route.LoaderArgs) {
         last_deployment: null,
         last_deployment_id: null,
         four_eyes_percentage: 0,
-      },
-      alertCount: alertCounts.get(app.id) || 0,
-    })),
+      }
+      return {
+        ...app,
+        active_repo: activeReposByApp.get(app.id) || null,
+        stats: {
+          ...baseStats,
+          missing_goal_links: missingGoalsByKey.get(`${app.team_slug}/${app.environment_name}/${app.app_name}`) ?? 0,
+        },
+        alertCount: alertCounts.get(app.id) || 0,
+      }
+    }),
   )
 
   issueAppCards.sort((a, b) => {
-    const aIssues = a.stats.without_four_eyes + a.alertCount
-    const bIssues = b.stats.without_four_eyes + b.alertCount
+    const aIssues = a.stats.without_four_eyes + a.alertCount + (a.stats.missing_goal_links ?? 0)
+    const bIssues = b.stats.without_four_eyes + b.alertCount + (b.stats.missing_goal_links ?? 0)
     return bIssues - aIssues
   })
 

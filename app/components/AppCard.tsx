@@ -1,4 +1,10 @@
-import { BellIcon, CheckmarkCircleIcon, ExclamationmarkTriangleIcon, XMarkOctagonIcon } from '@navikt/aksel-icons'
+import {
+  BellIcon,
+  CheckmarkCircleIcon,
+  ExclamationmarkTriangleIcon,
+  LinkBrokenIcon,
+  XMarkOctagonIcon,
+} from '@navikt/aksel-icons'
 import { BodyShort, Box, Detail, Hide, HStack, Show, Tag, VStack } from '@navikt/ds-react'
 import { Link } from 'react-router'
 import styles from '../styles/common.module.css'
@@ -7,6 +13,7 @@ interface AppStats {
   total: number
   without_four_eyes: number
   pending_verification: number
+  missing_goal_links?: number
 }
 
 export interface AppCardData {
@@ -91,6 +98,13 @@ export function AppCard({ app, showEnvironment = true }: AppCardProps) {
               <Link to={`${appUrl}#varsler`} style={{ textDecoration: 'none' }}>
                 <Tag data-color="danger" variant="moderate" size="xsmall" icon={<BellIcon aria-hidden />}>
                   {app.alertCount}
+                </Tag>
+              </Link>
+            )}
+            {(app.stats.missing_goal_links ?? 0) > 0 && (
+              <Link to={`${appUrl}/deployments?goal=missing&period=all`} style={{ textDecoration: 'none' }}>
+                <Tag data-color="warning" variant="outline" size="xsmall" icon={<LinkBrokenIcon aria-hidden />}>
+                  {app.stats.missing_goal_links} uten opphav
                 </Tag>
               </Link>
             )}
