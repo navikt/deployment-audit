@@ -27,6 +27,7 @@ interface AvailableBoard {
   id: number
   title: string
   period_label: string
+  dev_team_name?: string
   objectives: Array<{
     id: number
     title: string
@@ -157,6 +158,7 @@ function AddGoalLinkForm({ onCancel, availableBoards }: { onCancel: () => void; 
                   <option value="">Velg tavle…</option>
                   {availableBoards.map((board) => (
                     <option key={board.id} value={board.id}>
+                      {board.dev_team_name ? `${board.dev_team_name} — ` : ''}
                       {board.title} ({board.period_label})
                     </option>
                   ))}

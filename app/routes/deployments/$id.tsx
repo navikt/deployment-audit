@@ -130,7 +130,9 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const devTeams = await getDevTeamsForApp(deployment.monitored_app_id, app.team_slug)
   const deploymentDate = new Date(deployment.created_at).toISOString().split('T')[0]
   const boardsPerTeam = await Promise.all(devTeams.map((dt) => getBoardsWithGoalsForDevTeam(dt.id, deploymentDate)))
-  const availableBoards = boardsPerTeam.flat()
+  const availableBoards = boardsPerTeam.flatMap((boards, i) =>
+    boards.map((b) => ({ ...b, dev_team_name: devTeams[i].name })),
+  )
 
   // Get previous and next deployments for navigation (respecting filters)
   const previousDeployment = await getPreviousDeploymentForNav(deploymentId, deployment.monitored_app_id, navFilters)
