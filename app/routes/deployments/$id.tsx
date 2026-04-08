@@ -727,7 +727,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                     - {commit.message}
                     <br />
                     <Detail>
-                      av {commit.author} •{' '}
+                      av <UserName username={commit.author} userMappings={userMappings} link={false} /> •{' '}
                       {commit.pr_number ? `PR #${commit.pr_number} ikke godkjent` : 'Ingen PR (direkte push)'}
                     </Detail>
                   </li>
