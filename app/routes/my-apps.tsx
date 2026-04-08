@@ -11,7 +11,7 @@ import { groupAppCards } from '~/lib/group-app-cards'
 import type { Route } from './+types/my-apps'
 
 export function meta(_args: Route.MetaArgs) {
-  return [{ title: 'Mine applikasjoner - Deployment Audit' }]
+  return [{ title: 'Mine applikasjoner - NDA' }]
 }
 
 export async function loader({ request }: Route.LoaderArgs) {

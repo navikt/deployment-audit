@@ -299,7 +299,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 
 export function meta({ data }: Route.MetaArgs) {
   const deployment = data?.deployment
-  return [{ title: deployment ? `Deployment #${deployment.id} - Deployment Audit` : 'Deployment' }]
+  return [{ title: deployment ? `Deployment #${deployment.id} - NDA` : 'Deployment' }]
 }
 
 export default function DeploymentDetail({ loaderData, actionData }: Route.ComponentProps) {

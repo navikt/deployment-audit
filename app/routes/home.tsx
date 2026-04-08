@@ -4,10 +4,7 @@ import { requireUser } from '~/lib/auth.server'
 import type { Route } from './+types/home'
 
 export function meta(_args: Route.MetaArgs) {
-  return [
-    { title: 'Deployment Audit' },
-    { name: 'description', content: 'Audit Nais deployments for godkjenningsstatus' },
-  ]
+  return [{ title: 'NDA' }, { name: 'description', content: 'Audit Nais deployments for godkjenningsstatus' }]
 }
 
 export async function loader({ request }: Route.LoaderArgs) {

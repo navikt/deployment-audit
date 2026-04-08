@@ -20,10 +20,7 @@ import type { Route } from './+types/my-teams'
 import type { loader as layoutLoader } from './layout'
 
 export function meta(_args: Route.MetaArgs) {
-  return [
-    { title: 'Deployment Audit' },
-    { name: 'description', content: 'Audit Nais deployments for godkjenningsstatus' },
-  ]
+  return [{ title: 'NDA' }, { name: 'description', content: 'Audit Nais deployments for godkjenningsstatus' }]
 }
 
 interface BoardSummary {

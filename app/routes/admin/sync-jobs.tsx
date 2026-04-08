@@ -36,7 +36,7 @@ import styles from '~/styles/common.module.css'
 import type { Route } from './+types/sync-jobs'
 
 export function meta(_args: Route.MetaArgs) {
-  return [{ title: 'Sync Jobs - Admin - Deployment Audit' }]
+  return [{ title: 'Sync Jobs - Admin - NDA' }]
 }
 
 export async function loader({ request }: Route.LoaderArgs) {

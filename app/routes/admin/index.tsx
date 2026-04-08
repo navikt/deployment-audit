@@ -18,7 +18,7 @@ import { requireAdmin } from '~/lib/auth.server'
 import type { Route } from './+types/index'
 
 export function meta(_args: Route.MetaArgs) {
-  return [{ title: 'Admin - Deployment Audit' }]
+  return [{ title: 'Admin - NDA' }]
 }
 
 export async function loader({ request }: Route.LoaderArgs) {

@@ -10,7 +10,7 @@ import { fetchAllTeamsAndApplications, getApplicationInfo } from '../lib/nais.se
 import type { Route } from './+types/apps.add'
 
 export function meta(_args: Route.MetaArgs) {
-  return [{ title: 'Legg til applikasjon - Deployment Audit' }]
+  return [{ title: 'Legg til applikasjon - NDA' }]
 }
 
 export async function loader({ request }: Route.LoaderArgs) {

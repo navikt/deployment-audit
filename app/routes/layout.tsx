@@ -108,7 +108,7 @@ export default function Layout({ loaderData }: Route.ComponentProps) {
         </ActionMenu>
 
         <InternalHeader.Title as={Link} to="/">
-          Deployment Audit
+          NDA
         </InternalHeader.Title>
 
         {/* Global search dialog */}
@@ -256,7 +256,7 @@ export function ErrorBoundary() {
     <div className={styles.layoutContainer}>
       <InternalHeader>
         <InternalHeader.Title as={Link} to="/">
-          Deployment Audit
+          NDA
         </InternalHeader.Title>
       </InternalHeader>
 

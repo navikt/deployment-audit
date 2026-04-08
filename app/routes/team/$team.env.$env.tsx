@@ -42,7 +42,7 @@ export async function loader({ params }: Route.LoaderArgs) {
 }
 
 export function meta({ data }: { data?: { team: string; env: string } }) {
-  return [{ title: `${data?.team ?? 'Team'} / ${data?.env ?? 'Env'} - Deployment Audit` }]
+  return [{ title: `${data?.team ?? 'Team'} / ${data?.env ?? 'Env'} - NDA` }]
 }
 
 export default function TeamEnvPage() {

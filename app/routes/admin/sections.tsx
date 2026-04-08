@@ -9,7 +9,7 @@ import styles from '~/styles/common.module.css'
 import type { Route } from './+types/sections'
 
 export function meta() {
-  return [{ title: 'Seksjoner – Deployment Audit' }]
+  return [{ title: 'Seksjoner – NDA' }]
 }
 
 export async function loader({ request }: Route.LoaderArgs) {

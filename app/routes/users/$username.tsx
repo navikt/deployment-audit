@@ -42,7 +42,7 @@ import styles from '~/styles/common.module.css'
 import type { Route } from './+types/$username'
 
 export function meta({ data }: { data: { username: string } }) {
-  return [{ title: `${data?.username || 'Bruker'} - Deployment Audit` }]
+  return [{ title: `${data?.username || 'Bruker'} - NDA` }]
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {

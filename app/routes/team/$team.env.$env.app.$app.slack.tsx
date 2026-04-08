@@ -49,7 +49,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 }
 
 export function meta({ data }: { data?: { app: { app_name: string } } }) {
-  return [{ title: `Slack - ${data?.app?.app_name ?? 'App'} - Deployment Audit` }]
+  return [{ title: `Slack - ${data?.app?.app_name ?? 'App'} - NDA` }]
 }
 
 function formatDate(date: Date | string | null): string {

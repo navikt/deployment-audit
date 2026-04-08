@@ -94,7 +94,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 }
 
 export function meta({ data }: { data?: { app: { app_name: string } } }) {
-  return [{ title: `${data?.app?.app_name ?? 'App'} - Deployment Audit` }]
+  return [{ title: `${data?.app?.app_name ?? 'App'} - NDA` }]
 }
 
 export async function action({ request }: Route.ActionArgs) {

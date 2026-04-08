@@ -5,7 +5,7 @@ import { type SearchResult, searchDeployments } from '~/db/deployments.server'
 import type { Route } from './+types/search'
 
 export function meta({ data }: { data: { query: string } }) {
-  return [{ title: data?.query ? `Søk: ${data.query} - Deployment Audit` : 'Søk - Deployment Audit' }]
+  return [{ title: data?.query ? `Søk: ${data.query} - NDA` : 'Søk - NDA' }]
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
