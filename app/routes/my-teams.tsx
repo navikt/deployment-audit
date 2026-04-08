@@ -173,30 +173,31 @@ function SummaryCard({
   )
 }
 
-function formatCoverage(percentage: number): string {
-  if (percentage > 0 && percentage < 1) return '<1%'
-  if (percentage > 99 && percentage < 100) return '99%'
-  return `${percentage}%`
+function formatCoverage(ratio: number): string {
+  const pct = Math.round(ratio * 100)
+  if (ratio > 0 && pct === 0) return '<1%'
+  if (ratio < 1 && pct === 100) return '99%'
+  return `${pct}%`
 }
 
-function getHealthVariant(percentage: number): 'success' | 'warning' | 'error' | 'neutral' {
-  if (percentage >= 90) return 'success'
-  if (percentage >= 70) return 'warning'
-  if (percentage > 0) return 'error'
+function getHealthVariant(ratio: number): 'success' | 'warning' | 'error' | 'neutral' {
+  if (ratio >= 0.9) return 'success'
+  if (ratio >= 0.7) return 'warning'
+  if (ratio > 0) return 'error'
   return 'neutral'
 }
 
-function getHealthLabel(fourEyesPct: number, goalPct: number): string {
-  const min = Math.min(fourEyesPct, goalPct)
-  if (min >= 90) return 'God'
-  if (min >= 70) return 'Akseptabel'
+function getHealthLabel(fourEyes: number, goalCoverage: number): string {
+  const min = Math.min(fourEyes, goalCoverage)
+  if (min >= 0.9) return 'God'
+  if (min >= 0.7) return 'Akseptabel'
   if (min > 0) return 'Trenger oppfølging'
   return 'Ingen data'
 }
 
-function getHealthIcon(fourEyesPct: number, goalPct: number): ReactNode {
-  const min = Math.min(fourEyesPct, goalPct)
-  if (min >= 70) return <CheckmarkCircleIcon aria-hidden />
+function getHealthIcon(fourEyes: number, goalCoverage: number): ReactNode {
+  const min = Math.min(fourEyes, goalCoverage)
+  if (min >= 0.7) return <CheckmarkCircleIcon aria-hidden />
   return <ExclamationmarkTriangleIcon aria-hidden />
 }
 
@@ -246,21 +247,21 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             />
             <SummaryCard
               title="4-øyne dekning"
-              value={formatCoverage(teamStats.four_eyes_percentage)}
+              value={formatCoverage(teamStats.four_eyes_coverage)}
               icon={<CheckmarkCircleIcon aria-hidden />}
-              variant={getHealthVariant(teamStats.four_eyes_percentage)}
+              variant={getHealthVariant(teamStats.four_eyes_coverage)}
             />
             <SummaryCard
               title="Endringsopphav"
-              value={formatCoverage(teamStats.goal_percentage)}
+              value={formatCoverage(teamStats.goal_coverage)}
               icon={<LinkIcon aria-hidden />}
-              variant={getHealthVariant(teamStats.goal_percentage)}
+              variant={getHealthVariant(teamStats.goal_coverage)}
             />
             <SummaryCard
               title="Samlet helsetilstand"
-              value={getHealthLabel(teamStats.four_eyes_percentage, teamStats.goal_percentage)}
-              icon={getHealthIcon(teamStats.four_eyes_percentage, teamStats.goal_percentage)}
-              variant={getHealthVariant(Math.min(teamStats.four_eyes_percentage, teamStats.goal_percentage))}
+              value={getHealthLabel(teamStats.four_eyes_coverage, teamStats.goal_coverage)}
+              icon={getHealthIcon(teamStats.four_eyes_coverage, teamStats.goal_coverage)}
+              variant={getHealthVariant(Math.min(teamStats.four_eyes_coverage, teamStats.goal_coverage))}
             />
           </HGrid>
 

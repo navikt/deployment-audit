@@ -43,6 +43,8 @@ export interface DevTeamSummaryStats {
   without_four_eyes: number
   pending_verification: number
   linked_to_goal: number
+  four_eyes_coverage: number
+  goal_coverage: number
   four_eyes_percentage: number
   goal_percentage: number
   apps_with_issues: number
@@ -218,6 +220,8 @@ export async function getDevTeamSummaryStats(
     without_four_eyes: row?.without_four_eyes ?? 0,
     pending_verification: row?.pending_verification ?? 0,
     linked_to_goal: linkedToGoal,
+    four_eyes_coverage: total > 0 ? withFourEyes / total : 0,
+    goal_coverage: total > 0 ? linkedToGoal / total : 0,
     four_eyes_percentage: total > 0 ? Math.round((withFourEyes / total) * 100) : 0,
     goal_percentage: total > 0 ? Math.round((linkedToGoal / total) * 100) : 0,
     apps_with_issues: row?.apps_with_issues ?? 0,
