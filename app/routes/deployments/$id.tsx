@@ -126,9 +126,10 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const deviations = await getDeviationsByDeploymentId(deploymentId)
   const goalLinks = await getLinksForDeployment(deploymentId)
 
-  // Get available boards/goals for goal linking UI (from all matching dev teams)
+  // Get available boards/goals for goal linking UI (scoped to deployment date)
   const devTeams = await getDevTeamsForApp(deployment.monitored_app_id, app.team_slug)
-  const boardsPerTeam = await Promise.all(devTeams.map((dt) => getBoardsWithGoalsForDevTeam(dt.id)))
+  const deploymentDate = new Date(deployment.created_at).toISOString().split('T')[0]
+  const boardsPerTeam = await Promise.all(devTeams.map((dt) => getBoardsWithGoalsForDevTeam(dt.id, deploymentDate)))
   const availableBoards = boardsPerTeam.flat()
 
   // Get previous and next deployments for navigation (respecting filters)

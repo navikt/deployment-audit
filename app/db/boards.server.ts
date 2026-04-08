@@ -64,7 +64,10 @@ export async function getBoardsByDevTeam(devTeamId: number): Promise<Board[]> {
 }
 
 /** Lightweight board list with objectives and key results (titles/IDs only) for goal linking UI. */
-export async function getBoardsWithGoalsForDevTeam(devTeamId: number): Promise<
+export async function getBoardsWithGoalsForDevTeam(
+  devTeamId: number,
+  asOfDate?: string,
+): Promise<
   Array<{
     id: number
     title: string
@@ -72,9 +75,13 @@ export async function getBoardsWithGoalsForDevTeam(devTeamId: number): Promise<
     objectives: Array<{ id: number; title: string; key_results: Array<{ id: number; title: string }> }>
   }>
 > {
+  const dateFilter = asOfDate ? ' AND period_start <= $2 AND period_end >= $2' : ''
+  const params: unknown[] = [devTeamId]
+  if (asOfDate) params.push(asOfDate)
+
   const boards = await pool.query(
-    `SELECT id, title, period_label FROM boards WHERE dev_team_id = $1 AND is_active = true ORDER BY period_start DESC`,
-    [devTeamId],
+    `SELECT id, title, period_label FROM boards WHERE dev_team_id = $1 AND is_active = true${dateFilter} ORDER BY period_start DESC`,
+    params,
   )
 
   const result = []
