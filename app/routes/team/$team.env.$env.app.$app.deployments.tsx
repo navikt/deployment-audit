@@ -8,7 +8,8 @@ import { getSiblingApps } from '~/db/application-groups.server'
 import { pool } from '~/db/connection.server'
 import { type DeploymentFilters, getDeploymentsPaginated } from '~/db/deployments.server'
 import { getMonitoredApplicationByIdentity } from '~/db/monitored-applications.server'
-import { getUserMappings } from '~/db/user-mappings.server'
+import { getUserMappingByNavIdent, getUserMappings } from '~/db/user-mappings.server'
+import { getUserIdentity } from '~/lib/auth.server'
 import type { FourEyesStatus } from '~/lib/four-eyes-status'
 import { requireTeamEnvAppParams } from '~/lib/route-params.server'
 import { getDateRangeForPeriod, TIME_PERIOD_OPTIONS, type TimePeriod } from '~/lib/time-periods'
@@ -108,10 +109,21 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   })
   deployerOptions.sort((a, b) => a.label.localeCompare(b.label, 'no'))
 
+  // Find current user's GitHub username for "Meg" shortcut
+  const currentUser = await getUserIdentity(request)
+  let currentUserGithub: string | null = null
+  if (currentUser?.navIdent) {
+    const mapping = await getUserMappingByNavIdent(currentUser.navIdent)
+    if (mapping?.github_username && allDeployers.includes(mapping.github_username)) {
+      currentUserGithub = mapping.github_username
+    }
+  }
+
   return {
     app,
     userMappings: serializeUserMappings(userMappings),
     deployerOptions,
+    currentUserGithub,
     hasGroup,
     showGroup: showGroup && hasGroup,
     errorReasons,
@@ -128,6 +140,7 @@ export default function AppDeployments() {
     total_pages,
     userMappings,
     deployerOptions,
+    currentUserGithub,
     hasGroup,
     showGroup,
     errorReasons,
@@ -227,11 +240,14 @@ export default function AppDeployments() {
                 onChange={(e) => updateFilter('deployer', e.target.value)}
               >
                 <option value="">Alle</option>
-                {deployerOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
+                {currentUserGithub && <option value={currentUserGithub}>Meg</option>}
+                {deployerOptions
+                  .filter((opt) => opt.value !== currentUserGithub)
+                  .map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
               </Select>
 
               <TextField
