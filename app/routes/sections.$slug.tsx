@@ -38,8 +38,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const ytdStart = new Date(new Date().getFullYear(), 0, 1)
 
-  const [allTimeStats, ytdStats, ytdTeamStats, devTeams] = await Promise.all([
-    getSectionOverallStats(section.id),
+  const [ytdStats, ytdTeamStats, devTeams] = await Promise.all([
     getSectionOverallStats(section.id, ytdStart),
     getSectionDashboardStats(section.id, ytdStart),
     getDevTeamsBySection(section.id),
@@ -47,8 +46,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   return {
     section,
-    allTimeStats,
-    ytdDeployments: ytdStats.total_deployments,
+    ytdStats,
     ytdTeamStats,
     devTeams,
     isAdmin: user.role === 'admin',
@@ -56,10 +54,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 export default function SectionOverview() {
-  const { section, allTimeStats, ytdDeployments, ytdTeamStats, devTeams, isAdmin } = useLoaderData<typeof loader>()
+  const { section, ytdStats, ytdTeamStats, devTeams, isAdmin } = useLoaderData<typeof loader>()
 
-  const overallFourEyes = allTimeStats.four_eyes_coverage
-  const overallGoalCoverage = allTimeStats.goal_coverage
+  const overallFourEyes = ytdStats.four_eyes_coverage
+  const overallGoalCoverage = ytdStats.goal_coverage
 
   return (
     <VStack gap="space-32">
@@ -85,7 +83,7 @@ export default function SectionOverview() {
 
       {/* Summary cards */}
       <HGrid gap="space-16" columns={{ xs: 1, sm: 2, lg: 4 }}>
-        <SummaryCard title="Deployments i år" value={ytdDeployments} icon={<BarChartIcon aria-hidden />} />
+        <SummaryCard title="Deployments i år" value={ytdStats.total_deployments} icon={<BarChartIcon aria-hidden />} />
         <SummaryCard
           title="4-øyne dekning"
           value={formatCoverage(overallFourEyes)}

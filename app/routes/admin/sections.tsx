@@ -17,18 +17,15 @@ export async function loader({ request }: Route.LoaderArgs) {
   const allSections = await getAllSectionsWithTeams()
   const ytdStart = new Date(new Date().getFullYear(), 0, 1)
 
-  const [allTimeStatsList, ytdStatsList] = await Promise.all([
-    Promise.all(allSections.map((s) => getSectionOverallStats(s.id))),
-    Promise.all(allSections.map((s) => getSectionOverallStats(s.id, ytdStart))),
-  ])
+  const ytdStatsList = await Promise.all(allSections.map((s) => getSectionOverallStats(s.id, ytdStart)))
 
   const sections = allSections.map((s, i) => ({
     ...s,
     stats: ytdStatsList[i],
   }))
 
-  // Aggregate across all sections
-  const aggregate = allTimeStatsList.reduce(
+  // Aggregate YTD stats across all sections (consistent with section cards)
+  const aggregate = ytdStatsList.reduce(
     (acc, s) => ({
       total_deployments: acc.total_deployments + s.total_deployments,
       with_four_eyes: acc.with_four_eyes + s.with_four_eyes,
@@ -42,13 +39,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   const fourEyesCoverage = aggregate.total_deployments > 0 ? aggregate.with_four_eyes / aggregate.total_deployments : 0
   const goalCoverage = aggregate.total_deployments > 0 ? aggregate.linked_to_goal / aggregate.total_deployments : 0
 
-  const ytdTotal = ytdStatsList.reduce((acc, s) => acc + s.total_deployments, 0)
-
   return {
     isAdmin: user.role === 'admin',
     sections,
     overallStats: { fourEyesCoverage, goalCoverage },
-    ytdDeployments: ytdTotal,
+    ytdDeployments: aggregate.total_deployments,
   }
 }
 
