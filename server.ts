@@ -5,6 +5,7 @@ import express from 'express'
 import path from 'node:path'
 import url from 'node:url'
 import winston from 'winston'
+import { createAuthMiddleware } from './auth-middleware.js'
 
 const isProd = process.env.NODE_ENV === 'production'
 
@@ -58,6 +59,9 @@ app.use(express.static('public', { maxAge: '1h' }))
 
 // Structured access logging
 app.use(accessLogMiddleware)
+
+// Authentication — all requests except health checks and M2M routes require a valid JWT
+app.use(createAuthMiddleware())
 
 // React Router request handler
 const build = await import(url.pathToFileURL(buildPath).href)

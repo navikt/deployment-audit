@@ -52,7 +52,7 @@ spec:
         - "http://localhost:3000/auth/callback"
     sidecar:
       enabled: true
-      autoLogin: true
+      autoLogin: false
 
   gcp:
     sqlInstances:
