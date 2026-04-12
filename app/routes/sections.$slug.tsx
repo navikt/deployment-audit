@@ -212,22 +212,22 @@ function DevTeamCard({ stats, sectionSlug }: { stats: DevTeamDashboardStats; sec
 }
 
 function getHealthVariant(ratio: number): 'success' | 'warning' | 'error' | 'neutral' {
-  if (ratio >= 0.9) return 'success'
-  if (ratio >= 0.7) return 'warning'
+  if (ratio >= 1) return 'success'
+  if (ratio >= 0.9) return 'warning'
   if (ratio > 0) return 'error'
   return 'neutral'
 }
 
 function getHealthLabel(fourEyes: number, goalCoverage: number): string {
   const min = Math.min(fourEyes, goalCoverage)
-  if (min >= 0.9) return 'God'
-  if (min >= 0.7) return 'Akseptabel'
+  if (min >= 1) return 'God'
+  if (min >= 0.9) return 'Akseptabel'
   if (min > 0) return 'Trenger oppfølging'
   return 'Ingen data'
 }
 
 function getHealthIcon(fourEyes: number, goalCoverage: number): React.ReactNode {
   const min = Math.min(fourEyes, goalCoverage)
-  if (min >= 0.7) return <CheckmarkCircleIcon aria-hidden />
+  if (min >= 0.9) return <CheckmarkCircleIcon aria-hidden />
   return <ExclamationmarkTriangleIcon aria-hidden />
 }
