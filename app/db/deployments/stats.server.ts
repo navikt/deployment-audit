@@ -85,6 +85,7 @@ export async function getAppDeploymentStatsBatch(
       SUM(CASE WHEN four_eyes_status = ANY($2::text[]) THEN 1 ELSE 0 END) as with_four_eyes,
       SUM(CASE WHEN four_eyes_status = ANY($3) THEN 1 ELSE 0 END) as without_four_eyes,
       SUM(CASE WHEN four_eyes_status = ANY($4) THEN 1 ELSE 0 END) as pending_verification,
+      SUM(CASE WHEN NOT EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = deployments.id) THEN 1 ELSE 0 END) as missing_goal_links,
       MAX(created_at) as last_deployment
     FROM deployments
     WHERE monitored_app_id = ANY($1) ${auditYearFilter}
@@ -133,6 +134,7 @@ export async function getAppDeploymentStatsBatch(
       with_four_eyes: withFourEyes,
       without_four_eyes: parseInt(row.without_four_eyes, 10) || 0,
       pending_verification: parseInt(row.pending_verification, 10) || 0,
+      missing_goal_links: parseInt(row.missing_goal_links, 10) || 0,
       last_deployment: row.last_deployment ? new Date(row.last_deployment) : null,
       last_deployment_id: lastDeploymentIds.get(appId) || null,
       four_eyes_percentage: percentage,

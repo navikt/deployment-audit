@@ -835,6 +835,7 @@ export interface AppDeploymentStats {
   last_deployment: Date | null
   last_deployment_id: number | null
   four_eyes_percentage: number
+  missing_goal_links?: number
 }
 
 /**
