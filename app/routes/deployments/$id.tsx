@@ -55,7 +55,7 @@ import {
   getPreviousDeploymentForNav,
   getStatusHistory,
 } from '~/db/deployments.server'
-import { getDevTeamsForApp } from '~/db/dev-teams.server'
+import { getDevTeamsBySection, getDevTeamsForApp } from '~/db/dev-teams.server'
 import { getDeviationsByDeploymentId } from '~/db/deviations.server'
 import { getLatestVerificationRun } from '~/db/github-data.server'
 import { getMonitoredApplicationById } from '~/db/monitored-applications.server'
@@ -146,6 +146,18 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const boardsPerTeam = await Promise.all(devTeams.map((dt) => getBoardsWithGoalsForDevTeam(dt.id, deploymentDate)))
   const availableBoards = boardsPerTeam.flatMap((boards, i) =>
     boards.map((b) => ({ ...b, dev_team_name: devTeams[i].name })),
+  )
+
+  // Load boards from other teams in the same section(s) for cross-team goal linking
+  const devTeamIds = new Set(devTeams.map((dt) => dt.id))
+  const sectionIds = [...new Set(allDevTeams.map((dt) => dt.section_id))]
+  const sectionTeamArrays = await Promise.all(sectionIds.map((sid) => getDevTeamsBySection(sid)))
+  const otherSectionTeams = sectionTeamArrays.flat().filter((dt) => !devTeamIds.has(dt.id))
+  const sectionBoardsPerTeam = await Promise.all(
+    otherSectionTeams.map((dt) => getBoardsWithGoalsForDevTeam(dt.id, deploymentDate)),
+  )
+  const sectionBoards = sectionBoardsPerTeam.flatMap((boards, i) =>
+    boards.map((b) => ({ ...b, dev_team_name: otherSectionTeams[i].name })),
   )
 
   // Get previous and next deployments for navigation (respecting filters)
@@ -293,6 +305,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     deviations,
     goalLinks,
     availableBoards,
+    sectionBoards,
     previousDeployment,
     previousDeploymentForDiff,
     nextDeployment,
@@ -328,6 +341,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
     deviations,
     goalLinks,
     availableBoards,
+    sectionBoards,
     previousDeployment,
     previousDeploymentForDiff,
     nextDeployment,
@@ -1886,7 +1900,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
         </VStack>
       )}
       {/* Goal links / origin of change section */}
-      <GoalLinksSection goalLinks={goalLinks} availableBoards={availableBoards} />
+      <GoalLinksSection goalLinks={goalLinks} availableBoards={availableBoards} sectionBoards={sectionBoards} />
 
       {/* Deviations section */}
       <VStack gap="space-16">
