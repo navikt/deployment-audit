@@ -15,7 +15,7 @@ import {
   TextField,
   VStack,
 } from '@navikt/ds-react'
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Form, Link, useActionData, useLoaderData, useNavigation, useRouteLoaderData } from 'react-router'
 import { ActionAlert } from '~/components/ActionAlert'
 import { AppCard, type AppCardData } from '~/components/AppCard'
@@ -24,12 +24,17 @@ import { type Board, createBoard, getBoardsByDevTeam } from '~/db/boards.server'
 import { type BoardObjectiveProgress, getBoardObjectiveProgress } from '~/db/dashboard-stats.server'
 import { getAppDeploymentStatsBatch } from '~/db/deployments.server'
 import {
+  addAppToDevTeam,
   getAvailableAppsForDevTeam,
   getDevTeamApplications,
   getDevTeamBySlug,
   setDevTeamApplications,
 } from '~/db/dev-teams.server'
-import { getAllAlertCounts, getAllMonitoredApplications } from '~/db/monitored-applications.server'
+import {
+  createMonitoredApplication,
+  getAllAlertCounts,
+  getAllMonitoredApplications,
+} from '~/db/monitored-applications.server'
 import { getSectionBySlug } from '~/db/sections.server'
 import { type DevTeamMember, getDevTeamMembers } from '~/db/user-dev-team-preference.server'
 import { requireUser } from '~/lib/auth.server'
@@ -125,6 +130,28 @@ export async function action({ request, params }: Route.ActionArgs) {
       return { success: 'Applikasjoner oppdatert.' }
     } catch (error) {
       return { error: `Kunne ikke oppdatere applikasjoner: ${error}` }
+    }
+  }
+
+  if (intent === 'add_app') {
+    const teamSlug = (formData.get('team_slug') as string)?.trim()
+    const environmentName = (formData.get('environment_name') as string)?.trim()
+    const appName = (formData.get('app_name') as string)?.trim()
+
+    if (!teamSlug || !environmentName || !appName) {
+      return { error: 'Alle felt er påkrevd for å legge til ny applikasjon.' }
+    }
+
+    try {
+      const monitoredApp = await createMonitoredApplication({
+        team_slug: teamSlug,
+        environment_name: environmentName,
+        app_name: appName,
+      })
+      await addAppToDevTeam(devTeam.id, monitoredApp.id)
+      return { success: `La til ${appName} (${environmentName}) og koblet den til teamet.` }
+    } catch (error) {
+      return { error: `Kunne ikke legge til applikasjon: ${error}` }
     }
   }
 
@@ -352,61 +379,146 @@ const AddAppsDialog = forwardRef<
   HTMLDialogElement,
   { devTeamId: number; availableApps: AvailableApp[]; isSubmitting: boolean }
 >(function AddAppsDialog({ devTeamId, availableApps, isSubmitting }, ref) {
-  const appsByNaisTeam = new Map<string, AvailableApp[]>()
-  for (const app of availableApps) {
-    const group = appsByNaisTeam.get(app.team_slug) ?? []
-    group.push(app)
-    appsByNaisTeam.set(app.team_slug, group)
+  const [search, setSearch] = useState('')
+  const [showAddNew, setShowAddNew] = useState(false)
+
+  const searchLower = search.toLowerCase()
+  const filteredApps = useMemo(
+    () =>
+      search
+        ? availableApps.filter(
+            (app) =>
+              app.app_name.toLowerCase().includes(searchLower) ||
+              app.team_slug.toLowerCase().includes(searchLower) ||
+              app.environment_name.toLowerCase().includes(searchLower),
+          )
+        : availableApps,
+    [availableApps, search, searchLower],
+  )
+
+  const appsByNaisTeam = useMemo(() => {
+    const grouped = new Map<string, AvailableApp[]>()
+    for (const app of filteredApps) {
+      const group = grouped.get(app.team_slug) ?? []
+      group.push(app)
+      grouped.set(app.team_slug, group)
+    }
+    return grouped
+  }, [filteredApps])
+
+  const environments = useMemo(() => [...new Set(availableApps.map((a) => a.environment_name))].sort(), [availableApps])
+
+  const closeModal = () => {
+    if (typeof ref === 'object' && ref?.current) ref.current.close()
   }
 
   return (
     <Modal ref={ref} header={{ heading: 'Legg til applikasjoner' }} closeOnBackdropClick width="600px">
-      <Form
-        method="post"
-        onSubmit={() => {
-          if (typeof ref === 'object' && ref?.current) ref.current.close()
-        }}
-      >
-        <input type="hidden" name="intent" value="update_apps" />
-        <input type="hidden" name="id" value={devTeamId} />
-        <Modal.Body>
-          {availableApps.length === 0 ? (
-            <Alert variant="info" size="small">
-              Ingen overvåkede applikasjoner funnet.
-            </Alert>
-          ) : (
-            <VStack gap="space-16">
-              {[...appsByNaisTeam.entries()].map(([naisTeam, apps]) => (
-                <CheckboxGroup key={naisTeam} legend={naisTeam} size="small">
-                  {apps.map((app) => (
-                    <Checkbox key={app.id} name="app_ids" value={String(app.id)} defaultChecked={app.is_linked}>
-                      {app.app_name}{' '}
-                      <BodyShort as="span" size="small" textColor="subtle">
-                        ({app.environment_name})
-                      </BodyShort>
-                    </Checkbox>
-                  ))}
-                </CheckboxGroup>
-              ))}
-            </VStack>
-          )}
-        </Modal.Body>
-        <Modal.Footer>
-          <Button type="submit" size="small" loading={isSubmitting}>
-            Lagre
-          </Button>
-          <Button
-            variant="tertiary"
-            size="small"
-            type="button"
-            onClick={() => {
-              if (typeof ref === 'object' && ref?.current) ref.current.close()
+      <Modal.Body>
+        <VStack gap="space-16">
+          {/* Link existing apps */}
+          <Form
+            method="post"
+            id="update-apps-form"
+            onSubmit={() => {
+              closeModal()
             }}
           >
-            Avbryt
-          </Button>
-        </Modal.Footer>
-      </Form>
+            <input type="hidden" name="intent" value="update_apps" />
+            <input type="hidden" name="id" value={devTeamId} />
+            <VStack gap="space-12">
+              <TextField
+                label="Søk etter applikasjon"
+                hideLabel
+                placeholder="Søk etter applikasjon..."
+                size="small"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                autoComplete="off"
+              />
+              <Box style={{ maxHeight: '400px', overflowY: 'auto' }} paddingInline="space-4" paddingBlock="space-4">
+                {filteredApps.length === 0 ? (
+                  <BodyShort size="small" textColor="subtle">
+                    {search ? 'Ingen applikasjoner matcher søket.' : 'Ingen overvåkede applikasjoner funnet.'}
+                  </BodyShort>
+                ) : (
+                  <VStack gap="space-16">
+                    {[...appsByNaisTeam.entries()].map(([naisTeam, apps]) => (
+                      <CheckboxGroup key={naisTeam} legend={naisTeam} size="small">
+                        {apps.map((app) => (
+                          <Checkbox key={app.id} name="app_ids" value={String(app.id)} defaultChecked={app.is_linked}>
+                            {app.app_name}{' '}
+                            <BodyShort as="span" size="small" textColor="subtle">
+                              ({app.environment_name})
+                            </BodyShort>
+                          </Checkbox>
+                        ))}
+                      </CheckboxGroup>
+                    ))}
+                  </VStack>
+                )}
+              </Box>
+            </VStack>
+          </Form>
+
+          {/* Add new unmonitored app */}
+          {!showAddNew ? (
+            <Button variant="tertiary" size="small" icon={<PlusIcon aria-hidden />} onClick={() => setShowAddNew(true)}>
+              Legg til ny applikasjon som ikke er overvåket
+            </Button>
+          ) : (
+            <Box background="neutral-soft" padding="space-16" borderRadius="4">
+              <Form
+                method="post"
+                onSubmit={() => {
+                  setShowAddNew(false)
+                }}
+              >
+                <input type="hidden" name="intent" value="add_app" />
+                <VStack gap="space-12">
+                  <Heading level="3" size="xsmall">
+                    Legg til ny applikasjon
+                  </Heading>
+                  <HStack gap="space-8" wrap>
+                    <TextField label="Nais-team" name="team_slug" size="small" autoComplete="off" />
+                    <Select label="Miljø" name="environment_name" size="small">
+                      {environments.length > 0 ? (
+                        environments.map((env) => (
+                          <option key={env} value={env}>
+                            {env}
+                          </option>
+                        ))
+                      ) : (
+                        <>
+                          <option value="prod-gcp">prod-gcp</option>
+                          <option value="prod-fss">prod-fss</option>
+                        </>
+                      )}
+                    </Select>
+                    <TextField label="Applikasjonsnavn" name="app_name" size="small" autoComplete="off" />
+                  </HStack>
+                  <HStack gap="space-8">
+                    <Button type="submit" size="small" loading={isSubmitting}>
+                      Legg til og koble
+                    </Button>
+                    <Button variant="tertiary" size="small" type="button" onClick={() => setShowAddNew(false)}>
+                      Avbryt
+                    </Button>
+                  </HStack>
+                </VStack>
+              </Form>
+            </Box>
+          )}
+        </VStack>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button type="submit" form="update-apps-form" size="small" loading={isSubmitting}>
+          Lagre
+        </Button>
+        <Button variant="tertiary" size="small" type="button" onClick={closeModal}>
+          Avbryt
+        </Button>
+      </Modal.Footer>
     </Modal>
   )
 })

@@ -189,6 +189,16 @@ export async function setDevTeamApplications(devTeamId: number, monitoredAppIds:
   }
 }
 
+/** Add a single application link to a dev team (idempotent) */
+export async function addAppToDevTeam(devTeamId: number, monitoredAppId: number): Promise<void> {
+  await pool.query(
+    `INSERT INTO dev_team_applications (dev_team_id, monitored_app_id)
+     VALUES ($1, $2)
+     ON CONFLICT DO NOTHING`,
+    [devTeamId, monitoredAppId],
+  )
+}
+
 /** Get all active apps with their link status for a dev team */
 export async function getAvailableAppsForDevTeam(
   devTeamId: number,
