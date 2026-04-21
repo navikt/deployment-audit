@@ -147,7 +147,10 @@ export async function upsertUserMapping(params: {
   )
 
   const mapping = result.rows[0]
-  userMappingCache.set(githubUsername, mapping)
+  userMappingCache.set(githubUsername.toLowerCase(), mapping)
+  if (mapping.nav_ident) {
+    userMappingCache.set(mapping.nav_ident.toLowerCase(), mapping)
+  }
   return mapping
 }
 
@@ -155,8 +158,15 @@ export async function upsertUserMapping(params: {
  * Delete a user mapping
  */
 export async function deleteUserMapping(githubUsername: string): Promise<void> {
+  const normalized = githubUsername.toLowerCase()
+  // Fetch from DB to reliably get nav_ident for cache cleanup
+  const result = await pool.query('SELECT nav_ident FROM user_mappings WHERE github_username = $1', [githubUsername])
+  const existing = result.rows[0]
   await pool.query('DELETE FROM user_mappings WHERE github_username = $1', [githubUsername])
-  userMappingCache.delete(githubUsername)
+  userMappingCache.delete(normalized)
+  if (existing?.nav_ident) {
+    userMappingCache.delete(existing.nav_ident.toLowerCase())
+  }
 }
 
 /**

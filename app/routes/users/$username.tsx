@@ -22,7 +22,7 @@ import {
   VStack,
 } from '@navikt/ds-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Form, Link, useActionData, useLoaderData, useNavigation, useSearchParams } from 'react-router'
+import { Form, Link, redirect, useActionData, useLoaderData, useNavigation, useSearchParams } from 'react-router'
 import { DeploymentActivityChart } from '~/components/DeploymentActivityChart'
 import { MethodTag, StatusTag } from '~/components/deployment-tags'
 import { getBoardsWithGoalsForDevTeam } from '~/db/boards.server'
@@ -40,7 +40,7 @@ import { addUserDevTeam, getUserDevTeams, removeUserDevTeam } from '~/db/user-de
 import { getUserMapping, upsertUserMapping } from '~/db/user-mappings.server'
 import { getUserLandingPage, setUserLandingPage } from '~/db/user-settings.server'
 import { requireUser } from '~/lib/auth.server'
-import { isValidEmail, isValidNavIdent } from '~/lib/form-validators'
+import { isValidEmail, isValidGitHubUsername, isValidNavIdent } from '~/lib/form-validators'
 import type { FourEyesStatus } from '~/lib/four-eyes-status'
 import { getBotDescription, getBotDisplayName, isGitHubBot } from '~/lib/github-bots'
 import { getDateRangeForPeriod, TIME_PERIOD_OPTIONS, type TimePeriod } from '~/lib/time-periods'
@@ -80,8 +80,19 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const botDisplayName = getBotDisplayName(username)
   const botDescription = getBotDescription(username)
 
-  const [mapping, deploymentCount, paginatedDeployments, monthlyStats, deployerApps] = await Promise.all([
-    isBot ? Promise.resolve(null) : getUserMapping(username),
+  // Resolve user mapping first to check for canonical URL redirect
+  const mapping = isBot ? null : await getUserMapping(username)
+
+  // Redirect to canonical GitHub username URL if nav-ident resolves to a different username
+  if (
+    mapping &&
+    isValidGitHubUsername(mapping.github_username) &&
+    mapping.github_username.toLowerCase() !== username.toLowerCase()
+  ) {
+    throw redirect(`/users/${encodeURIComponent(mapping.github_username)}${url.search}`)
+  }
+
+  const [deploymentCount, paginatedDeployments, monthlyStats, deployerApps] = await Promise.all([
     getDeploymentCountByDeployer(username),
     getDeployerDeploymentsPaginated(username, page, 20, dateRange?.startDate, dateRange?.endDate, filters),
     getDeployerMonthlyStats(username, dateRange?.startDate, dateRange?.endDate),
@@ -90,6 +101,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   // Check if this is the logged-in user's own profile
   const isOwnProfile = !isBot && mapping?.nav_ident === identity.navIdent
+
+  // Check if the logged-in user is viewing their own nav-ident URL without a mapping
+  const canPrefillOwnMapping = !isBot && !mapping && username.toUpperCase() === identity.navIdent.toUpperCase()
 
   // Fetch dev teams if user has a nav_ident
   let devTeams: Awaited<ReturnType<typeof getUserDevTeams>> = []
@@ -145,13 +159,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     devTeams,
     availableBoards,
     isOwnProfile,
+    canPrefillOwnMapping,
+    loggedInNavIdent: canPrefillOwnMapping ? identity.navIdent : null,
     availableDevTeams,
     landingPage,
     allSections,
   }
 }
 
-export async function action({ request }: Route.ActionArgs) {
+export async function action({ request, params }: Route.ActionArgs) {
   const identity = await requireUser(request)
   const formData = await request.formData()
   const intent = formData.get('intent')
@@ -250,18 +266,26 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   if (intent === 'create-mapping') {
-    const githubUsername = formData.get('github_username') as string
-    const navEmail = (formData.get('nav_email') as string) || null
-    const navIdent = (formData.get('nav_ident') as string) || null
+    const routeUsername = params.username || ''
+    const isSelfService = routeUsername.toUpperCase() === identity.navIdent.toUpperCase()
 
-    const fieldErrors: { nav_email?: string; nav_ident?: string } = {}
+    // Server-side ownership enforcement:
+    // - Self-service (own nav-ident URL): allow free-form GitHub username, force nav_ident
+    // - Other profiles: derive GitHub username from route param, allow free-form nav_ident
+    const githubUsername = isSelfService
+      ? (formData.get('github_username') as string)?.trim().toLowerCase() || ''
+      : routeUsername.toLowerCase()
+    const navEmail = (formData.get('nav_email') as string) || null
+    const navIdent = isSelfService ? identity.navIdent : (formData.get('nav_ident') as string) || null
+
+    const fieldErrors: { github_username?: string; nav_email?: string; nav_ident?: string } = {}
 
     if (!githubUsername) {
-      return { error: 'GitHub brukernavn er påkrevd' }
-    }
-
-    if (isGitHubBot(githubUsername)) {
-      return { error: 'Kan ikke opprette mapping for GitHub-botkontoer' }
+      fieldErrors.github_username = 'GitHub brukernavn er påkrevd'
+    } else if (!isValidGitHubUsername(githubUsername)) {
+      fieldErrors.github_username = 'Ugyldig GitHub-brukernavn (kun bokstaver, tall og bindestrek)'
+    } else if (isGitHubBot(githubUsername)) {
+      fieldErrors.github_username = 'Kan ikke opprette mapping for GitHub-botkontoer'
     }
 
     // Validate email format
@@ -285,7 +309,7 @@ export async function action({ request }: Route.ActionArgs) {
       navIdent,
       slackMemberId: (formData.get('slack_member_id') as string) || null,
     })
-    return { success: true }
+    return redirect(`/users/${githubUsername}`)
   }
 
   return { error: 'Ukjent handling' }
@@ -311,6 +335,8 @@ export default function UserPage() {
     devTeams,
     availableBoards,
     isOwnProfile,
+    canPrefillOwnMapping,
+    loggedInNavIdent,
     availableDevTeams,
     landingPage,
     allSections,
@@ -796,14 +822,28 @@ export default function UserPage() {
           <Modal.Body>
             <Form method="post" id="create-mapping-form">
               <input type="hidden" name="intent" value="create-mapping" />
-              <input type="hidden" name="github_username" value={username} />
+              {!canPrefillOwnMapping && <input type="hidden" name="github_username" value={username} />}
               <VStack gap="space-16">
-                <TextField label="GitHub brukernavn" value={username} disabled />
+                {canPrefillOwnMapping ? (
+                  <TextField
+                    label="GitHub brukernavn"
+                    name="github_username"
+                    error={actionData?.fieldErrors?.github_username}
+                  />
+                ) : (
+                  <TextField
+                    label="GitHub brukernavn"
+                    value={username}
+                    error={actionData?.fieldErrors?.github_username}
+                    disabled
+                  />
+                )}
                 <TextField label="Navn" name="display_name" />
                 <TextField label="Nav e-post" name="nav_email" error={actionData?.fieldErrors?.nav_email} />
                 <TextField
                   label="Nav-ident"
                   name="nav_ident"
+                  defaultValue={canPrefillOwnMapping ? (loggedInNavIdent ?? '') : ''}
                   description="Format: én bokstav etterfulgt av 6 siffer (f.eks. A123456)"
                   error={actionData?.fieldErrors?.nav_ident}
                 />
