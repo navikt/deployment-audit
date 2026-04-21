@@ -40,7 +40,7 @@ export async function autoLinkGoalKeywords(
        unnest(bo.keywords) AS keyword
      FROM boards b
      JOIN board_objectives bo ON bo.board_id = b.id
-     WHERE b.dev_team_id = ANY($1) AND b.is_active = true AND array_length(bo.keywords, 1) > 0
+     WHERE b.dev_team_id = ANY($1) AND b.is_active = true AND bo.is_active = true AND array_length(bo.keywords, 1) > 0
      UNION ALL
      SELECT
        b.id AS board_id,
@@ -52,7 +52,7 @@ export async function autoLinkGoalKeywords(
      FROM boards b
      JOIN board_objectives bo ON bo.board_id = b.id
      JOIN board_key_results bkr ON bkr.objective_id = bo.id
-     WHERE b.dev_team_id = ANY($1) AND b.is_active = true AND array_length(bkr.keywords, 1) > 0`,
+     WHERE b.dev_team_id = ANY($1) AND b.is_active = true AND bo.is_active = true AND bkr.is_active = true AND array_length(bkr.keywords, 1) > 0`,
     [devTeamIds],
   )
 
@@ -82,7 +82,7 @@ export async function autoLinkGoalKeywords(
 
   // Check for existing links to avoid duplicates
   const existingResult = await pool.query(
-    `SELECT objective_id, key_result_id FROM deployment_goal_links WHERE deployment_id = $1`,
+    `SELECT objective_id, key_result_id FROM deployment_goal_links WHERE deployment_id = $1 AND is_active = true`,
     [deploymentId],
   )
   const existingKeys = new Set(

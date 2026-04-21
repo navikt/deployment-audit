@@ -110,4 +110,59 @@ describe('Database migrations', () => {
     expect(fks).toContainEqual('board_key_results.objective_id -> board_objectives')
     expect(fks).toContainEqual('deployments.monitored_app_id -> monitored_applications')
   })
+
+  it('should have is_active columns on board_objectives and board_key_results', async () => {
+    const { rows } = await pool.query<{
+      table_name: string
+      column_name: string
+      data_type: string
+      is_nullable: string
+      column_default: string
+    }>(`
+      SELECT table_name, column_name, data_type, is_nullable, column_default
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name IN ('board_objectives', 'board_key_results')
+        AND column_name = 'is_active'
+      ORDER BY table_name
+    `)
+
+    expect(rows).toHaveLength(2)
+
+    for (const col of rows) {
+      expect(col.data_type).toBe('boolean')
+      expect(col.is_nullable).toBe('NO')
+      expect(col.column_default).toContain('true')
+    }
+
+    expect(rows.map((r) => r.table_name)).toEqual(['board_key_results', 'board_objectives'])
+  })
+
+  it('should have RESTRICT delete rules on soft-delete protected foreign keys', async () => {
+    const { rows } = await pool.query<{
+      constraint_name: string
+      delete_rule: string
+    }>(`
+      SELECT tc.constraint_name, rc.delete_rule
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.referential_constraints rc
+        ON tc.constraint_name = rc.constraint_name
+      WHERE tc.table_schema = 'public'
+        AND tc.constraint_type = 'FOREIGN KEY'
+        AND tc.constraint_name IN (
+          'deployment_goal_links_objective_id_fkey',
+          'deployment_goal_links_key_result_id_fkey',
+          'board_objectives_board_id_fkey',
+          'board_key_results_objective_id_fkey',
+          'external_references_objective_id_fkey',
+          'external_references_key_result_id_fkey'
+        )
+      ORDER BY tc.constraint_name
+    `)
+
+    expect(rows).toHaveLength(6)
+    for (const fk of rows) {
+      expect(fk.delete_rule, `${fk.constraint_name} should be RESTRICT`).toBe('RESTRICT')
+    }
+  })
 })

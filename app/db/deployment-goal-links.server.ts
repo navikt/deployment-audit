@@ -9,6 +9,7 @@ export interface DeploymentGoalLink {
   external_url_title: string | null
   link_method: 'manual' | 'slack' | 'commit_keyword' | 'pr_title'
   linked_by: string | null
+  is_active: boolean
   created_at: string
 }
 
@@ -17,19 +18,25 @@ export interface DeploymentGoalLinkWithDetails extends DeploymentGoalLink {
   key_result_title: string | null
   board_title: string | null
   board_period_label: string | null
+  objective_is_active: boolean | null
+  key_result_is_active: boolean | null
 }
 
 export async function getLinksForDeployment(deploymentId: number): Promise<DeploymentGoalLinkWithDetails[]> {
   const result = await pool.query(
     `SELECT dgl.*,
-       bo.title AS objective_title,
+       COALESCE(bo.title, bo_via_kr.title) AS objective_title,
        bkr.title AS key_result_title,
-       b.title AS board_title,
-       b.period_label AS board_period_label
+       COALESCE(b.title, b_via_kr.title) AS board_title,
+       COALESCE(b.period_label, b_via_kr.period_label) AS board_period_label,
+       COALESCE(bo.is_active, bo_via_kr.is_active) AS objective_is_active,
+       bkr.is_active AS key_result_is_active
      FROM deployment_goal_links dgl
      LEFT JOIN board_objectives bo ON bo.id = dgl.objective_id
      LEFT JOIN board_key_results bkr ON bkr.id = dgl.key_result_id
-     LEFT JOIN boards b ON b.id = bo.board_id OR b.id = (SELECT bo2.board_id FROM board_objectives bo2 WHERE bo2.id = bkr.objective_id)
+     LEFT JOIN board_objectives bo_via_kr ON bo_via_kr.id = bkr.objective_id
+     LEFT JOIN boards b ON b.id = bo.board_id
+     LEFT JOIN boards b_via_kr ON b_via_kr.id = bo_via_kr.board_id
      WHERE dgl.deployment_id = $1
      ORDER BY dgl.created_at DESC`,
     [deploymentId],
@@ -46,10 +53,58 @@ export async function addDeploymentGoalLink(data: {
   link_method: DeploymentGoalLink['link_method']
   linked_by?: string
 }): Promise<DeploymentGoalLink> {
-  const result = await pool.query(
-    `INSERT INTO deployment_goal_links (deployment_id, objective_id, key_result_id, external_url, external_url_title, link_method, linked_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-    [
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+
+    // Reject linking to inactive objectives or key results (atomic with row locks)
+    if (data.objective_id) {
+      const obj = await client.query('SELECT is_active FROM board_objectives WHERE id = $1 FOR UPDATE', [
+        data.objective_id,
+      ])
+      if (obj.rowCount === 0) {
+        throw new Error('Målet finnes ikke.')
+      }
+      if (!obj.rows[0].is_active) {
+        throw new Error('Kan ikke koble til et deaktivert mål.')
+      }
+    }
+    if (data.key_result_id) {
+      const kr = await client.query(
+        `SELECT bkr.is_active AS kr_active, bo.is_active AS obj_active
+         FROM board_key_results bkr
+         JOIN board_objectives bo ON bo.id = bkr.objective_id
+         WHERE bkr.id = $1
+         FOR UPDATE OF bkr, bo`,
+        [data.key_result_id],
+      )
+      if (kr.rowCount === 0) {
+        throw new Error('Nøkkelresultatet finnes ikke.')
+      }
+      if (!kr.rows[0].kr_active) {
+        throw new Error('Kan ikke koble til et deaktivert nøkkelresultat.')
+      }
+      if (!kr.rows[0].obj_active) {
+        throw new Error('Kan ikke koble til et nøkkelresultat med deaktivert mål.')
+      }
+    }
+
+    const hasGoalId = data.objective_id != null || data.key_result_id != null
+    const insertSql = hasGoalId
+      ? `INSERT INTO deployment_goal_links (deployment_id, objective_id, key_result_id, external_url, external_url_title, link_method, linked_by)
+         SELECT $1, $2, $3, $4, $5, $6, $7
+         WHERE NOT EXISTS (
+           SELECT 1 FROM deployment_goal_links
+           WHERE deployment_id = $1
+             AND objective_id IS NOT DISTINCT FROM $2
+             AND key_result_id IS NOT DISTINCT FROM $3
+             AND is_active = true
+         )
+         RETURNING *`
+      : `INSERT INTO deployment_goal_links (deployment_id, objective_id, key_result_id, external_url, external_url_title, link_method, linked_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`
+
+    const result = await client.query(insertSql, [
       data.deployment_id,
       data.objective_id ?? null,
       data.key_result_id ?? null,
@@ -57,13 +112,45 @@ export async function addDeploymentGoalLink(data: {
       data.external_url_title ?? null,
       data.link_method,
       data.linked_by ?? null,
-    ],
-  )
-  return result.rows[0]
+    ])
+    if (hasGoalId && result.rowCount === 0) {
+      await client.query('ROLLBACK')
+      throw new Error('Koblingen finnes allerede.')
+    }
+    await client.query('COMMIT')
+    return result.rows[0]
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {})
+    throw e
+  } finally {
+    client.release()
+  }
 }
 
 export async function removeDeploymentGoalLink(id: number): Promise<void> {
-  await pool.query('DELETE FROM deployment_goal_links WHERE id = $1', [id])
+  // First check if the link exists and its current state
+  const link = await pool.query(
+    `SELECT dgl.id, dgl.is_active,
+       COALESCE(bo.is_active, bo_via_kr.is_active, true) AS objective_is_active,
+       COALESCE(bkr.is_active, true) AS kr_is_active
+     FROM deployment_goal_links dgl
+     LEFT JOIN board_objectives bo ON bo.id = dgl.objective_id
+     LEFT JOIN board_key_results bkr ON bkr.id = dgl.key_result_id
+     LEFT JOIN board_objectives bo_via_kr ON bo_via_kr.id = bkr.objective_id
+     WHERE dgl.id = $1`,
+    [id],
+  )
+
+  if (link.rowCount === 0) return
+  const row = link.rows[0]
+
+  if (!row.is_active) return // Already deactivated — idempotent
+
+  if (!row.objective_is_active || !row.kr_is_active) {
+    throw new Error('Kan ikke fjerne kobling til et deaktivert mål eller nøkkelresultat.')
+  }
+
+  await pool.query('UPDATE deployment_goal_links SET is_active = false WHERE id = $1', [id])
 }
 
 /**
@@ -78,7 +165,7 @@ export async function getUnlinkedDependabotDeploymentIds(
 ): Promise<number[]> {
   let whereSql = `WHERE d.deployer_username = $1
     AND LOWER(d.github_pr_data->'creator'->>'username') = 'dependabot[bot]'
-    AND NOT EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = d.id)`
+    AND NOT EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = d.id AND dgl.is_active = true)`
   const params: (string | Date)[] = [deployerUsername]
   let idx = 2
 
@@ -118,9 +205,43 @@ export async function bulkAddDeploymentGoalLinks(
   linkedBy?: string,
 ): Promise<number> {
   if (deploymentIds.length === 0) return 0
+
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
+
+    // Reject linking to inactive objectives or key results (inside transaction with row locks)
+    if (goal.objective_id) {
+      const obj = await client.query('SELECT is_active FROM board_objectives WHERE id = $1 FOR UPDATE', [
+        goal.objective_id,
+      ])
+      if (obj.rowCount === 0) {
+        throw new Error('Målet finnes ikke.')
+      }
+      if (!obj.rows[0].is_active) {
+        throw new Error('Kan ikke koble til et deaktivert mål.')
+      }
+    }
+    if (goal.key_result_id) {
+      const kr = await client.query(
+        `SELECT bkr.is_active AS kr_active, bo.is_active AS obj_active
+         FROM board_key_results bkr
+         JOIN board_objectives bo ON bo.id = bkr.objective_id
+         WHERE bkr.id = $1
+         FOR UPDATE OF bkr, bo`,
+        [goal.key_result_id],
+      )
+      if (kr.rowCount === 0) {
+        throw new Error('Nøkkelresultatet finnes ikke.')
+      }
+      if (!kr.rows[0].kr_active) {
+        throw new Error('Kan ikke koble til et deaktivert nøkkelresultat.')
+      }
+      if (!kr.rows[0].obj_active) {
+        throw new Error('Kan ikke koble til et nøkkelresultat med deaktivert mål.')
+      }
+    }
+
     let linked = 0
     for (const deploymentId of deploymentIds) {
       const result = await client.query(
@@ -135,7 +256,7 @@ export async function bulkAddDeploymentGoalLinks(
     await client.query('COMMIT')
     return linked
   } catch (e) {
-    await client.query('ROLLBACK')
+    await client.query('ROLLBACK').catch(() => {})
     throw e
   } finally {
     client.release()
@@ -160,7 +281,7 @@ export async function getOriginOfChangeCoverage(
          COUNT(DISTINCT d.id) AS total,
          COUNT(DISTINCT dgl.deployment_id) AS linked
        FROM deployments d
-       LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id
+       LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id AND dgl.is_active = true
        WHERE d.monitored_app_id IN (${placeholders})
          AND d.created_at >= $${directAppIds.length + 1}
          AND d.created_at < $${directAppIds.length + 2}`,
@@ -177,7 +298,7 @@ export async function getOriginOfChangeCoverage(
        COUNT(DISTINCT d.id) AS total,
        COUNT(DISTINCT dgl.deployment_id) AS linked
      FROM deployments d
-     LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id
+     LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id AND dgl.is_active = true
      WHERE d.team_slug IN (${placeholders})
        AND d.created_at >= $${naisTeamSlugs.length + 1}
        AND d.created_at < $${naisTeamSlugs.length + 2}`,

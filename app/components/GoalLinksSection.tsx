@@ -92,6 +92,10 @@ function GoalLinkItem({ link }: { link: DeploymentGoalLinkWithDetails }) {
       ? link.objective_title
       : (link.external_url_title ?? link.external_url ?? '(ukjent)')
 
+  const isGoalInactive = link.objective_is_active === false || link.key_result_is_active === false
+  const isLinkRemoved = link.is_active === false
+  const isInactive = isGoalInactive || isLinkRemoved
+
   return (
     <Box padding="space-12" borderRadius="8" background="sunken">
       <HStack justify="space-between" align="center">
@@ -114,13 +118,29 @@ function GoalLinkItem({ link }: { link: DeploymentGoalLinkWithDetails }) {
               <Tag variant={link.link_method === 'commit_keyword' ? 'alt3' : 'info'} size="xsmall">
                 {LINK_METHOD_LABELS[link.link_method] ?? link.link_method}
               </Tag>
+              {isLinkRemoved && (
+                <Tag variant="neutral" size="xsmall">
+                  Fjernet
+                </Tag>
+              )}
+              {isGoalInactive && !isLinkRemoved && (
+                <Tag variant="warning" size="xsmall">
+                  Deaktivert
+                </Tag>
+              )}
             </HStack>
           </div>
         </HStack>
         <Form method="post" style={{ display: 'inline' }}>
           <input type="hidden" name="intent" value="unlink_goal" />
           <input type="hidden" name="link_id" value={link.id} />
-          <Button variant="tertiary-neutral" size="xsmall" icon={<TrashIcon aria-hidden />} type="submit" />
+          <Button
+            variant="tertiary-neutral"
+            size="xsmall"
+            icon={<TrashIcon aria-hidden />}
+            type="submit"
+            disabled={isInactive}
+          />
         </Form>
       </HStack>
     </Box>

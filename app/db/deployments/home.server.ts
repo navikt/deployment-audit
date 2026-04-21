@@ -27,7 +27,7 @@ export async function getDevTeamAppsWithIssues(
       SELECT 
         SUM(CASE WHEN d.four_eyes_status = ANY($1) THEN 1 ELSE 0 END) as without_four_eyes,
         SUM(CASE WHEN d.four_eyes_status = ANY($2) THEN 1 ELSE 0 END) as pending_verification,
-        SUM(CASE WHEN NOT EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = d.id) THEN 1 ELSE 0 END) as missing_goal_links
+        SUM(CASE WHEN NOT EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = d.id AND dgl.is_active = true) THEN 1 ELSE 0 END) as missing_goal_links
       FROM deployments d
       WHERE d.monitored_app_id = ma.id
         AND (ma.audit_start_year IS NULL OR d.created_at >= make_date(ma.audit_start_year, 1, 1))
