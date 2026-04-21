@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isValidEmail, isValidNavIdent, isValidSlackChannel } from '../form-validators'
+import { isValidEmail, isValidGitHubUsername, isValidNavIdent, isValidSlackChannel } from '../form-validators'
 
 describe('form-validators', () => {
   describe('isValidEmail', () => {
@@ -51,6 +51,27 @@ describe('form-validators', () => {
       expect(isValidSlackChannel('general')).toBe(false)
       expect(isValidSlackChannel('D01ABC')).toBe(false)
       expect(isValidSlackChannel('#has spaces')).toBe(false)
+    })
+  })
+
+  describe('isValidGitHubUsername', () => {
+    it('accepts valid GitHub usernames', () => {
+      expect(isValidGitHubUsername('octocat')).toBe(true)
+      expect(isValidGitHubUsername('user-name')).toBe(true)
+      expect(isValidGitHubUsername('a')).toBe(true)
+      expect(isValidGitHubUsername('user123')).toBe(true)
+      expect(isValidGitHubUsername('123user')).toBe(true)
+    })
+
+    it('rejects invalid GitHub usernames', () => {
+      expect(isValidGitHubUsername('')).toBe(false)
+      expect(isValidGitHubUsername('-starts-with-hyphen')).toBe(false)
+      expect(isValidGitHubUsername('ends-with-hyphen-')).toBe(false)
+      expect(isValidGitHubUsername('has spaces')).toBe(false)
+      expect(isValidGitHubUsername('has/slash')).toBe(false)
+      expect(isValidGitHubUsername('has..dots')).toBe(false)
+      expect(isValidGitHubUsername('double--hyphen')).toBe(false)
+      expect(isValidGitHubUsername('a'.repeat(40))).toBe(false)
     })
   })
 })

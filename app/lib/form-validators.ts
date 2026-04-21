@@ -1,6 +1,7 @@
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const NAV_IDENT_REGEX = /^[a-zA-Z]\d{6}$/
 const SLACK_CHANNEL_REGEX = /^(C[A-Z0-9]+|#[\w-]+)$/i
+const GITHUB_USERNAME_REGEX = /^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9]))*$/
 
 export function isValidEmail(value: string): boolean {
   return EMAIL_REGEX.test(value)
@@ -12,4 +13,8 @@ export function isValidNavIdent(value: string): boolean {
 
 export function isValidSlackChannel(value: string): boolean {
   return SLACK_CHANNEL_REGEX.test(value)
+}
+
+export function isValidGitHubUsername(value: string): boolean {
+  return value.length <= 39 && GITHUB_USERNAME_REGEX.test(value)
 }
