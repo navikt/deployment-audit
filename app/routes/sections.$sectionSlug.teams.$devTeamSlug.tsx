@@ -391,9 +391,8 @@ function TeamCoverageCards({
   if (!hasMappedMembers) {
     return (
       <Alert variant="warning">
-        {totalMembers === unmappedMemberCount
-          ? `Ingen av de ${totalMembers} medlemmene har et GitHub-brukernavn registrert. Statistikk vises når brukerkoblinger er på plass.`
-          : `${unmappedMemberCount} av ${totalMembers} medlemmer mangler GitHub-brukernavn — statistikken kan derfor være ufullstendig.`}
+        Ingen av de {totalMembers} medlemmene har et GitHub-brukernavn registrert. Statistikk vises når brukerkoblinger
+        er på plass.
       </Alert>
     )
   }
