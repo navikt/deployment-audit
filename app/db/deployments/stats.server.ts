@@ -63,9 +63,28 @@ export async function getAppDeploymentStats(
  */
 export async function getAppDeploymentStatsBatch(
   apps: Array<{ id: number; audit_start_year?: number | null }>,
+  deployerUsernames?: string[],
 ): Promise<Map<number, AppDeploymentStats>> {
   if (apps.length === 0) {
     return new Map()
+  }
+
+  // Empty deployer filter ⇒ short-circuit to zero stats for all apps
+  if (deployerUsernames !== undefined && deployerUsernames.length === 0) {
+    const empty = new Map<number, AppDeploymentStats>()
+    for (const app of apps) {
+      empty.set(app.id, {
+        total: 0,
+        with_four_eyes: 0,
+        without_four_eyes: 0,
+        pending_verification: 0,
+        missing_goal_links: 0,
+        last_deployment: null,
+        last_deployment_id: null,
+        four_eyes_percentage: 0,
+      })
+    }
+    return empty
   }
 
   const appIds = apps.map((a) => a.id)
@@ -78,6 +97,10 @@ export async function getAppDeploymentStatsBatch(
 
   const auditYearFilter = auditYearCases ? `AND (CASE ${auditYearCases} ELSE true END)` : ''
 
+  const deployerFilter = deployerUsernames ? ' AND deployer_username = ANY($5::text[])' : ''
+  const baseParams: any[] = [appIds, APPROVED_STATUSES, NOT_APPROVED_STATUSES, PENDING_STATUSES]
+  if (deployerUsernames) baseParams.push(deployerUsernames)
+
   const result = await pool.query(
     `SELECT 
       monitored_app_id,
@@ -88,18 +111,21 @@ export async function getAppDeploymentStatsBatch(
       SUM(CASE WHEN NOT EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = deployments.id AND dgl.is_active = true) THEN 1 ELSE 0 END) as missing_goal_links,
       MAX(created_at) as last_deployment
     FROM deployments
-    WHERE monitored_app_id = ANY($1) ${auditYearFilter}
+    WHERE monitored_app_id = ANY($1) ${auditYearFilter}${deployerFilter}
     GROUP BY monitored_app_id`,
-    [appIds, APPROVED_STATUSES, NOT_APPROVED_STATUSES, PENDING_STATUSES],
+    baseParams,
   )
 
   // Get last deployment IDs in a separate query for simplicity
+  const lastDeployerFilter = deployerUsernames ? ' AND deployer_username = ANY($2::text[])' : ''
+  const lastParams: any[] = [appIds]
+  if (deployerUsernames) lastParams.push(deployerUsernames)
   const lastDeploymentResult = await pool.query(
     `SELECT DISTINCT ON (monitored_app_id) monitored_app_id, id
      FROM deployments
-     WHERE monitored_app_id = ANY($1)
+     WHERE monitored_app_id = ANY($1)${lastDeployerFilter}
      ORDER BY monitored_app_id, created_at DESC`,
-    [appIds],
+    lastParams,
   )
 
   const lastDeploymentIds = new Map<number, number>()

@@ -1,3 +1,4 @@
+import { APPROVED_STATUSES } from '~/lib/four-eyes-status'
 import { pool } from './connection.server'
 
 export interface DeploymentGoalLink {
@@ -308,4 +309,58 @@ export async function getOriginOfChangeCoverage(
   const total = Number(result.rows[0]?.total ?? 0)
   const linked = Number(result.rows[0]?.linked ?? 0)
   return { total, linked, coverage: total > 0 ? linked / total : 0 }
+}
+
+export interface DevTeamCoverageStats {
+  total: number
+  with_four_eyes: number
+  four_eyes_percentage: number
+  with_origin: number
+  origin_percentage: number
+}
+
+/**
+ * Aggregated stats for a dev team filtered to deployments performed by team members.
+ * - `monitoredAppIds`: applications belonging to the team (direct + nais-team)
+ * - `deployerUsernames`: GitHub usernames of team members
+ * Empty member list ⇒ zero stats. Empty app list ⇒ zero stats.
+ */
+export async function getDevTeamCoverageStats(
+  monitoredAppIds: number[],
+  deployerUsernames: string[],
+  startDate: Date,
+  endDate: Date,
+): Promise<DevTeamCoverageStats> {
+  if (monitoredAppIds.length === 0 || deployerUsernames.length === 0) {
+    return { total: 0, with_four_eyes: 0, four_eyes_percentage: 0, with_origin: 0, origin_percentage: 0 }
+  }
+
+  const result = await pool.query(
+    `SELECT
+       COUNT(DISTINCT d.id) AS total,
+       COUNT(DISTINCT d.id) FILTER (WHERE d.four_eyes_status = ANY($4::text[])) AS with_four_eyes,
+       COUNT(DISTINCT d.id) FILTER (WHERE EXISTS (
+         SELECT 1 FROM deployment_goal_links dgl
+         WHERE dgl.deployment_id = d.id AND dgl.is_active = true
+       )) AS with_origin
+     FROM deployments d
+     WHERE d.monitored_app_id = ANY($1::int[])
+       AND d.deployer_username = ANY($2::text[])
+       AND d.created_at >= $3
+       AND d.created_at < $5`,
+    [monitoredAppIds, deployerUsernames, startDate, APPROVED_STATUSES, endDate],
+  )
+
+  const row = result.rows[0]
+  const total = Number(row?.total ?? 0)
+  const withFourEyes = Number(row?.with_four_eyes ?? 0)
+  const withOrigin = Number(row?.with_origin ?? 0)
+
+  return {
+    total,
+    with_four_eyes: withFourEyes,
+    four_eyes_percentage: total > 0 ? Math.round((withFourEyes / total) * 100) : 0,
+    with_origin: withOrigin,
+    origin_percentage: total > 0 ? Math.round((withOrigin / total) * 100) : 0,
+  }
 }
