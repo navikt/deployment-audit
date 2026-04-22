@@ -46,14 +46,14 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  await requireAdmin(request)
+  const admin = await requireAdmin(request)
 
   const formData = await request.formData()
   const intent = formData.get('intent')
 
   if (intent === 'delete') {
     const githubUsername = formData.get('github_username') as string
-    await deleteUserMapping(githubUsername)
+    await deleteUserMapping(githubUsername, admin.navIdent)
     return { success: true }
   }
 
