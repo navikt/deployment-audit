@@ -20,6 +20,7 @@ export interface BoardObjective {
   description: string | null
   sort_order: number
   keywords: string[]
+  is_active: boolean
   created_at: string
 }
 
@@ -30,6 +31,7 @@ export interface BoardKeyResult {
   description: string | null
   sort_order: number
   keywords: string[]
+  is_active: boolean
   created_at: string
 }
 
@@ -89,13 +91,13 @@ export async function getBoardsWithGoalsForDevTeam(
   const result = []
   for (const board of boards.rows) {
     const objectives = await pool.query(
-      `SELECT bo.id, bo.title FROM board_objectives bo WHERE bo.board_id = $1 ORDER BY bo.sort_order, bo.id`,
+      `SELECT bo.id, bo.title FROM board_objectives bo WHERE bo.board_id = $1 AND bo.is_active = true ORDER BY bo.sort_order, bo.id`,
       [board.id],
     )
     const objectivesWithKr = []
     for (const obj of objectives.rows) {
       const keyResults = await pool.query(
-        `SELECT id, title FROM board_key_results WHERE objective_id = $1 ORDER BY sort_order, id`,
+        `SELECT id, title FROM board_key_results WHERE objective_id = $1 AND is_active = true ORDER BY sort_order, id`,
         [obj.id],
       )
       objectivesWithKr.push({ ...obj, key_results: keyResults.rows })
@@ -225,14 +227,19 @@ export async function updateObjective(
 
   values.push(id)
   const result = await pool.query(
-    `UPDATE board_objectives SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`,
+    `UPDATE board_objectives SET ${sets.join(', ')} WHERE id = $${idx} AND is_active = true RETURNING *`,
     values,
   )
+  if (result.rowCount === 0) throw new Error('Kan ikke oppdatere et deaktivert mål.')
   return result.rows[0] ?? null
 }
 
-export async function deleteObjective(id: number): Promise<void> {
-  await pool.query('DELETE FROM board_objectives WHERE id = $1', [id])
+export async function deactivateObjective(id: number): Promise<void> {
+  await pool.query('UPDATE board_objectives SET is_active = false WHERE id = $1', [id])
+}
+
+export async function reactivateObjective(id: number): Promise<void> {
+  await pool.query('UPDATE board_objectives SET is_active = true WHERE id = $1', [id])
 }
 
 // --- Key Result queries ---
@@ -242,15 +249,29 @@ export async function createKeyResult(
   title: string,
   description?: string,
 ): Promise<BoardKeyResult> {
-  const maxOrder = await pool.query(
-    'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM board_key_results WHERE objective_id = $1',
-    [objectiveId],
-  )
-  const result = await pool.query(
-    'INSERT INTO board_key_results (objective_id, title, description, sort_order) VALUES ($1, $2, $3, $4) RETURNING *',
-    [objectiveId, title, description ?? null, maxOrder.rows[0].next_order],
-  )
-  return result.rows[0]
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const obj = await client.query('SELECT is_active FROM board_objectives WHERE id = $1 FOR UPDATE', [objectiveId])
+    if (!obj.rows[0]?.is_active) {
+      throw new Error('Kan ikke legge til nøkkelresultat på et deaktivert mål.')
+    }
+    const maxOrder = await client.query(
+      'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM board_key_results WHERE objective_id = $1',
+      [objectiveId],
+    )
+    const result = await client.query(
+      'INSERT INTO board_key_results (objective_id, title, description, sort_order) VALUES ($1, $2, $3, $4) RETURNING *',
+      [objectiveId, title, description ?? null, maxOrder.rows[0].next_order],
+    )
+    await client.query('COMMIT')
+    return result.rows[0]
+  } catch (e) {
+    await client.query('ROLLBACK')
+    throw e
+  } finally {
+    client.release()
+  }
 }
 
 export async function updateKeyResult(
@@ -274,24 +295,80 @@ export async function updateKeyResult(
 
   values.push(id)
   const result = await pool.query(
-    `UPDATE board_key_results SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`,
+    `UPDATE board_key_results
+     SET ${sets.join(', ')}
+     WHERE id = $${idx}
+       AND is_active = true
+       AND EXISTS (
+         SELECT 1 FROM board_objectives
+         WHERE board_objectives.id = board_key_results.objective_id
+           AND board_objectives.is_active = true
+       )
+     RETURNING *`,
     values,
   )
+  if (result.rowCount === 0)
+    throw new Error('Kan ikke oppdatere et deaktivert nøkkelresultat eller et nøkkelresultat under et deaktivert mål.')
   return result.rows[0] ?? null
 }
 
-export async function deleteKeyResult(id: number): Promise<void> {
-  await pool.query('DELETE FROM board_key_results WHERE id = $1', [id])
+export async function deactivateKeyResult(id: number): Promise<void> {
+  await pool.query('UPDATE board_key_results SET is_active = false WHERE id = $1', [id])
+}
+
+export async function reactivateKeyResult(id: number): Promise<void> {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const obj = await client.query(
+      `SELECT bo.is_active
+       FROM board_key_results bkr
+       JOIN board_objectives bo ON bo.id = bkr.objective_id
+       WHERE bkr.id = $1
+       FOR UPDATE OF bo, bkr`,
+      [id],
+    )
+    if (!obj.rows[0]) {
+      throw new Error('Nøkkelresultatet finnes ikke.')
+    }
+    if (!obj.rows[0].is_active) {
+      throw new Error('Kan ikke reaktivere et nøkkelresultat under et deaktivert mål.')
+    }
+    await client.query('UPDATE board_key_results SET is_active = true WHERE id = $1', [id])
+    await client.query('COMMIT')
+  } catch (e) {
+    await client.query('ROLLBACK')
+    throw e
+  } finally {
+    client.release()
+  }
 }
 
 // --- Keyword queries ---
 
 export async function updateObjectiveKeywords(id: number, keywords: string[]): Promise<void> {
-  await pool.query('UPDATE board_objectives SET keywords = $1 WHERE id = $2', [keywords, id])
+  const result = await pool.query('UPDATE board_objectives SET keywords = $1 WHERE id = $2 AND is_active = true', [
+    keywords,
+    id,
+  ])
+  if (result.rowCount === 0) throw new Error('Kan ikke oppdatere kode-ord på et deaktivert mål.')
 }
 
 export async function updateKeyResultKeywords(id: number, keywords: string[]): Promise<void> {
-  await pool.query('UPDATE board_key_results SET keywords = $1 WHERE id = $2', [keywords, id])
+  const result = await pool.query(
+    `UPDATE board_key_results
+     SET keywords = $1
+     WHERE id = $2
+       AND is_active = true
+       AND EXISTS (
+         SELECT 1 FROM board_objectives
+         WHERE board_objectives.id = board_key_results.objective_id
+           AND board_objectives.is_active = true
+       )`,
+    [keywords, id],
+  )
+  if (result.rowCount === 0)
+    throw new Error('Kan ikke oppdatere kode-ord på et deaktivert nøkkelresultat eller under et deaktivert mål.')
 }
 
 // --- External Reference queries ---
@@ -303,14 +380,77 @@ export async function addExternalReference(data: {
   objective_id?: number
   key_result_id?: number
 }): Promise<ExternalReference> {
-  const result = await pool.query(
-    `INSERT INTO external_references (ref_type, url, title, objective_id, key_result_id)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [data.ref_type, data.url, data.title ?? null, data.objective_id ?? null, data.key_result_id ?? null],
-  )
-  return result.rows[0]
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    if (data.objective_id) {
+      const obj = await client.query('SELECT is_active FROM board_objectives WHERE id = $1 FOR UPDATE', [
+        data.objective_id,
+      ])
+      if (!obj.rows[0]) {
+        throw new Error('Målet finnes ikke.')
+      }
+      if (!obj.rows[0].is_active) {
+        throw new Error('Kan ikke legge til ekstern lenke på et deaktivert mål.')
+      }
+    }
+    if (data.key_result_id) {
+      const kr = await client.query(
+        `SELECT bkr.is_active AS kr_active, bo.is_active AS obj_active
+         FROM board_key_results bkr
+         JOIN board_objectives bo ON bo.id = bkr.objective_id
+         WHERE bkr.id = $1
+         FOR UPDATE OF bkr, bo`,
+        [data.key_result_id],
+      )
+      if (!kr.rows[0]) {
+        throw new Error('Nøkkelresultatet finnes ikke.')
+      }
+      if (!kr.rows[0].kr_active) {
+        throw new Error('Kan ikke legge til ekstern lenke på et deaktivert nøkkelresultat.')
+      }
+      if (!kr.rows[0].obj_active) {
+        throw new Error('Kan ikke legge til ekstern lenke på et nøkkelresultat under et deaktivert mål.')
+      }
+    }
+    const result = await client.query(
+      `INSERT INTO external_references (ref_type, url, title, objective_id, key_result_id)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [data.ref_type, data.url, data.title ?? null, data.objective_id ?? null, data.key_result_id ?? null],
+    )
+    await client.query('COMMIT')
+    return result.rows[0]
+  } catch (e) {
+    await client.query('ROLLBACK')
+    throw e
+  } finally {
+    client.release()
+  }
 }
 
 export async function deleteExternalReference(id: number): Promise<void> {
-  await pool.query('DELETE FROM external_references WHERE id = $1', [id])
+  const exists = await pool.query('SELECT id FROM external_references WHERE id = $1', [id])
+  if (exists.rowCount === 0) return
+
+  const result = await pool.query(
+    `DELETE FROM external_references er
+     WHERE er.id = $1
+       AND NOT EXISTS (
+         SELECT 1 FROM board_objectives bo
+         WHERE bo.id = er.objective_id AND bo.is_active = false
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM board_key_results bkr
+         WHERE bkr.id = er.key_result_id AND bkr.is_active = false
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM board_key_results bkr
+         JOIN board_objectives bo ON bo.id = bkr.objective_id
+         WHERE bkr.id = er.key_result_id AND bo.is_active = false
+       )`,
+    [id],
+  )
+  if (result.rowCount === 0) {
+    throw new Error('Kan ikke slette ekstern lenke fra et deaktivert mål eller nøkkelresultat.')
+  }
 }

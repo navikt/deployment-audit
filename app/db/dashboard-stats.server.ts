@@ -70,7 +70,7 @@ export async function getSectionOverallStats(
      JOIN deployments d ON d.team_slug = st.team_slug
        AND ($2::timestamptz IS NULL OR d.created_at >= $2)
        AND ($3::timestamptz IS NULL OR d.created_at < $3)
-     LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id
+     LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id AND dgl.is_active = true
      WHERE st.section_id = $1`,
     [sectionId, startDate ?? null, endDate ?? null],
   )
@@ -127,7 +127,7 @@ export async function getSectionDashboardStats(
          END
        ) AND ($2::timestamptz IS NULL OR d.created_at >= $2)
          AND ($3::timestamptz IS NULL OR d.created_at < $3)
-       LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id
+       LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id AND dgl.is_active = true
        GROUP BY ta.dev_team_id
      )
      SELECT ta.dev_team_id, ta.dev_team_name, ta.dev_team_slug,
@@ -185,7 +185,7 @@ export async function getDevTeamSummaryStats(
        JOIN deployments d ON d.monitored_app_id = ta.id
          AND ($4::timestamptz IS NULL OR d.created_at >= $4)
          AND ($4::timestamptz IS NOT NULL OR ta.audit_start_year IS NULL OR d.created_at >= make_date(ta.audit_start_year, 1, 1))
-       LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id
+       LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id AND dgl.is_active = true
        GROUP BY d.monitored_app_id
      ),
      app_alerts AS (
@@ -233,7 +233,7 @@ export async function getDevTeamSummaryStats(
  */
 export async function getBoardObjectiveProgress(boardId: number): Promise<BoardObjectiveProgress[]> {
   const objectives = await pool.query(
-    'SELECT id, title FROM board_objectives WHERE board_id = $1 ORDER BY sort_order, id',
+    'SELECT id, title FROM board_objectives WHERE board_id = $1 AND is_active = true ORDER BY sort_order, id',
     [boardId],
   )
 
@@ -244,15 +244,15 @@ export async function getBoardObjectiveProgress(boardId: number): Promise<BoardO
       `SELECT bkr.id, bkr.title,
               COUNT(DISTINCT dgl.deployment_id) AS linked_deployments
        FROM board_key_results bkr
-       LEFT JOIN deployment_goal_links dgl ON dgl.key_result_id = bkr.id
-       WHERE bkr.objective_id = $1
+       LEFT JOIN deployment_goal_links dgl ON dgl.key_result_id = bkr.id AND dgl.is_active = true
+       WHERE bkr.objective_id = $1 AND bkr.is_active = true
        GROUP BY bkr.id, bkr.title
        ORDER BY bkr.sort_order, bkr.id`,
       [obj.id],
     )
 
     const objLinks = await pool.query(
-      'SELECT COUNT(DISTINCT deployment_id) AS cnt FROM deployment_goal_links WHERE objective_id = $1',
+      'SELECT COUNT(DISTINCT deployment_id) AS cnt FROM deployment_goal_links WHERE objective_id = $1 AND is_active = true',
       [obj.id],
     )
 

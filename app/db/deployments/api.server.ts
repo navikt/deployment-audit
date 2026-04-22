@@ -38,7 +38,7 @@ export async function getAppChangeOriginCoverage(
         WHERE LOWER(d.github_pr_data->'creator'->>'username') IS DISTINCT FROM 'dependabot[bot]'
       )::int AS linked
     FROM deployments d
-    LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id
+    LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id AND dgl.is_active = true
     WHERE d.monitored_app_id = $1
       AND d.created_at >= $2
       AND d.created_at <= $3`
@@ -81,7 +81,7 @@ export async function getLastDeploymentSummary(monitoredAppId: number): Promise<
       d.commit_sha,
       d.four_eyes_status,
       EXISTS (
-        SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = d.id
+        SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = d.id AND dgl.is_active = true
       ) AS has_change_origin
     FROM deployments d
     WHERE d.monitored_app_id = $1

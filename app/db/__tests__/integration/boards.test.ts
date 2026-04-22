@@ -1,6 +1,6 @@
 import { Pool } from 'pg'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { seedDevTeam, seedSection, truncateAllTables } from './helpers'
+import { seedApp, seedDeployment, seedDevTeam, seedSection, truncateAllTables } from './helpers'
 
 let pool: Pool
 
@@ -66,7 +66,7 @@ describe('boards', () => {
     expect(kr[0].title).toBe('KR 1')
   })
 
-  it('cascading delete: removing board deletes objectives and key results', async () => {
+  it('soft delete: deactivating objective sets is_active to false', async () => {
     const { board } = await seedBoardStack(pool)
     const { rows: obj } = await pool.query(
       "INSERT INTO board_objectives (board_id, title, sort_order) VALUES ($1, 'Obj', 0) RETURNING *",
@@ -76,32 +76,81 @@ describe('boards', () => {
       obj[0].id,
     ])
 
-    await pool.query('DELETE FROM boards WHERE id = $1', [board.id])
+    // Deactivate objective
+    await pool.query('UPDATE board_objectives SET is_active = false WHERE id = $1', [obj[0].id])
 
-    const { rows: objectives } = await pool.query('SELECT * FROM board_objectives WHERE board_id = $1', [board.id])
+    // Objective still exists but is inactive
+    const { rows: objectives } = await pool.query('SELECT * FROM board_objectives WHERE id = $1', [obj[0].id])
+    expect(objectives).toHaveLength(1)
+    expect(objectives[0].is_active).toBe(false)
+
+    // Key results still exist
     const { rows: keyResults } = await pool.query('SELECT * FROM board_key_results WHERE objective_id = $1', [
       obj[0].id,
     ])
-    expect(objectives).toHaveLength(0)
-    expect(keyResults).toHaveLength(0)
+    expect(keyResults).toHaveLength(1)
   })
 
-  it('cascading delete: removing objective deletes key results', async () => {
+  it('RESTRICT prevents physical deletion of objective when deployment goal links exist', async () => {
     const { board } = await seedBoardStack(pool)
     const { rows: obj } = await pool.query(
       "INSERT INTO board_objectives (board_id, title, sort_order) VALUES ($1, 'Obj', 0) RETURNING *",
       [board.id],
     )
-    await pool.query("INSERT INTO board_key_results (objective_id, title, sort_order) VALUES ($1, 'KR', 0)", [
-      obj[0].id,
-    ])
 
-    await pool.query('DELETE FROM board_objectives WHERE id = $1', [obj[0].id])
+    const appId = await seedApp(pool, { teamSlug: 'team', appName: 'restrict-test', environment: 'prod' })
+    const deploymentId = await seedDeployment(pool, { monitoredAppId: appId, teamSlug: 'team', environment: 'prod' })
+    await pool.query(
+      "INSERT INTO deployment_goal_links (deployment_id, objective_id, link_method) VALUES ($1, $2, 'manual')",
+      [deploymentId, obj[0].id],
+    )
 
-    const { rows: keyResults } = await pool.query('SELECT * FROM board_key_results WHERE objective_id = $1', [
-      obj[0].id,
-    ])
-    expect(keyResults).toHaveLength(0)
+    // Physical deletion should fail with RESTRICT
+    await expect(pool.query('DELETE FROM board_objectives WHERE id = $1', [obj[0].id])).rejects.toThrow()
+  })
+
+  it('RESTRICT prevents physical deletion of key result when deployment goal links exist', async () => {
+    const { board } = await seedBoardStack(pool)
+    const { rows: obj } = await pool.query(
+      "INSERT INTO board_objectives (board_id, title, sort_order) VALUES ($1, 'Obj', 0) RETURNING *",
+      [board.id],
+    )
+    const { rows: kr } = await pool.query(
+      "INSERT INTO board_key_results (objective_id, title, sort_order) VALUES ($1, 'KR', 0) RETURNING *",
+      [obj[0].id],
+    )
+
+    const appId = await seedApp(pool, { teamSlug: 'team', appName: 'kr-restrict-test', environment: 'prod' })
+    const deploymentId = await seedDeployment(pool, { monitoredAppId: appId, teamSlug: 'team', environment: 'prod' })
+    await pool.query(
+      "INSERT INTO deployment_goal_links (deployment_id, key_result_id, link_method) VALUES ($1, $2, 'manual')",
+      [deploymentId, kr[0].id],
+    )
+
+    // Physical deletion should fail with RESTRICT
+    await expect(pool.query('DELETE FROM board_key_results WHERE id = $1', [kr[0].id])).rejects.toThrow()
+  })
+
+  it('RESTRICT prevents physical deletion of board when objectives exist', async () => {
+    const { board } = await seedBoardStack(pool)
+    await pool.query("INSERT INTO board_objectives (board_id, title, sort_order) VALUES ($1, 'Obj', 0)", [board.id])
+
+    // Physical deletion should fail with RESTRICT
+    await expect(pool.query('DELETE FROM boards WHERE id = $1', [board.id])).rejects.toThrow()
+  })
+
+  it('reactivation restores objective to active state', async () => {
+    const { board } = await seedBoardStack(pool)
+    const { rows: obj } = await pool.query(
+      "INSERT INTO board_objectives (board_id, title, sort_order) VALUES ($1, 'Obj', 0) RETURNING *",
+      [board.id],
+    )
+
+    await pool.query('UPDATE board_objectives SET is_active = false WHERE id = $1', [obj[0].id])
+    await pool.query('UPDATE board_objectives SET is_active = true WHERE id = $1', [obj[0].id])
+
+    const { rows } = await pool.query('SELECT * FROM board_objectives WHERE id = $1', [obj[0].id])
+    expect(rows[0].is_active).toBe(true)
   })
 
   it('external references link to objectives and key results', async () => {
@@ -131,6 +180,57 @@ describe('boards', () => {
     expect(refs).toHaveLength(2)
     expect(refs[0].ref_type).toBe('jira')
     expect(refs[1].ref_type).toBe('github_issue')
+  })
+
+  it('RESTRICT prevents physical deletion of objective when key results exist', async () => {
+    const { board } = await seedBoardStack(pool)
+    const { rows: obj } = await pool.query(
+      "INSERT INTO board_objectives (board_id, title, sort_order) VALUES ($1, 'Obj', 0) RETURNING *",
+      [board.id],
+    )
+    await pool.query("INSERT INTO board_key_results (objective_id, title, sort_order) VALUES ($1, 'KR', 0)", [
+      obj[0].id,
+    ])
+
+    await expect(pool.query('DELETE FROM board_objectives WHERE id = $1', [obj[0].id])).rejects.toThrow(
+      /violates foreign key constraint/,
+    )
+  })
+
+  it('RESTRICT prevents physical deletion of objective when external references exist', async () => {
+    const { board } = await seedBoardStack(pool)
+    const { rows: obj } = await pool.query(
+      "INSERT INTO board_objectives (board_id, title, sort_order) VALUES ($1, 'Obj', 0) RETURNING *",
+      [board.id],
+    )
+    await pool.query(
+      "INSERT INTO external_references (ref_type, url, title, objective_id) VALUES ('jira', 'https://jira/1', 'JIRA-1', $1)",
+      [obj[0].id],
+    )
+
+    await expect(pool.query('DELETE FROM board_objectives WHERE id = $1', [obj[0].id])).rejects.toThrow(
+      /violates foreign key constraint/,
+    )
+  })
+
+  it('RESTRICT prevents physical deletion of key result when external references exist', async () => {
+    const { board } = await seedBoardStack(pool)
+    const { rows: obj } = await pool.query(
+      "INSERT INTO board_objectives (board_id, title, sort_order) VALUES ($1, 'Obj', 0) RETURNING *",
+      [board.id],
+    )
+    const { rows: kr } = await pool.query(
+      "INSERT INTO board_key_results (objective_id, title, sort_order) VALUES ($1, 'KR', 0) RETURNING *",
+      [obj[0].id],
+    )
+    await pool.query(
+      "INSERT INTO external_references (ref_type, url, title, key_result_id) VALUES ('github_issue', 'https://gh/1', 'GH-1', $1)",
+      [kr[0].id],
+    )
+
+    await expect(pool.query('DELETE FROM board_key_results WHERE id = $1', [kr[0].id])).rejects.toThrow(
+      /violates foreign key constraint/,
+    )
   })
 
   it('updates board title and is_active', async () => {

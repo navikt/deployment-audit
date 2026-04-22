@@ -1,4 +1,4 @@
-import { ChevronLeftIcon, PlusIcon, TrashIcon } from '@navikt/aksel-icons'
+import { ChevronLeftIcon, MinusCircleIcon, PlusCircleIcon, PlusIcon, TrashIcon } from '@navikt/aksel-icons'
 import {
   Link as AkselLink,
   Alert,
@@ -11,20 +11,24 @@ import {
   Select,
   Tag,
   TextField,
+  Tooltip,
   VStack,
 } from '@navikt/ds-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Form, Link, useLoaderData, useSubmit } from 'react-router'
 import {
   addExternalReference,
+  type BoardKeyResultWithRefs,
   createKeyResult,
   createObjective,
+  deactivateKeyResult,
+  deactivateObjective,
   deleteExternalReference,
-  deleteKeyResult,
-  deleteObjective,
   type ExternalReference,
   getBoardWithObjectives,
   type ObjectiveWithKeyResults,
+  reactivateKeyResult,
+  reactivateObjective,
   updateKeyResult,
   updateKeyResultKeywords,
   updateObjective,
@@ -74,8 +78,12 @@ export async function action({ request, params }: Route.ActionArgs) {
         await updateObjective(id, { title, description: (formData.get('description') as string)?.trim() })
         return { success: true }
       }
-      case 'delete-objective': {
-        await deleteObjective(Number(formData.get('id')))
+      case 'deactivate-objective': {
+        await deactivateObjective(Number(formData.get('id')))
+        return { success: true }
+      }
+      case 'reactivate-objective': {
+        await reactivateObjective(Number(formData.get('id')))
         return { success: true }
       }
       case 'add-key-result': {
@@ -92,8 +100,12 @@ export async function action({ request, params }: Route.ActionArgs) {
         await updateKeyResult(id, { title, description: (formData.get('description') as string)?.trim() })
         return { success: true }
       }
-      case 'delete-key-result': {
-        await deleteKeyResult(Number(formData.get('id')))
+      case 'deactivate-key-result': {
+        await deactivateKeyResult(Number(formData.get('id')))
+        return { success: true }
+      }
+      case 'reactivate-key-result': {
+        await reactivateKeyResult(Number(formData.get('id')))
         return { success: true }
       }
       case 'add-reference': {
@@ -221,29 +233,68 @@ export default function BoardDetail() {
 function ObjectiveCard({ objective }: { objective: ObjectiveWithKeyResults }) {
   const [showAddKR, setShowAddKR] = useState(false)
   const [showAddRef, setShowAddRef] = useState(false)
+  const isInactive = !objective.is_active
+
+  useEffect(() => {
+    if (isInactive) {
+      setShowAddKR(false)
+      setShowAddRef(false)
+    }
+  }, [isInactive])
 
   return (
-    <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
+    <Box
+      padding="space-24"
+      borderRadius="8"
+      background="raised"
+      borderColor={isInactive ? 'neutral' : 'neutral-subtle'}
+      borderWidth="1"
+      style={isInactive ? { opacity: 0.7 } : undefined}
+    >
       <VStack gap="space-16">
         <HStack justify="space-between" align="start">
-          <div>
-            <Heading level="2" size="medium">
-              {objective.title}
-            </Heading>
-            {objective.description && <BodyShort textColor="subtle">{objective.description}</BodyShort>}
-          </div>
+          <HStack gap="space-8" align="center">
+            <div>
+              <Heading level="2" size="medium">
+                {objective.title}
+              </Heading>
+              {objective.description && <BodyShort textColor="subtle">{objective.description}</BodyShort>}
+            </div>
+            {isInactive && (
+              <Tag variant="neutral" size="xsmall">
+                Deaktivert
+              </Tag>
+            )}
+          </HStack>
           <Form method="post" style={{ display: 'inline' }}>
-            <input type="hidden" name="intent" value="delete-objective" />
+            <input type="hidden" name="intent" value={isInactive ? 'reactivate-objective' : 'deactivate-objective'} />
             <input type="hidden" name="id" value={objective.id} />
-            <Button variant="tertiary-neutral" size="xsmall" icon={<TrashIcon aria-hidden />} type="submit">
-              Slett
-            </Button>
+            {isInactive ? (
+              <Tooltip content="Reaktiver mål">
+                <Button variant="tertiary-neutral" size="xsmall" icon={<PlusCircleIcon aria-hidden />} type="submit">
+                  Reaktiver
+                </Button>
+              </Tooltip>
+            ) : (
+              <Tooltip content="Deaktiver mål (kan ikke kobles til nye endringsopphav)">
+                <Button variant="tertiary-neutral" size="xsmall" icon={<MinusCircleIcon aria-hidden />} type="submit">
+                  Deaktiver
+                </Button>
+              </Tooltip>
+            )}
           </Form>
         </HStack>
 
-        {objective.external_references.length > 0 && <ReferenceList refs={objective.external_references} />}
+        {objective.external_references.length > 0 && (
+          <ReferenceList refs={objective.external_references} readOnly={isInactive} />
+        )}
 
-        <KeywordEditor id={objective.id} keywords={objective.keywords ?? []} intent="update-objective-keywords" />
+        <KeywordEditor
+          id={objective.id}
+          keywords={objective.keywords ?? []}
+          intent="update-objective-keywords"
+          readOnly={isInactive}
+        />
 
         {objective.key_results.length > 0 && (
           <VStack gap="space-8">
@@ -251,50 +302,37 @@ function ObjectiveCard({ objective }: { objective: ObjectiveWithKeyResults }) {
               Nøkkelresultater
             </Heading>
             {objective.key_results.map((kr) => (
-              <Box key={kr.id} padding="space-12" borderRadius="4" background="sunken">
-                <HStack justify="space-between" align="start">
-                  <div>
-                    <BodyShort weight="semibold">{kr.title}</BodyShort>
-                    {kr.description && (
-                      <BodyShort size="small" textColor="subtle">
-                        {kr.description}
-                      </BodyShort>
-                    )}
-                    {kr.external_references.length > 0 && <ReferenceList refs={kr.external_references} />}
-                    <KeywordEditor id={kr.id} keywords={kr.keywords ?? []} intent="update-kr-keywords" />
-                  </div>
-                  <Form method="post" style={{ display: 'inline' }}>
-                    <input type="hidden" name="intent" value="delete-key-result" />
-                    <input type="hidden" name="id" value={kr.id} />
-                    <Button variant="tertiary-neutral" size="xsmall" icon={<TrashIcon aria-hidden />} type="submit">
-                      Slett
-                    </Button>
-                  </Form>
-                </HStack>
-              </Box>
+              <KeyResultRow key={kr.id} kr={kr} objectiveIsActive={objective.is_active} />
             ))}
           </VStack>
         )}
 
-        <HStack gap="space-8">
-          {!showAddKR && (
-            <Button variant="tertiary" size="xsmall" icon={<PlusIcon aria-hidden />} onClick={() => setShowAddKR(true)}>
-              Nøkkelresultat
-            </Button>
-          )}
-          {!showAddRef && (
-            <Button
-              variant="tertiary"
-              size="xsmall"
-              icon={<PlusIcon aria-hidden />}
-              onClick={() => setShowAddRef(true)}
-            >
-              Ekstern lenke
-            </Button>
-          )}
-        </HStack>
+        {!isInactive && (
+          <HStack gap="space-8">
+            {!showAddKR && (
+              <Button
+                variant="tertiary"
+                size="xsmall"
+                icon={<PlusIcon aria-hidden />}
+                onClick={() => setShowAddKR(true)}
+              >
+                Nøkkelresultat
+              </Button>
+            )}
+            {!showAddRef && (
+              <Button
+                variant="tertiary"
+                size="xsmall"
+                icon={<PlusIcon aria-hidden />}
+                onClick={() => setShowAddRef(true)}
+              >
+                Ekstern lenke
+              </Button>
+            )}
+          </HStack>
+        )}
 
-        {showAddKR && (
+        {showAddKR && !isInactive && (
           <Form method="post" onSubmit={() => setShowAddKR(false)}>
             <input type="hidden" name="intent" value="add-key-result" />
             <input type="hidden" name="objective_id" value={objective.id} />
@@ -313,13 +351,97 @@ function ObjectiveCard({ objective }: { objective: ObjectiveWithKeyResults }) {
           </Form>
         )}
 
-        {showAddRef && <AddReferenceForm objectiveId={objective.id} onCancel={() => setShowAddRef(false)} />}
+        {showAddRef && !isInactive && (
+          <AddReferenceForm objectiveId={objective.id} onCancel={() => setShowAddRef(false)} />
+        )}
       </VStack>
     </Box>
   )
 }
 
-function ReferenceList({ refs }: { refs: ExternalReference[] }) {
+function KeyResultRow({ kr, objectiveIsActive }: { kr: BoardKeyResultWithRefs; objectiveIsActive: boolean }) {
+  const isInactive = !kr.is_active
+
+  return (
+    <Box padding="space-12" borderRadius="4" background="sunken" style={isInactive ? { opacity: 0.7 } : undefined}>
+      <HStack justify="space-between" align="start">
+        <HStack gap="space-8" align="center">
+          <div>
+            <BodyShort weight="semibold">{kr.title}</BodyShort>
+            {kr.description && (
+              <BodyShort size="small" textColor="subtle">
+                {kr.description}
+              </BodyShort>
+            )}
+            {kr.external_references.length > 0 && (
+              <ReferenceList refs={kr.external_references} readOnly={isInactive || !objectiveIsActive} />
+            )}
+            <KeywordEditor
+              id={kr.id}
+              keywords={kr.keywords ?? []}
+              intent="update-kr-keywords"
+              readOnly={isInactive || !objectiveIsActive}
+            />
+          </div>
+          {isInactive && (
+            <Tag variant="neutral" size="xsmall">
+              Deaktivert
+            </Tag>
+          )}
+        </HStack>
+        <Form method="post" style={{ display: 'inline' }}>
+          <input type="hidden" name="intent" value={isInactive ? 'reactivate-key-result' : 'deactivate-key-result'} />
+          <input type="hidden" name="id" value={kr.id} />
+          {isInactive ? (
+            objectiveIsActive ? (
+              <Tooltip content="Reaktiver nøkkelresultat">
+                <Button variant="tertiary-neutral" size="xsmall" icon={<PlusCircleIcon aria-hidden />} type="submit">
+                  Reaktiver
+                </Button>
+              </Tooltip>
+            ) : (
+              <Tooltip content="Reaktiver målet først for å kunne endre nøkkelresultatet">
+                <span>
+                  <Button
+                    variant="tertiary-neutral"
+                    size="xsmall"
+                    icon={<PlusCircleIcon aria-hidden />}
+                    type="submit"
+                    disabled
+                  >
+                    Reaktiver
+                  </Button>
+                </span>
+              </Tooltip>
+            )
+          ) : objectiveIsActive ? (
+            <Tooltip content="Deaktiver nøkkelresultat">
+              <Button variant="tertiary-neutral" size="xsmall" icon={<MinusCircleIcon aria-hidden />} type="submit">
+                Deaktiver
+              </Button>
+            </Tooltip>
+          ) : (
+            <Tooltip content="Reaktiver målet først for å kunne endre nøkkelresultatet">
+              <span>
+                <Button
+                  variant="tertiary-neutral"
+                  size="xsmall"
+                  icon={<MinusCircleIcon aria-hidden />}
+                  type="submit"
+                  disabled
+                >
+                  Deaktiver
+                </Button>
+              </span>
+            </Tooltip>
+          )}
+        </Form>
+      </HStack>
+    </Box>
+  )
+}
+
+function ReferenceList({ refs, readOnly }: { refs: ExternalReference[]; readOnly?: boolean }) {
   const REF_TYPE_LABELS: Record<string, string> = {
     jira: 'Jira',
     slack: 'Slack',
@@ -338,11 +460,13 @@ function ReferenceList({ refs }: { refs: ExternalReference[] }) {
           <AkselLink href={ref.url} target="_blank" rel="noopener noreferrer">
             {ref.title ?? ref.url}
           </AkselLink>
-          <Form method="post" style={{ display: 'inline' }}>
-            <input type="hidden" name="intent" value="delete-reference" />
-            <input type="hidden" name="id" value={ref.id} />
-            <Button variant="tertiary-neutral" size="xsmall" icon={<TrashIcon aria-hidden />} type="submit" />
-          </Form>
+          {!readOnly && (
+            <Form method="post" style={{ display: 'inline' }}>
+              <input type="hidden" name="intent" value="delete-reference" />
+              <input type="hidden" name="id" value={ref.id} />
+              <Button variant="tertiary-neutral" size="xsmall" icon={<TrashIcon aria-hidden />} type="submit" />
+            </Form>
+          )}
         </HStack>
       ))}
     </HStack>
@@ -388,7 +512,17 @@ function AddReferenceForm({
   )
 }
 
-function KeywordEditor({ id, keywords, intent }: { id: number; keywords: string[]; intent: string }) {
+function KeywordEditor({
+  id,
+  keywords,
+  intent,
+  readOnly,
+}: {
+  id: number
+  keywords: string[]
+  intent: string
+  readOnly?: boolean
+}) {
   const [adding, setAdding] = useState(false)
   const [newKeyword, setNewKeyword] = useState('')
   const submit = useSubmit()
@@ -426,20 +560,24 @@ function KeywordEditor({ id, keywords, intent }: { id: number; keywords: string[
         )}
         {keywords.map((kw) => (
           <Tag key={kw} variant="neutral" size="xsmall">
-            <HStack gap="space-4" align="center">
-              {kw}
-              <button
-                type="button"
-                onClick={() => handleRemove(kw)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 1 }}
-                aria-label={`Fjern kode-ord ${kw}`}
-              >
-                ×
-              </button>
-            </HStack>
+            {readOnly ? (
+              kw
+            ) : (
+              <HStack gap="space-4" align="center">
+                {kw}
+                <button
+                  type="button"
+                  onClick={() => handleRemove(kw)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 1 }}
+                  aria-label={`Fjern kode-ord ${kw}`}
+                >
+                  ×
+                </button>
+              </HStack>
+            )}
           </Tag>
         ))}
-        {!adding && (
+        {!adding && !readOnly && (
           <Button
             variant="tertiary-neutral"
             size="xsmall"
