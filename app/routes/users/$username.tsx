@@ -125,12 +125,16 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     )
   }
 
-  // Fetch all available teams if viewing own profile
+  // Fetch all available teams if viewing own profile or admin viewing any profile
+  const isAdmin = identity.role === 'admin'
+  const canManageTeams = (isOwnProfile || isAdmin) && !!mapping?.nav_ident
   let availableDevTeams: Awaited<ReturnType<typeof getAllDevTeams>> = []
   let landingPage = 'my-teams'
   let allSections: { slug: string; name: string }[] = []
-  if (isOwnProfile) {
+  if (canManageTeams) {
     availableDevTeams = await getAllDevTeams()
+  }
+  if (isOwnProfile) {
     try {
       const [lp, sections] = await Promise.all([getUserLandingPage(identity.navIdent), getAllSectionsWithTeams()])
       landingPage = lp
@@ -159,6 +163,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     devTeams,
     availableBoards,
     isOwnProfile,
+    isAdmin,
+    profileNavIdent: mapping?.nav_ident ?? null,
     canPrefillOwnMapping,
     loggedInNavIdent: canPrefillOwnMapping ? identity.navIdent : null,
     availableDevTeams,
@@ -177,8 +183,12 @@ export async function action({ request, params }: Route.ActionArgs) {
     if (!devTeamId || Number.isNaN(devTeamId)) {
       return { error: 'Ugyldig team-valg' }
     }
+    const targetNavIdent = (formData.get('targetNavIdent') as string) || identity.navIdent
+    if (targetNavIdent !== identity.navIdent && identity.role !== 'admin') {
+      throw new Response('Forbidden - admin access required', { status: 403 })
+    }
     try {
-      await addUserDevTeam(identity.navIdent, devTeamId)
+      await addUserDevTeam(targetNavIdent, devTeamId)
     } catch {
       return { error: 'Kunne ikke legge til team.' }
     }
@@ -190,8 +200,12 @@ export async function action({ request, params }: Route.ActionArgs) {
     if (!devTeamId || Number.isNaN(devTeamId)) {
       return { error: 'Ugyldig team-valg' }
     }
+    const targetNavIdent = (formData.get('targetNavIdent') as string) || identity.navIdent
+    if (targetNavIdent !== identity.navIdent && identity.role !== 'admin') {
+      throw new Response('Forbidden - admin access required', { status: 403 })
+    }
     try {
-      await removeUserDevTeam(identity.navIdent, devTeamId)
+      await removeUserDevTeam(targetNavIdent, devTeamId)
     } catch {
       return { error: 'Kunne ikke fjerne team.' }
     }
@@ -335,6 +349,8 @@ export default function UserPage() {
     devTeams,
     availableBoards,
     isOwnProfile,
+    isAdmin,
+    profileNavIdent,
     canPrefillOwnMapping,
     loggedInNavIdent,
     availableDevTeams,
@@ -471,13 +487,13 @@ export default function UserPage() {
       </HGrid>
 
       {/* Dev team memberships */}
-      {isOwnProfile && availableDevTeams.length > 0 ? (
+      {(isOwnProfile || isAdmin) && availableDevTeams.length > 0 ? (
         <VStack gap="space-12">
           <Heading level="2" size="small">
-            Mine utviklingsteam
+            {isOwnProfile ? 'Mine utviklingsteam' : 'Teamtilhørighet'}
           </Heading>
           <Box background="raised" padding="space-16" borderRadius="4">
-            <CheckboxGroup legend="Velg team du tilhører" hideLegend>
+            <CheckboxGroup legend="Velg team" hideLegend>
               <HStack gap="space-16" wrap>
                 {availableDevTeams.map((team) => {
                   const isSelected = devTeams.some((t) => t.id === team.id)
@@ -485,6 +501,9 @@ export default function UserPage() {
                     <Form method="post" key={team.id}>
                       <input type="hidden" name="intent" value={isSelected ? 'remove-dev-team' : 'add-dev-team'} />
                       <input type="hidden" name="devTeamId" value={team.id} />
+                      {!isOwnProfile && profileNavIdent && (
+                        <input type="hidden" name="targetNavIdent" value={profileNavIdent} />
+                      )}
                       <Checkbox
                         value={String(team.id)}
                         checked={isSelected}
