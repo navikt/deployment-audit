@@ -69,24 +69,6 @@ export async function getAppDeploymentStatsBatch(
     return new Map()
   }
 
-  // Empty deployer filter ⇒ short-circuit to zero stats for all apps
-  if (deployerUsernames !== undefined && deployerUsernames.length === 0) {
-    const empty = new Map<number, AppDeploymentStats>()
-    for (const app of apps) {
-      empty.set(app.id, {
-        total: 0,
-        with_four_eyes: 0,
-        without_four_eyes: 0,
-        pending_verification: 0,
-        missing_goal_links: 0,
-        last_deployment: null,
-        last_deployment_id: null,
-        four_eyes_percentage: 0,
-      })
-    }
-    return empty
-  }
-
   const appIds = apps.map((a) => a.id)
 
   // Build the audit year filter as a CASE expression
@@ -97,35 +79,38 @@ export async function getAppDeploymentStatsBatch(
 
   const auditYearFilter = auditYearCases ? `AND (CASE ${auditYearCases} ELSE true END)` : ''
 
-  const deployerFilter = deployerUsernames ? ' AND deployer_username = ANY($5::text[])' : ''
+  // Deployer filter is applied only to count/aggregate columns, not to last_deployment.
+  // The "last deployment" timestamp/id should always reflect the most recent deploy
+  // to the app (regardless of deployer), so AppCard's "last deployment" link/timestamp
+  // doesn't silently change meaning when filtering by team members.
+  // Empty array ⇒ counts are 0 (FILTER clause matches nothing).
+  const hasDeployerFilter = deployerUsernames !== undefined
+  const deployerFilterClause = hasDeployerFilter ? ' AND deployer_username = ANY($5::text[])' : ''
   const baseParams: any[] = [appIds, APPROVED_STATUSES, NOT_APPROVED_STATUSES, PENDING_STATUSES]
-  if (deployerUsernames) baseParams.push(deployerUsernames)
+  if (hasDeployerFilter) baseParams.push(deployerUsernames)
 
   const result = await pool.query(
     `SELECT 
       monitored_app_id,
-      COUNT(*) as total,
-      SUM(CASE WHEN four_eyes_status = ANY($2::text[]) THEN 1 ELSE 0 END) as with_four_eyes,
-      SUM(CASE WHEN four_eyes_status = ANY($3) THEN 1 ELSE 0 END) as without_four_eyes,
-      SUM(CASE WHEN four_eyes_status = ANY($4) THEN 1 ELSE 0 END) as pending_verification,
-      SUM(CASE WHEN NOT EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = deployments.id AND dgl.is_active = true) THEN 1 ELSE 0 END) as missing_goal_links,
+      COUNT(*) FILTER (WHERE TRUE${deployerFilterClause}) as total,
+      COUNT(*) FILTER (WHERE four_eyes_status = ANY($2::text[])${deployerFilterClause}) as with_four_eyes,
+      COUNT(*) FILTER (WHERE four_eyes_status = ANY($3)${deployerFilterClause}) as without_four_eyes,
+      COUNT(*) FILTER (WHERE four_eyes_status = ANY($4)${deployerFilterClause}) as pending_verification,
+      COUNT(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = deployments.id AND dgl.is_active = true)${deployerFilterClause}) as missing_goal_links,
       MAX(created_at) as last_deployment
     FROM deployments
-    WHERE monitored_app_id = ANY($1) ${auditYearFilter}${deployerFilter}
+    WHERE monitored_app_id = ANY($1) ${auditYearFilter}
     GROUP BY monitored_app_id`,
     baseParams,
   )
 
-  // Get last deployment IDs in a separate query for simplicity
-  const lastDeployerFilter = deployerUsernames ? ' AND deployer_username = ANY($2::text[])' : ''
-  const lastParams: any[] = [appIds]
-  if (deployerUsernames) lastParams.push(deployerUsernames)
+  // last_deployment_id is intentionally unfiltered by deployer (see note above).
   const lastDeploymentResult = await pool.query(
     `SELECT DISTINCT ON (monitored_app_id) monitored_app_id, id
      FROM deployments
-     WHERE monitored_app_id = ANY($1)${lastDeployerFilter}
+     WHERE monitored_app_id = ANY($1)
      ORDER BY monitored_app_id, created_at DESC`,
-    lastParams,
+    [appIds],
   )
 
   const lastDeploymentIds = new Map<number, number>()

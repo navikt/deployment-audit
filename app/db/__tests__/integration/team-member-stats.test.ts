@@ -99,9 +99,9 @@ describe('getAppDeploymentStatsBatch with deployerUsernames filter', () => {
     expect(s.without_four_eyes).toBe(1)
   })
 
-  it('returns zero stats for all apps when deployerUsernames is empty', async () => {
+  it('returns zero counts but keeps last_deployment_id pointing to most recent deploy when deployerUsernames is empty', async () => {
     const appId = await seedApp(pool, { teamSlug: 'tx', appName: 'a', environment: 'prod' })
-    await seedDeploy(appId, 'tx', 'alice', 'approved_pr', new Date())
+    const depId = await seedDeploy(appId, 'tx', 'alice', 'approved_pr', new Date())
 
     const stats = await getAppDeploymentStatsBatch([{ id: appId }], [])
     const s = stats.get(appId)
@@ -109,7 +109,25 @@ describe('getAppDeploymentStatsBatch with deployerUsernames filter', () => {
 
     expect(s.total).toBe(0)
     expect(s.with_four_eyes).toBe(0)
-    expect(s.last_deployment_id).toBeNull()
+    // last_deployment_id is intentionally not filtered by deployer — it always
+    // reflects the most recent deploy to the app so the AppCard "last deployment"
+    // link doesn't mislead users into thinking the app is stale.
+    expect(s.last_deployment_id).toBe(depId)
+  })
+
+  it('keeps last_deployment_id pointing to most recent deploy regardless of deployer filter', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'tx', appName: 'a', environment: 'prod' })
+    const earlier = new Date(Date.now() - 60_000)
+    const later = new Date()
+    await seedDeploy(appId, 'tx', 'alice', 'approved_pr', earlier)
+    const nonMemberLatest = await seedDeploy(appId, 'tx', 'mallory', 'approved_pr', later)
+
+    const stats = await getAppDeploymentStatsBatch([{ id: appId }], ['alice'])
+    const s = stats.get(appId)
+    if (!s) throw new Error('expected stats for appId')
+
+    expect(s.total).toBe(1) // only alice's deploy counted
+    expect(s.last_deployment_id).toBe(nonMemberLatest) // but link points to most recent overall
   })
 
   it('preserves backwards-compatible behavior when deployerUsernames is undefined', async () => {

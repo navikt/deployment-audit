@@ -77,24 +77,26 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   // Filter stats to deploys made by team members (their GitHub usernames).
   const deployerUsernames = members.map((m) => m.github_username).filter((u): u is string => !!u)
-
-  const statsByApp =
-    teamApps.length > 0
-      ? await getAppDeploymentStatsBatch(
-          teamApps.map((a) => ({ id: a.id, audit_start_year: a.audit_start_year })),
-          deployerUsernames,
-        )
-      : new Map()
+  const hasMappedMembers = deployerUsernames.length > 0
 
   // Top-of-page coverage stats: last 90 days, filtered to team members' deploys.
   const coverageEnd = new Date()
   const coverageStart = new Date(coverageEnd.getTime() - 90 * 24 * 60 * 60 * 1000)
-  const teamCoverage = await getDevTeamCoverageStats(
-    teamApps.map((a) => a.id),
-    deployerUsernames,
-    coverageStart,
-    coverageEnd,
-  )
+
+  const [statsByApp, teamCoverage] = await Promise.all([
+    teamApps.length > 0
+      ? getAppDeploymentStatsBatch(
+          teamApps.map((a) => ({ id: a.id, audit_start_year: a.audit_start_year })),
+          deployerUsernames,
+        )
+      : Promise.resolve(new Map()),
+    getDevTeamCoverageStats(
+      teamApps.map((a) => a.id),
+      deployerUsernames,
+      coverageStart,
+      coverageEnd,
+    ),
+  ])
 
   const appCards: AppCardData[] = groupAppCards(
     teamApps.map((app) => ({
@@ -127,6 +129,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     sectionSlug: params.sectionSlug,
     sectionName: section?.name ?? params.sectionSlug,
     teamCoverage,
+    hasMappedMembers,
+    unmappedMemberCount: members.length - deployerUsernames.length,
   }
 }
 
@@ -226,6 +230,8 @@ export default function DevTeamPage() {
     availableApps,
     sectionSlug,
     teamCoverage,
+    hasMappedMembers,
+    unmappedMemberCount,
   } = useLoaderData<typeof loader>()
   const actionData = useActionData<typeof action>()
   const navigation = useNavigation()
@@ -248,7 +254,12 @@ export default function DevTeamPage() {
       </div>
 
       {/* Team-member-based coverage summary */}
-      <TeamCoverageCards coverage={teamCoverage} hasMembers={members.length > 0} />
+      <TeamCoverageCards
+        coverage={teamCoverage}
+        hasMappedMembers={hasMappedMembers}
+        unmappedMemberCount={unmappedMemberCount}
+        totalMembers={members.length}
+      />
 
       {/* Active board */}
       {activeBoard ? (
@@ -353,7 +364,9 @@ export default function DevTeamPage() {
 
 function TeamCoverageCards({
   coverage,
-  hasMembers,
+  hasMappedMembers,
+  unmappedMemberCount,
+  totalMembers,
 }: {
   coverage: {
     total: number
@@ -362,9 +375,11 @@ function TeamCoverageCards({
     with_origin: number
     origin_percentage: number
   }
-  hasMembers: boolean
+  hasMappedMembers: boolean
+  unmappedMemberCount: number
+  totalMembers: number
 }) {
-  if (!hasMembers) {
+  if (totalMembers === 0) {
     return (
       <Alert variant="info">
         Ingen medlemmer er registrert for dette teamet enda. Statistikk på team-medlemmenes deploys vises når medlemmer
@@ -373,8 +388,24 @@ function TeamCoverageCards({
     )
   }
 
+  if (!hasMappedMembers) {
+    return (
+      <Alert variant="warning">
+        {totalMembers === unmappedMemberCount
+          ? `Ingen av de ${totalMembers} medlemmene har et GitHub-brukernavn registrert. Statistikk vises når brukerkoblinger er på plass.`
+          : `${unmappedMemberCount} av ${totalMembers} medlemmer mangler GitHub-brukernavn — statistikken kan derfor være ufullstendig.`}
+      </Alert>
+    )
+  }
+
   return (
     <VStack gap="space-8">
+      {unmappedMemberCount > 0 && (
+        <Alert variant="warning" size="small">
+          {unmappedMemberCount} av {totalMembers} medlemmer mangler GitHub-brukernavn — statistikken kan være
+          ufullstendig.
+        </Alert>
+      )}
       <HGrid gap="space-12" columns={{ xs: 1, sm: 3 }}>
         <CoverageCard label="Deploys siste 90 dager" value={coverage.total.toString()} />
         <CoverageCard
