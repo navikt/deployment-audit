@@ -337,9 +337,9 @@ export async function getDevTeamCoverageStats(
 
   const result = await pool.query(
     `SELECT
-       COUNT(DISTINCT d.id) AS total,
-       COUNT(DISTINCT d.id) FILTER (WHERE d.four_eyes_status = ANY($4::text[])) AS with_four_eyes,
-       COUNT(DISTINCT d.id) FILTER (WHERE EXISTS (
+       COUNT(*) AS total,
+       COUNT(*) FILTER (WHERE d.four_eyes_status = ANY($4::text[])) AS with_four_eyes,
+       COUNT(*) FILTER (WHERE EXISTS (
          SELECT 1 FROM deployment_goal_links dgl
          WHERE dgl.deployment_id = d.id AND dgl.is_active = true
        )) AS with_origin
