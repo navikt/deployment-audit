@@ -1,0 +1,195 @@
+/**
+ * Integration tests: filtering deployment stats by team-member GitHub usernames.
+ *
+ * Covers:
+ *   - getAppDeploymentStatsBatch with `deployerUsernames` filter
+ *   - getDevTeamCoverageStats (new aggregated team coverage)
+ */
+
+import { Pool } from 'pg'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { getDevTeamCoverageStats } from '../../deployment-goal-links.server'
+import { getAppDeploymentStatsBatch } from '../../deployments/stats.server'
+import { seedApp, truncateAllTables } from './helpers'
+
+let pool: Pool
+
+beforeAll(() => {
+  pool = new Pool({ connectionString: process.env.DATABASE_URL })
+})
+
+afterAll(async () => {
+  await pool.end()
+})
+
+afterEach(async () => {
+  await truncateAllTables(pool)
+})
+
+async function seedDeploy(
+  appId: number,
+  teamSlug: string,
+  deployer: string | null,
+  fourEyesStatus: string,
+  createdAt: Date,
+): Promise<number> {
+  const naisId = `deploy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const { rows } = await pool.query<{ id: number }>(
+    `INSERT INTO deployments (
+       monitored_app_id, nais_deployment_id, team_slug, app_name, environment_name,
+       commit_sha, created_at, four_eyes_status, deployer_username
+     ) VALUES ($1, $2, $3, 'test-app', 'prod', $4, $5, $6, $7)
+     RETURNING id`,
+    [appId, naisId, teamSlug, `sha-${naisId}`, createdAt, fourEyesStatus, deployer],
+  )
+  return rows[0].id
+}
+
+async function linkDeploymentToObjective(deploymentId: number, objectiveId: number) {
+  await pool.query(
+    `INSERT INTO deployment_goal_links (deployment_id, objective_id, link_method, is_active)
+     VALUES ($1, $2, 'manual', true)`,
+    [deploymentId, objectiveId],
+  )
+}
+
+async function seedBoardObjective(): Promise<number> {
+  // Minimal board + objective so we can link deployments
+  const sectionId = (
+    await pool.query<{ id: number }>(`INSERT INTO sections (slug, name) VALUES ('s1-${Date.now()}', 's1') RETURNING id`)
+  ).rows[0].id
+  const teamId = (
+    await pool.query<{ id: number }>(
+      `INSERT INTO dev_teams (slug, name, section_id) VALUES ('t1', 't1', $1) RETURNING id`,
+      [sectionId],
+    )
+  ).rows[0].id
+  const boardId = (
+    await pool.query<{ id: number }>(
+      `INSERT INTO boards (dev_team_id, title, period_type, period_start, period_end, period_label, is_active)
+       VALUES ($1, 'B', 'quarterly', '2025-01-01', '2025-03-31', 'Q1', true) RETURNING id`,
+      [teamId],
+    )
+  ).rows[0].id
+  const objId = (
+    await pool.query<{ id: number }>(
+      `INSERT INTO board_objectives (board_id, title, sort_order, is_active) VALUES ($1, 'O', 1, true) RETURNING id`,
+      [boardId],
+    )
+  ).rows[0].id
+  return objId
+}
+
+describe('getAppDeploymentStatsBatch with deployerUsernames filter', () => {
+  it('counts only deployments by listed deployers', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'tx', appName: 'a', environment: 'prod' })
+    const now = new Date()
+
+    await seedDeploy(appId, 'tx', 'alice', 'approved_pr', now)
+    await seedDeploy(appId, 'tx', 'alice', 'approved_pr', now)
+    await seedDeploy(appId, 'tx', 'bob', 'direct_push', now)
+    await seedDeploy(appId, 'tx', 'mallory', 'approved_pr', now) // not a member
+
+    const stats = await getAppDeploymentStatsBatch([{ id: appId }], ['alice', 'bob'])
+    const s = stats.get(appId)
+    if (!s) throw new Error('expected stats for appId')
+
+    expect(s.total).toBe(3)
+    expect(s.with_four_eyes).toBe(2)
+    expect(s.without_four_eyes).toBe(1)
+  })
+
+  it('returns zero counts but keeps last_deployment_id pointing to most recent deploy when deployerUsernames is empty', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'tx', appName: 'a', environment: 'prod' })
+    const depId = await seedDeploy(appId, 'tx', 'alice', 'approved_pr', new Date())
+
+    const stats = await getAppDeploymentStatsBatch([{ id: appId }], [])
+    const s = stats.get(appId)
+    if (!s) throw new Error('expected stats for appId')
+
+    expect(s.total).toBe(0)
+    expect(s.with_four_eyes).toBe(0)
+    // last_deployment_id is intentionally not filtered by deployer — it always
+    // reflects the most recent deploy to the app so the AppCard "last deployment"
+    // link doesn't mislead users into thinking the app is stale.
+    expect(s.last_deployment_id).toBe(depId)
+  })
+
+  it('keeps last_deployment_id pointing to most recent deploy regardless of deployer filter', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'tx', appName: 'a', environment: 'prod' })
+    const earlier = new Date(Date.now() - 60_000)
+    const later = new Date()
+    await seedDeploy(appId, 'tx', 'alice', 'approved_pr', earlier)
+    const nonMemberLatest = await seedDeploy(appId, 'tx', 'mallory', 'approved_pr', later)
+
+    const stats = await getAppDeploymentStatsBatch([{ id: appId }], ['alice'])
+    const s = stats.get(appId)
+    if (!s) throw new Error('expected stats for appId')
+
+    expect(s.total).toBe(1) // only alice's deploy counted
+    expect(s.last_deployment_id).toBe(nonMemberLatest) // but link points to most recent overall
+  })
+
+  it('preserves backwards-compatible behavior when deployerUsernames is undefined', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'tx', appName: 'a', environment: 'prod' })
+    await seedDeploy(appId, 'tx', 'alice', 'approved_pr', new Date())
+    await seedDeploy(appId, 'tx', 'mallory', 'approved_pr', new Date())
+
+    const stats = await getAppDeploymentStatsBatch([{ id: appId }])
+    expect(stats.get(appId)?.total).toBe(2)
+  })
+})
+
+describe('getDevTeamCoverageStats', () => {
+  it('aggregates four-eyes and origin coverage filtered to team members', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'tx', appName: 'a', environment: 'prod' })
+    const objectiveId = await seedBoardObjective()
+    const now = new Date()
+    const since = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+    const until = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+
+    const d1 = await seedDeploy(appId, 'tx', 'alice', 'approved_pr', now)
+    const d2 = await seedDeploy(appId, 'tx', 'alice', 'direct_push', now)
+    const d3 = await seedDeploy(appId, 'tx', 'bob', 'approved_pr', now)
+    await seedDeploy(appId, 'tx', 'mallory', 'approved_pr', now) // excluded
+
+    // Link two of the three member deploys to an objective
+    await linkDeploymentToObjective(d1, objectiveId)
+    await linkDeploymentToObjective(d3, objectiveId)
+    void d2
+
+    const result = await getDevTeamCoverageStats([appId], ['alice', 'bob'], since, until)
+    expect(result.total).toBe(3)
+    expect(result.with_four_eyes).toBe(2)
+    expect(result.four_eyes_percentage).toBe(67)
+    expect(result.with_origin).toBe(2)
+    expect(result.origin_percentage).toBe(67)
+  })
+
+  it('returns zeros when there are no team members', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'tx', appName: 'a', environment: 'prod' })
+    await seedDeploy(appId, 'tx', 'alice', 'approved_pr', new Date())
+
+    const r = await getDevTeamCoverageStats([appId], [], new Date(0), new Date())
+    expect(r).toEqual({ total: 0, with_four_eyes: 0, four_eyes_percentage: 0, with_origin: 0, origin_percentage: 0 })
+  })
+
+  it('returns zeros when there are no apps', async () => {
+    const r = await getDevTeamCoverageStats([], ['alice'], new Date(0), new Date())
+    expect(r.total).toBe(0)
+  })
+
+  it('respects date window', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'tx', appName: 'a', environment: 'prod' })
+    const old = new Date('2020-01-01')
+    const recent = new Date()
+
+    await seedDeploy(appId, 'tx', 'alice', 'approved_pr', old)
+    await seedDeploy(appId, 'tx', 'alice', 'approved_pr', recent)
+
+    const since = new Date(recent.getTime() - 24 * 60 * 60 * 1000)
+    const until = new Date(recent.getTime() + 24 * 60 * 60 * 1000)
+    const r = await getDevTeamCoverageStats([appId], ['alice'], since, until)
+    expect(r.total).toBe(1)
+  })
+})

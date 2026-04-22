@@ -8,6 +8,7 @@ import {
   CheckboxGroup,
   Detail,
   Heading,
+  HGrid,
   HStack,
   Modal,
   Select,
@@ -22,6 +23,7 @@ import { AppCard, type AppCardData } from '~/components/AppCard'
 import { getAllActiveRepositories } from '~/db/application-repositories.server'
 import { type Board, createBoard, getBoardsByDevTeam } from '~/db/boards.server'
 import { type BoardObjectiveProgress, getBoardObjectiveProgress } from '~/db/dashboard-stats.server'
+import { getDevTeamCoverageStats } from '~/db/deployment-goal-links.server'
 import { getAppDeploymentStatsBatch } from '~/db/deployments.server'
 import {
   addAppToDevTeam,
@@ -73,10 +75,28 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     (app) => app.is_active && (directAppIds.has(app.id) || naisTeamSlugs.includes(app.team_slug)),
   )
 
-  const statsByApp =
+  // Filter stats to deploys made by team members (their GitHub usernames).
+  const deployerUsernames = members.map((m) => m.github_username).filter((u): u is string => !!u)
+  const hasMappedMembers = deployerUsernames.length > 0
+
+  // Top-of-page coverage stats: last 90 days, filtered to team members' deploys.
+  const coverageEnd = new Date()
+  const coverageStart = new Date(coverageEnd.getTime() - 90 * 24 * 60 * 60 * 1000)
+
+  const [statsByApp, teamCoverage] = await Promise.all([
     teamApps.length > 0
-      ? await getAppDeploymentStatsBatch(teamApps.map((a) => ({ id: a.id, audit_start_year: a.audit_start_year })))
-      : new Map()
+      ? getAppDeploymentStatsBatch(
+          teamApps.map((a) => ({ id: a.id, audit_start_year: a.audit_start_year })),
+          deployerUsernames,
+        )
+      : Promise.resolve(new Map()),
+    getDevTeamCoverageStats(
+      teamApps.map((a) => a.id),
+      deployerUsernames,
+      coverageStart,
+      coverageEnd,
+    ),
+  ])
 
   const appCards: AppCardData[] = groupAppCards(
     teamApps.map((app) => ({
@@ -108,6 +128,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     availableApps,
     sectionSlug: params.sectionSlug,
     sectionName: section?.name ?? params.sectionSlug,
+    teamCoverage,
+    hasMappedMembers,
+    unmappedMemberCount: members.length - deployerUsernames.length,
   }
 }
 
@@ -197,8 +220,19 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function DevTeamPage() {
-  const { devTeam, boards, activeBoard, activeBoardProgress, members, appCards, availableApps, sectionSlug } =
-    useLoaderData<typeof loader>()
+  const {
+    devTeam,
+    boards,
+    activeBoard,
+    activeBoardProgress,
+    members,
+    appCards,
+    availableApps,
+    sectionSlug,
+    teamCoverage,
+    hasMappedMembers,
+    unmappedMemberCount,
+  } = useLoaderData<typeof loader>()
   const actionData = useActionData<typeof action>()
   const navigation = useNavigation()
   const layoutData = useRouteLoaderData<typeof layoutLoader>('routes/layout')
@@ -218,6 +252,14 @@ export default function DevTeamPage() {
         </Heading>
         <BodyShort textColor="subtle">Teamside med mål- og commitmentstavler.</BodyShort>
       </div>
+
+      {/* Team-member-based coverage summary */}
+      <TeamCoverageCards
+        coverage={teamCoverage}
+        hasMappedMembers={hasMappedMembers}
+        unmappedMemberCount={unmappedMemberCount}
+        totalMembers={members.length}
+      />
 
       {/* Active board */}
       {activeBoard ? (
@@ -296,6 +338,7 @@ export default function DevTeamPage() {
             </Button>
           )}
         </HStack>
+        <Detail textColor="subtle">Statistikk er filtrert til deploys utført av team-medlemmer.</Detail>
         <ActionAlert data={actionData} />
         {appCards.length > 0 ? (
           <VStack gap="space-4">
@@ -316,6 +359,81 @@ export default function DevTeamPage() {
         isSubmitting={navigation.state === 'submitting'}
       />
     </VStack>
+  )
+}
+
+function TeamCoverageCards({
+  coverage,
+  hasMappedMembers,
+  unmappedMemberCount,
+  totalMembers,
+}: {
+  coverage: {
+    total: number
+    with_four_eyes: number
+    four_eyes_percentage: number
+    with_origin: number
+    origin_percentage: number
+  }
+  hasMappedMembers: boolean
+  unmappedMemberCount: number
+  totalMembers: number
+}) {
+  if (totalMembers === 0) {
+    return (
+      <Alert variant="info">
+        Ingen medlemmer er registrert for dette teamet enda. Statistikk på team-medlemmenes deploys vises når medlemmer
+        er lagt til.
+      </Alert>
+    )
+  }
+
+  if (!hasMappedMembers) {
+    return (
+      <Alert variant="warning">
+        Ingen av de {totalMembers} medlemmene har et GitHub-brukernavn registrert. Statistikk vises når brukerkoblinger
+        er på plass.
+      </Alert>
+    )
+  }
+
+  return (
+    <VStack gap="space-8">
+      {unmappedMemberCount > 0 && (
+        <Alert variant="warning" size="small">
+          {unmappedMemberCount} av {totalMembers} medlemmer mangler GitHub-brukernavn — statistikken kan være
+          ufullstendig.
+        </Alert>
+      )}
+      <HGrid gap="space-12" columns={{ xs: 1, sm: 3 }}>
+        <CoverageCard label="Deploys siste 90 dager" value={coverage.total.toString()} />
+        <CoverageCard
+          label="4-øyne-dekning"
+          value={`${coverage.four_eyes_percentage}%`}
+          sub={`${coverage.with_four_eyes} av ${coverage.total}`}
+        />
+        <CoverageCard
+          label="Endringsopphav"
+          value={`${coverage.origin_percentage}%`}
+          sub={`${coverage.with_origin} av ${coverage.total}`}
+        />
+      </HGrid>
+      <Detail textColor="subtle">Basert på deploys utført av team-medlemmer (siste 90 dager).</Detail>
+    </VStack>
+  )
+}
+
+function CoverageCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <Box padding="space-16" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
+      <VStack gap="space-4">
+        <Detail textColor="subtle">{label}</Detail>
+        <Heading level="3" size="medium">
+          {value}
+        </Heading>
+        {sub && <Detail textColor="subtle">{sub}</Detail>}
+      </VStack>
+    </Box>
   )
 }
 
