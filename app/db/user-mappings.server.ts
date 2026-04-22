@@ -181,7 +181,6 @@ export async function upsertUserMapping(params: {
  * conflict.
  */
 export async function deleteUserMapping(githubUsername: string, deletedBy: string | null = null): Promise<void> {
-  const normalized = githubUsername.toLowerCase()
   // Fetch from DB to reliably get nav_ident for cache cleanup
   const result = await pool.query('SELECT nav_ident FROM user_mappings WHERE github_username = $1', [githubUsername])
   const existing = result.rows[0]
@@ -189,10 +188,11 @@ export async function deleteUserMapping(githubUsername: string, deletedBy: strin
     'UPDATE user_mappings SET deleted_at = NOW(), deleted_by = $2, updated_at = NOW() WHERE github_username = $1 AND deleted_at IS NULL',
     [githubUsername, deletedBy],
   )
-  // Drop cached entries so the next "current state" lookup (e.g. nav-ident or
-  // Slack-id resolution) re-queries and respects the deleted_at filter.
+  // Drop cached entries so the next cached "current state" lookup by GitHub
+  // username or nav-ident re-queries and respects the deleted_at filter.
   // Display-name lookups will repopulate the cache from the soft-deleted row.
-  userMappingCache.delete(normalized)
+  // Cache keys are lowercased; DB matching is case-sensitive (pre-existing).
+  userMappingCache.delete(githubUsername.toLowerCase())
   if (existing?.nav_ident) {
     userMappingCache.delete(existing.nav_ident.toLowerCase())
   }

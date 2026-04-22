@@ -201,11 +201,14 @@ CREATE TABLE IF NOT EXISTS user_mappings (
   nav_ident TEXT,
   slack_member_id TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ NULL,
+  deleted_by TEXT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_user_mappings_slack ON user_mappings(slack_member_id);
 CREATE INDEX IF NOT EXISTS idx_user_mappings_email ON user_mappings(nav_email);
+CREATE INDEX IF NOT EXISTS idx_user_mappings_active ON user_mappings(github_username) WHERE deleted_at IS NULL;
 
 -- Triggers for updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()

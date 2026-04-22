@@ -52,8 +52,12 @@ export async function action({ request }: Route.ActionArgs) {
   const intent = formData.get('intent')
 
   if (intent === 'delete') {
-    const githubUsername = formData.get('github_username') as string
-    await deleteUserMapping(githubUsername, admin.navIdent)
+    const githubUsername = formData.get('github_username')
+    const normalized = typeof githubUsername === 'string' ? githubUsername.trim() : ''
+    if (!normalized) {
+      return { fieldErrors: { github_username: 'GitHub brukernavn er påkrevd' } }
+    }
+    await deleteUserMapping(normalized, admin.navIdent)
     return { success: true }
   }
 

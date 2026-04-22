@@ -1,5 +1,6 @@
 import { Pool } from 'pg'
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { searchDeployments } from '../../deployments.server'
 import {
   clearUserMappingCache,
   deleteUserMapping,
@@ -21,22 +22,19 @@ beforeAll(() => {
 afterAll(async () => {
   await pool.end()
 })
-afterEach(async () => {
-  await truncateAllTables(pool)
-  clearUserMappingCache()
-})
 
 async function seedDeploy(pool: Pool, deployer: string) {
   const app = await pool.query<{ id: number }>(
     `INSERT INTO monitored_applications (team_slug, app_name, environment_name, is_active)
-     VALUES ('t', 'a', 'dev', true) RETURNING id`,
+     VALUES ('t', $1, 'dev', true) RETURNING id`,
+    [`a-${deployer}`],
   )
   await pool.query(
     `INSERT INTO deployments (
        monitored_app_id, nais_deployment_id, team_slug, app_name, environment_name,
        commit_sha, created_at, four_eyes_status, deployer_username
-     ) VALUES ($1, $2, 't', 'a', 'dev', $3, NOW(), 'pending', $4)`,
-    [app.rows[0].id, `nd-${deployer}-${Date.now()}`, `sha-${deployer}`, deployer],
+     ) VALUES ($1, $2, 't', $3, 'dev', $4, NOW(), 'pending', $5)`,
+    [app.rows[0].id, `nd-${deployer}-${Date.now()}`, `a-${deployer}`, `sha-${deployer}`, deployer],
   )
 }
 
@@ -143,5 +141,34 @@ describe('user_mappings soft delete', () => {
 
     expect(second[0].deleted_at.getTime()).toBe(first[0].deleted_at.getTime())
     expect(second[0].deleted_by).toBe('A111111')
+  })
+
+  it('searchDeployments excludes soft-deleted mappings from user search', async () => {
+    await seedDeploy(pool, 'octocat')
+    await upsertUserMapping({
+      githubUsername: 'octocat',
+      displayName: 'Octo Cat',
+      navIdent: 'O123456',
+      navEmail: 'octo.cat@nav.no',
+      slackMemberId: 'U001OCTO',
+    })
+
+    // Active mapping is discoverable by every joined field.
+    expect((await searchDeployments('Octo Cat')).some((r) => r.type === 'user')).toBe(true)
+    expect((await searchDeployments('O123456')).some((r) => r.type === 'user')).toBe(true)
+    expect((await searchDeployments('octo.cat')).some((r) => r.type === 'user')).toBe(true)
+    expect((await searchDeployments('U001OCTO')).some((r) => r.type === 'user')).toBe(true)
+
+    await deleteUserMapping('octocat', 'A999999')
+
+    // Soft-deleted mapping no longer matches via mapping fields.
+    expect((await searchDeployments('Octo Cat')).some((r) => r.type === 'user')).toBe(false)
+    expect((await searchDeployments('O123456')).some((r) => r.type === 'user')).toBe(false)
+    expect((await searchDeployments('octo.cat')).some((r) => r.type === 'user')).toBe(false)
+    expect((await searchDeployments('U001OCTO')).some((r) => r.type === 'user')).toBe(false)
+
+    // Direct deployer_username search still finds the deployment activity.
+    const byUsername = await searchDeployments('octocat')
+    expect(byUsername.some((r) => r.type === 'user' && r.url === '/users/octocat')).toBe(true)
   })
 })
