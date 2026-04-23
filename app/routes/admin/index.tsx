@@ -1,5 +1,6 @@
 import {
   ArrowsCirclepathIcon,
+  ArrowUndoIcon,
   Buildings3Icon,
   ChatIcon,
   CheckmarkCircleIcon,
@@ -34,11 +35,24 @@ export async function loader({ request }: Route.LoaderArgs) {
   const diffResult = await pool.query('SELECT COUNT(*) as count FROM verification_diffs')
   const diffCount = parseInt(diffResult.rows[0].count, 10)
 
-  return { pendingCount, diffCount }
+  // Count soft-deleted rows across the audit-relevant tables
+  const softDeletedResult = await pool.query<{ total: string }>(`
+    SELECT (
+      (SELECT COUNT(*) FROM user_mappings WHERE deleted_at IS NOT NULL) +
+      (SELECT COUNT(*) FROM deployment_comments WHERE deleted_at IS NOT NULL AND comment_type NOT IN ('manual_approval', 'legacy_info')) +
+      (SELECT COUNT(*) FROM dev_team_applications WHERE deleted_at IS NOT NULL) +
+      (SELECT COUNT(*) FROM section_teams WHERE deleted_at IS NOT NULL) +
+      (SELECT COUNT(*) FROM dev_team_nais_teams WHERE deleted_at IS NOT NULL) +
+      (SELECT COUNT(*) FROM external_references WHERE deleted_at IS NOT NULL)
+    )::text AS total
+  `)
+  const softDeletedCount = parseInt(softDeletedResult.rows[0].total, 10)
+
+  return { pendingCount, diffCount, softDeletedCount }
 }
 
 export default function AdminIndex() {
-  const { pendingCount, diffCount } = useLoaderData<typeof loader>()
+  const { pendingCount, diffCount, softDeletedCount } = useLoaderData<typeof loader>()
   return (
     <VStack gap="space-24">
       <div>
@@ -259,6 +273,33 @@ export default function AdminIndex() {
                   {diffCount > 0
                     ? `${diffCount} avvik funnet på tvers av applikasjoner.`
                     : 'Sjekk verifiseringsavvik på tvers av alle applikasjoner.'}
+                </BodyShort>
+              </div>
+            </VStack>
+          </Box>
+        </Link>
+
+        <Link to="/admin/soft-deleted" style={{ textDecoration: 'none', height: '100%' }}>
+          <Box
+            padding="space-24"
+            borderRadius="8"
+            background="raised"
+            borderColor={softDeletedCount > 0 ? 'warning-subtle' : 'neutral-subtle'}
+            borderWidth="1"
+            data-color={softDeletedCount > 0 ? 'warning' : undefined}
+            className="admin-card"
+            style={{ height: '100%' }}
+          >
+            <VStack gap="space-12">
+              <ArrowUndoIcon fontSize="2rem" aria-hidden />
+              <div>
+                <Heading level="2" size="small" spacing>
+                  Slettede rader
+                </Heading>
+                <BodyShort textColor="subtle">
+                  {softDeletedCount > 0
+                    ? `${softDeletedCount} logisk slettede rader. Se hvem som slettet og gjenopprett ved behov.`
+                    : 'Se og gjenopprett logisk slettede rader.'}
                 </BodyShort>
               </div>
             </VStack>
