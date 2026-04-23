@@ -10,6 +10,8 @@ interface DeploymentComment {
   approved_at: Date | null
   registered_by: string | null
   created_at: Date
+  deleted_at: Date | null
+  deleted_by: string | null
 }
 
 interface CreateCommentParams {
@@ -23,7 +25,7 @@ interface CreateCommentParams {
 
 export async function getCommentsByDeploymentId(deployment_id: number): Promise<DeploymentComment[]> {
   const result = await query<DeploymentComment>(
-    'SELECT * FROM deployment_comments WHERE deployment_id = $1 ORDER BY created_at DESC',
+    'SELECT * FROM deployment_comments WHERE deployment_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC',
     [deployment_id],
   )
   return result.rows
@@ -53,7 +55,7 @@ export async function createComment(params: CreateCommentParams): Promise<Deploy
 export async function getManualApproval(deployment_id: number): Promise<DeploymentComment | null> {
   const result = await query<DeploymentComment>(
     `SELECT * FROM deployment_comments 
-     WHERE deployment_id = $1 AND comment_type = 'manual_approval'
+     WHERE deployment_id = $1 AND comment_type = 'manual_approval' AND deleted_at IS NULL
      ORDER BY created_at DESC
      LIMIT 1`,
     [deployment_id],
@@ -64,7 +66,7 @@ export async function getManualApproval(deployment_id: number): Promise<Deployme
 export async function getLegacyInfo(deployment_id: number): Promise<DeploymentComment | null> {
   const result = await query<DeploymentComment>(
     `SELECT * FROM deployment_comments 
-     WHERE deployment_id = $1 AND comment_type = 'legacy_info'
+     WHERE deployment_id = $1 AND comment_type = 'legacy_info' AND deleted_at IS NULL
      ORDER BY created_at DESC
      LIMIT 1`,
     [deployment_id],
@@ -72,15 +74,22 @@ export async function getLegacyInfo(deployment_id: number): Promise<DeploymentCo
   return result.rows[0] || null
 }
 
-export async function deleteComment(id: number): Promise<boolean> {
-  const result = await query('DELETE FROM deployment_comments WHERE id = $1', [id])
+export async function deleteComment(id: number, deletedBy: string): Promise<boolean> {
+  const result = await query(
+    `UPDATE deployment_comments
+     SET deleted_at = NOW(), deleted_by = $2
+     WHERE id = $1 AND deleted_at IS NULL`,
+    [id, deletedBy],
+  )
   return (result.rowCount ?? 0) > 0
 }
 
-export async function deleteLegacyInfo(deployment_id: number): Promise<boolean> {
+export async function deleteLegacyInfo(deployment_id: number, deletedBy: string): Promise<boolean> {
   const result = await query(
-    "DELETE FROM deployment_comments WHERE deployment_id = $1 AND comment_type = 'legacy_info'",
-    [deployment_id],
+    `UPDATE deployment_comments
+     SET deleted_at = NOW(), deleted_by = $2
+     WHERE deployment_id = $1 AND comment_type = 'legacy_info' AND deleted_at IS NULL`,
+    [deployment_id, deletedBy],
   )
   return (result.rowCount ?? 0) > 0
 }

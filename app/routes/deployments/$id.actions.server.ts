@@ -458,7 +458,7 @@ export async function action({ request, params }: { request: Request; params: Re
 
     try {
       // Delete the legacy_info comment
-      await deleteLegacyInfo(deploymentId)
+      await deleteLegacyInfo(deploymentId, navIdent)
 
       // Add a rejection comment
       await createComment({
@@ -485,9 +485,13 @@ export async function action({ request, params }: { request: Request; params: Re
   }
 
   if (intent === 'delete_comment') {
+    const navIdent = await getNavIdent(request)
+    if (!navIdent) {
+      return { error: 'Kunne ikke identifisere bruker. Vennligst logg inn på nytt.' }
+    }
     const commentId = parseInt(formData.get('comment_id') as string, 10)
     try {
-      await deleteComment(commentId)
+      await deleteComment(commentId, navIdent)
       return { success: 'Kommentar slettet' }
     } catch (_error) {
       return { error: 'Kunne ikke slette kommentar' }

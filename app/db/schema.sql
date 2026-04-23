@@ -153,10 +153,14 @@ CREATE TABLE IF NOT EXISTS deployment_comments (
   comment_text TEXT NOT NULL,
   slack_link TEXT,
   created_by VARCHAR(255),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  deleted_at TIMESTAMPTZ NULL,
+  deleted_by TEXT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_deployment_comments_deployment_id ON deployment_comments(deployment_id);
+CREATE INDEX IF NOT EXISTS idx_deployment_comments_active
+  ON deployment_comments(deployment_id)
+  WHERE deleted_at IS NULL;
 
 -- Commits cache (for fast verification without GitHub API calls)
 CREATE TABLE IF NOT EXISTS commits (
