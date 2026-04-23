@@ -108,7 +108,7 @@ export async function getSectionDashboardStats(
               array_agg(DISTINCT dta.monitored_app_id) FILTER (WHERE dta.monitored_app_id IS NOT NULL) AS direct_app_ids
        FROM dev_teams dt
        LEFT JOIN dev_team_nais_teams dtn ON dtn.dev_team_id = dt.id
-       LEFT JOIN dev_team_applications dta ON dta.dev_team_id = dt.id
+       LEFT JOIN dev_team_applications dta ON dta.dev_team_id = dt.id AND dta.deleted_at IS NULL
        WHERE dt.section_id = $1 AND dt.is_active = true
        GROUP BY dt.id
      ),

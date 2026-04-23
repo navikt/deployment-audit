@@ -160,7 +160,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       .map(Number)
       .filter((n) => !Number.isNaN(n) && n > 0)
     try {
-      await setDevTeamApplications(devTeam.id, appIds)
+      await setDevTeamApplications(devTeam.id, appIds, user.navIdent)
       return { success: 'Applikasjoner oppdatert.' }
     } catch (error) {
       return { error: `Kunne ikke oppdatere applikasjoner: ${error}` }
