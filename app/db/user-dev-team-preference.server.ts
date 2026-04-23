@@ -96,7 +96,8 @@ export async function getDevTeamMembers(devTeamId: number): Promise<DevTeamMembe
   const result = await pool.query(
     `SELECT p.nav_ident, um.github_username, um.display_name
      FROM user_dev_team_preference p
-     LEFT JOIN user_mappings um ON UPPER(um.nav_ident) = UPPER(p.nav_ident)
+     LEFT JOIN user_mappings um
+       ON UPPER(um.nav_ident) = UPPER(p.nav_ident) AND um.deleted_at IS NULL
      WHERE p.dev_team_id = $1
      ORDER BY COALESCE(um.display_name, p.nav_ident)`,
     [devTeamId],

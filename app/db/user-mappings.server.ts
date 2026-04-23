@@ -9,13 +9,26 @@ export interface UserMapping {
   slack_member_id: string | null
   created_at: Date
   updated_at: Date
+  deleted_at: Date | null
+  deleted_by: string | null
 }
 
 // In-memory cache for user mappings
 const userMappingCache = new Map<string, UserMapping | null>()
 
 /**
- * Get user mapping by GitHub username or NAV-ident
+ * Clear the in-memory user mapping cache. Intended for tests; safe to call
+ * in production but will cause a brief spike of DB hits as caches refill.
+ */
+export function clearUserMappingCache(): void {
+  userMappingCache.clear()
+}
+
+/**
+ * Get user mapping by GitHub username or NAV-ident.
+ *
+ * Returns soft-deleted mappings too, so historical deployments keep resolving
+ * to the previously-mapped display name.
  */
 export async function getUserMapping(identifier: string): Promise<UserMapping | null> {
   const key = identifier.toLowerCase()
@@ -48,8 +61,11 @@ export async function getUserMapping(identifier: string): Promise<UserMapping | 
 }
 
 /**
- * Get multiple user mappings by GitHub usernames or NAV-idents
- * Searches both github_username and nav_ident fields
+ * Get multiple user mappings by GitHub usernames or NAV-idents.
+ * Searches both github_username and nav_ident fields.
+ *
+ * Returns soft-deleted mappings too, so historical deployments keep resolving
+ * to the previously-mapped display name.
  */
 export async function getUserMappings(identifiers: string[]): Promise<Map<string, UserMapping>> {
   if (identifiers.length === 0) return new Map()
@@ -135,7 +151,9 @@ export async function upsertUserMapping(params: {
        nav_email = COALESCE(EXCLUDED.nav_email, user_mappings.nav_email),
        nav_ident = COALESCE(EXCLUDED.nav_ident, user_mappings.nav_ident),
        slack_member_id = COALESCE(EXCLUDED.slack_member_id, user_mappings.slack_member_id),
-       updated_at = NOW()
+       updated_at = NOW(),
+       deleted_at = NULL,
+       deleted_by = NULL
      RETURNING *`,
     [
       githubUsername,
@@ -155,37 +173,50 @@ export async function upsertUserMapping(params: {
 }
 
 /**
- * Delete a user mapping
+ * Soft-delete a user mapping.
+ *
+ * The row is preserved so historical deployments still resolve to the mapped
+ * display name. Admin lists, current-user identity lookups, and "unmapped users"
+ * suggestions treat the row as gone. `upsertUserMapping` will undelete on
+ * conflict.
  */
-export async function deleteUserMapping(githubUsername: string): Promise<void> {
-  const normalized = githubUsername.toLowerCase()
+export async function deleteUserMapping(githubUsername: string, deletedBy: string | null = null): Promise<void> {
   // Fetch from DB to reliably get nav_ident for cache cleanup
   const result = await pool.query('SELECT nav_ident FROM user_mappings WHERE github_username = $1', [githubUsername])
   const existing = result.rows[0]
-  await pool.query('DELETE FROM user_mappings WHERE github_username = $1', [githubUsername])
-  userMappingCache.delete(normalized)
+  await pool.query(
+    'UPDATE user_mappings SET deleted_at = NOW(), deleted_by = $2, updated_at = NOW() WHERE github_username = $1 AND deleted_at IS NULL',
+    [githubUsername, deletedBy],
+  )
+  // Drop cached entries so the next cached "current state" lookup by GitHub
+  // username or nav-ident re-queries and respects the deleted_at filter.
+  // Display-name lookups will repopulate the cache from the soft-deleted row.
+  // Cache keys are lowercased; DB matching is case-sensitive (pre-existing).
+  userMappingCache.delete(githubUsername.toLowerCase())
   if (existing?.nav_ident) {
     userMappingCache.delete(existing.nav_ident.toLowerCase())
   }
 }
 
 /**
- * Get all user mappings
+ * Get all active (non-soft-deleted) user mappings — for admin list views.
  */
 export async function getAllUserMappings(): Promise<UserMapping[]> {
-  const result = await pool.query('SELECT * FROM user_mappings ORDER BY github_username')
+  const result = await pool.query('SELECT * FROM user_mappings WHERE deleted_at IS NULL ORDER BY github_username')
   return result.rows
 }
 
 /**
- * Get GitHub usernames from deployments that don't have user mappings.
+ * Get GitHub usernames from deployments that don't have an active user mapping.
+ * Soft-deleted mappings are treated as missing so admins can re-create them.
  * Excludes known bot accounts.
  */
 export async function getUnmappedUsers(): Promise<{ github_username: string; deployment_count: number }[]> {
   const result = await pool.query(`
     SELECT d.deployer_username as github_username, COUNT(*) as deployment_count
     FROM deployments d
-    LEFT JOIN user_mappings um ON d.deployer_username = um.github_username
+    LEFT JOIN user_mappings um
+      ON d.deployer_username = um.github_username AND um.deleted_at IS NULL
     WHERE d.deployer_username IS NOT NULL
       AND d.deployer_username != ''
       AND um.github_username IS NULL
@@ -203,17 +234,22 @@ export async function getUnmappedUsers(): Promise<{ github_username: string; dep
 }
 
 /**
- * Get user mapping by NAV-ident
+ * Get user mapping by NAV-ident — current-state lookup, excludes soft-deleted.
  */
 export async function getUserMappingByNavIdent(navIdent: string): Promise<UserMapping | null> {
-  const result = await pool.query('SELECT * FROM user_mappings WHERE UPPER(nav_ident) = UPPER($1)', [navIdent])
+  const result = await pool.query(
+    'SELECT * FROM user_mappings WHERE UPPER(nav_ident) = UPPER($1) AND deleted_at IS NULL',
+    [navIdent],
+  )
   return result.rows[0] || null
 }
 
 /**
- * Get user mapping by Slack member ID
+ * Get user mapping by Slack member ID — current-state lookup, excludes soft-deleted.
  */
 export async function getUserMappingBySlackId(slackMemberId: string): Promise<UserMapping | null> {
-  const result = await pool.query('SELECT * FROM user_mappings WHERE slack_member_id = $1', [slackMemberId])
+  const result = await pool.query('SELECT * FROM user_mappings WHERE slack_member_id = $1 AND deleted_at IS NULL', [
+    slackMemberId,
+  ])
   return result.rows[0] || null
 }
