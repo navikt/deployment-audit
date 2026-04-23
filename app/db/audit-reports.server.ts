@@ -361,7 +361,7 @@ export async function getAuditReportData(
     const approvalsResult = await pool.query(
       `SELECT deployment_id, comment_text, slack_link, approved_by, approved_at
        FROM deployment_comments
-       WHERE deployment_id = ANY($1) AND comment_type = 'manual_approval'
+       WHERE deployment_id = ANY($1) AND comment_type = 'manual_approval' AND deleted_at IS NULL
        ORDER BY approved_at ASC`,
       [deploymentIds],
     )
@@ -371,7 +371,7 @@ export async function getAuditReportData(
     const legacyInfoResult = await pool.query(
       `SELECT deployment_id, registered_by
        FROM deployment_comments
-       WHERE deployment_id = ANY($1) AND comment_type = 'legacy_info'`,
+       WHERE deployment_id = ANY($1) AND comment_type = 'legacy_info' AND deleted_at IS NULL`,
       [deploymentIds],
     )
     legacy_infos = legacyInfoResult.rows

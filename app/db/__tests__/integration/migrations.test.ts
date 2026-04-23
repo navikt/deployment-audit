@@ -165,4 +165,16 @@ describe('Database migrations', () => {
       expect(fk.delete_rule, `${fk.constraint_name} should be RESTRICT`).toBe('RESTRICT')
     }
   })
+
+  it('should have only the partial active index on deployment_comments(deployment_id)', async () => {
+    const { rows } = await pool.query<{ indexname: string }>(`
+      SELECT indexname FROM pg_indexes
+      WHERE schemaname = 'public' AND tablename = 'deployment_comments'
+      ORDER BY indexname
+    `)
+    const names = rows.map((r) => r.indexname)
+    expect(names).toContain('idx_deployment_comments_active')
+    expect(names).not.toContain('idx_deployment_comments_deployment_id')
+    expect(names).not.toContain('idx_comments_deployment')
+  })
 })
