@@ -177,4 +177,15 @@ describe('Database migrations', () => {
     expect(names).not.toContain('idx_deployment_comments_deployment_id')
     expect(names).not.toContain('idx_comments_deployment')
   })
+
+  it('should have only the partial active index on dev_team_applications', async () => {
+    const { rows } = await pool.query<{ indexname: string }>(`
+      SELECT indexname FROM pg_indexes
+      WHERE schemaname = 'public' AND tablename = 'dev_team_applications'
+      ORDER BY indexname
+    `)
+    const names = rows.map((r) => r.indexname)
+    expect(names).toContain('idx_dev_team_applications_active')
+    expect(names).not.toContain('idx_dev_team_applications_app')
+  })
 })

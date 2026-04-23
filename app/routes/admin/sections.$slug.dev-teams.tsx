@@ -56,7 +56,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
-  await requireAdmin(request)
+  const user = await requireAdmin(request)
   const section = await getSectionBySlug(params.slug)
   if (!section) {
     throw new Response('Seksjon ikke funnet', { status: 404 })
@@ -144,7 +144,7 @@ export async function action({ request, params }: Route.ActionArgs) {
     const id = Number(formData.get('id'))
     const appIds = formData.getAll('app_ids').map(Number).filter(Boolean)
     try {
-      await setDevTeamApplications(id, appIds)
+      await setDevTeamApplications(id, appIds, user.navIdent)
       return { success: true }
     } catch (error) {
       return { error: `Kunne ikke oppdatere applikasjoner: ${error}` }
