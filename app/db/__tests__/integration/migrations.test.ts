@@ -210,4 +210,15 @@ describe('Database migrations', () => {
     expect(names).toContain('idx_dev_team_nais_teams_active')
     expect(names).not.toContain('idx_dev_team_nais_teams_slug')
   })
+
+  it('should have partial active indexes on external_references', async () => {
+    const { rows } = await pool.query<{ indexname: string }>(`
+      SELECT indexname FROM pg_indexes
+      WHERE schemaname = 'public' AND tablename = 'external_references'
+      ORDER BY indexname
+    `)
+    const names = rows.map((r) => r.indexname)
+    expect(names).toContain('idx_external_references_active_objective')
+    expect(names).toContain('idx_external_references_active_key_result')
+  })
 })

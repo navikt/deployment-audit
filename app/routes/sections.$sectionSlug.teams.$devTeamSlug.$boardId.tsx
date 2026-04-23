@@ -56,7 +56,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
-  await requireUser(request)
+  const user = await requireUser(request)
   const devTeam = await getDevTeamBySlug(params.devTeamSlug)
   if (!devTeam) throw new Response('Utviklingsteam ikke funnet', { status: 404 })
 
@@ -125,7 +125,7 @@ export async function action({ request, params }: Route.ActionArgs) {
         return { success: true }
       }
       case 'delete-reference': {
-        await deleteExternalReference(Number(formData.get('id')))
+        await deleteExternalReference(Number(formData.get('id')), user.navIdent)
         return { success: true }
       }
       case 'update-objective-keywords': {

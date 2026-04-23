@@ -128,15 +128,17 @@ export async function getBoardWithObjectives(boardId: number): Promise<BoardWith
       [obj.id],
     )
 
-    const objRefsResult = await pool.query('SELECT * FROM external_references WHERE objective_id = $1 ORDER BY id', [
-      obj.id,
-    ])
+    const objRefsResult = await pool.query(
+      'SELECT * FROM external_references WHERE objective_id = $1 AND deleted_at IS NULL ORDER BY id',
+      [obj.id],
+    )
 
     const keyResults: BoardKeyResultWithRefs[] = []
     for (const kr of krResult.rows) {
-      const krRefsResult = await pool.query('SELECT * FROM external_references WHERE key_result_id = $1 ORDER BY id', [
-        kr.id,
-      ])
+      const krRefsResult = await pool.query(
+        'SELECT * FROM external_references WHERE key_result_id = $1 AND deleted_at IS NULL ORDER BY id',
+        [kr.id],
+      )
       keyResults.push({ ...kr, external_references: krRefsResult.rows })
     }
 
@@ -428,13 +430,12 @@ export async function addExternalReference(data: {
   }
 }
 
-export async function deleteExternalReference(id: number): Promise<void> {
-  const exists = await pool.query('SELECT id FROM external_references WHERE id = $1', [id])
-  if (exists.rowCount === 0) return
-
+export async function deleteExternalReference(id: number, deletedBy: string): Promise<void> {
   const result = await pool.query(
-    `DELETE FROM external_references er
+    `UPDATE external_references er
+     SET deleted_at = NOW(), deleted_by = $2
      WHERE er.id = $1
+       AND er.deleted_at IS NULL
        AND NOT EXISTS (
          SELECT 1 FROM board_objectives bo
          WHERE bo.id = er.objective_id AND bo.is_active = false
@@ -447,10 +448,21 @@ export async function deleteExternalReference(id: number): Promise<void> {
          SELECT 1 FROM board_key_results bkr
          JOIN board_objectives bo ON bo.id = bkr.objective_id
          WHERE bkr.id = er.key_result_id AND bo.is_active = false
-       )`,
+       )
+     RETURNING id`,
+    [id, deletedBy],
+  )
+  if ((result.rowCount ?? 0) > 0) return
+
+  // The UPDATE matched zero rows. Re-read state to disambiguate:
+  //   - row missing → no-op (idempotent)
+  //   - row already soft-deleted (e.g. by a concurrent caller) → no-op (idempotent)
+  //   - row still active in this follow-up read → treat it as blocked by a deactivated parent and throw
+  const { rows } = await pool.query<{ deleted_at: Date | null }>(
+    'SELECT deleted_at FROM external_references WHERE id = $1',
     [id],
   )
-  if (result.rowCount === 0) {
-    throw new Error('Kan ikke slette ekstern lenke fra et deaktivert mål eller nøkkelresultat.')
-  }
+  if (rows.length === 0) return
+  if (rows[0].deleted_at !== null) return
+  throw new Error('Kan ikke slette ekstern lenke fra et deaktivert mål eller nøkkelresultat.')
 }
