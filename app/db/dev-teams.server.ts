@@ -7,6 +7,13 @@ import { pool } from './connection.server'
  */
 const DEV_TEAM_APPLICATIONS_LOCK_NAMESPACE = 1772400000
 
+/**
+ * Advisory-lock namespace for dev_team_nais_teams replace-all writes
+ * (per dev_team_id). Distinct from DEV_TEAM_APPLICATIONS_LOCK_NAMESPACE
+ * so the two write paths don't share a lock unnecessarily.
+ */
+const DEV_TEAM_NAIS_TEAMS_LOCK_NAMESPACE = 1772500002
+
 export interface DevTeam {
   id: number
   section_id: number
@@ -34,7 +41,7 @@ export async function getAllDevTeams(): Promise<DevTeamWithNaisTeams[]> {
        COALESCE(array_agg(dn.nais_team_slug ORDER BY dn.nais_team_slug) FILTER (WHERE dn.nais_team_slug IS NOT NULL), '{}') as nais_team_slugs
      FROM dev_teams dt
      JOIN sections s ON s.id = dt.section_id
-     LEFT JOIN dev_team_nais_teams dn ON dn.dev_team_id = dt.id
+     LEFT JOIN dev_team_nais_teams dn ON dn.dev_team_id = dt.id AND dn.deleted_at IS NULL
      WHERE dt.is_active = true
      GROUP BY dt.id, s.slug
      ORDER BY dt.name`,
@@ -48,7 +55,7 @@ export async function getDevTeamsBySection(sectionId: number): Promise<DevTeamWi
        COALESCE(array_agg(dn.nais_team_slug ORDER BY dn.nais_team_slug) FILTER (WHERE dn.nais_team_slug IS NOT NULL), '{}') as nais_team_slugs
      FROM dev_teams dt
      LEFT JOIN sections s ON s.id = dt.section_id
-     LEFT JOIN dev_team_nais_teams dn ON dn.dev_team_id = dt.id
+     LEFT JOIN dev_team_nais_teams dn ON dn.dev_team_id = dt.id AND dn.deleted_at IS NULL
      WHERE dt.section_id = $1 AND dt.is_active = true
      GROUP BY dt.id, s.slug
      ORDER BY dt.name`,
@@ -63,7 +70,7 @@ export async function getDevTeamBySlug(slug: string): Promise<DevTeamWithNaisTea
        COALESCE(array_agg(dn.nais_team_slug ORDER BY dn.nais_team_slug) FILTER (WHERE dn.nais_team_slug IS NOT NULL), '{}') as nais_team_slugs
      FROM dev_teams dt
      JOIN sections s ON s.id = dt.section_id
-     LEFT JOIN dev_team_nais_teams dn ON dn.dev_team_id = dt.id
+     LEFT JOIN dev_team_nais_teams dn ON dn.dev_team_id = dt.id AND dn.deleted_at IS NULL
      WHERE dt.slug = $1
      GROUP BY dt.id, s.slug`,
     [slug],
@@ -76,7 +83,7 @@ async function getDevTeamById(id: number): Promise<DevTeamWithNaisTeams | null> 
     `SELECT dt.*,
        COALESCE(array_agg(dn.nais_team_slug ORDER BY dn.nais_team_slug) FILTER (WHERE dn.nais_team_slug IS NOT NULL), '{}') as nais_team_slugs
      FROM dev_teams dt
-     LEFT JOIN dev_team_nais_teams dn ON dn.dev_team_id = dt.id
+     LEFT JOIN dev_team_nais_teams dn ON dn.dev_team_id = dt.id AND dn.deleted_at IS NULL
      WHERE dt.id = $1
      GROUP BY dt.id`,
     [id],
@@ -89,7 +96,7 @@ async function _getDevTeamForNaisTeam(naisTeamSlug: string): Promise<DevTeam | n
   const result = await pool.query(
     `SELECT dt.* FROM dev_teams dt
      JOIN dev_team_nais_teams dn ON dn.dev_team_id = dt.id
-     WHERE dn.nais_team_slug = $1 AND dt.is_active = true`,
+     WHERE dn.nais_team_slug = $1 AND dn.deleted_at IS NULL AND dt.is_active = true`,
     [naisTeamSlug],
   )
   return result.rows[0] ?? null
@@ -105,7 +112,7 @@ export async function getDevTeamsForApp(
      JOIN sections s ON s.id = dt.section_id
      LEFT JOIN dev_team_applications dta
        ON dta.dev_team_id = dt.id AND dta.monitored_app_id = $1 AND dta.deleted_at IS NULL
-     LEFT JOIN dev_team_nais_teams dnt ON dnt.dev_team_id = dt.id AND dnt.nais_team_slug = $2
+     LEFT JOIN dev_team_nais_teams dnt ON dnt.dev_team_id = dt.id AND dnt.nais_team_slug = $2 AND dnt.deleted_at IS NULL
      WHERE dt.is_active = true AND (dta.monitored_app_id IS NOT NULL OR dnt.nais_team_slug IS NOT NULL)
      ORDER BY dt.name`,
     [monitoredAppId, teamSlug],
@@ -143,17 +150,54 @@ export async function updateDevTeam(id: number, data: { name?: string; is_active
   return result.rows[0] ?? null
 }
 
-export async function setDevTeamNaisTeams(devTeamId: number, naisTeamSlugs: string[]): Promise<void> {
+/**
+ * Replace the full set of Nais teams a dev team is responsible for.
+ *
+ * Soft-deletes any existing active link not in `naisTeamSlugs` (recording
+ * `deletedBy`), and undeletes / inserts the requested links in a single
+ * transaction. Existing active links present in the new set are left
+ * untouched to avoid unnecessary row-version churn and preserve the
+ * existing row.
+ */
+export async function setDevTeamNaisTeams(
+  devTeamId: number,
+  naisTeamSlugs: string[],
+  deletedBy: string,
+): Promise<void> {
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
-    await client.query('DELETE FROM dev_team_nais_teams WHERE dev_team_id = $1', [devTeamId])
+
+    // Serialize concurrent replace-all writes for the same dev team to avoid
+    // deadlocks (parallel UPDATE+UPSERT lock orderings) and lost updates
+    // (two transactions each soft-deleting the other's set, then both
+    // inserting their own → union of both sets active).
+    await client.query('SELECT pg_advisory_xact_lock($1, $2)', [DEV_TEAM_NAIS_TEAMS_LOCK_NAMESPACE, devTeamId])
+
+    // Soft-delete active links no longer present in the new set.
+    await client.query(
+      `UPDATE dev_team_nais_teams
+       SET deleted_at = NOW(), deleted_by = $2
+       WHERE dev_team_id = $1
+         AND deleted_at IS NULL
+         AND NOT (nais_team_slug = ANY($3::text[]))`,
+      [devTeamId, deletedBy, naisTeamSlugs],
+    )
+
+    // Insert / undelete each requested link. The WHERE guard on the
+    // DO UPDATE branch prevents already-active rows from being rewritten,
+    // so unchanged links produce no row-version churn.
     for (const slug of naisTeamSlugs) {
-      await client.query('INSERT INTO dev_team_nais_teams (dev_team_id, nais_team_slug) VALUES ($1, $2)', [
-        devTeamId,
-        slug,
-      ])
+      await client.query(
+        `INSERT INTO dev_team_nais_teams (dev_team_id, nais_team_slug)
+         VALUES ($1, $2)
+         ON CONFLICT (dev_team_id, nais_team_slug)
+         DO UPDATE SET deleted_at = NULL, deleted_by = NULL
+         WHERE dev_team_nais_teams.deleted_at IS NOT NULL`,
+        [devTeamId, slug],
+      )
     }
+
     await client.query('COMMIT')
   } catch (e) {
     await client.query('ROLLBACK')

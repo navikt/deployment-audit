@@ -22,7 +22,7 @@ export async function autoLinkGoalKeywords(
   const devTeamResult = await pool.query(
     `SELECT dt.id FROM dev_teams dt
      JOIN dev_team_nais_teams dtn ON dtn.dev_team_id = dt.id
-     WHERE dtn.nais_team_slug = $1 AND dt.is_active = true`,
+     WHERE dtn.nais_team_slug = $1 AND dtn.deleted_at IS NULL AND dt.is_active = true`,
     [teamSlug],
   )
 
