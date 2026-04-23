@@ -85,7 +85,7 @@ export async function action({ request, params }: Route.ActionArgs) {
         entra_group_user: entraGroupUser || null,
       })
       if (teamSlugs) {
-        await setSectionTeams(section.id, teamSlugs)
+        await setSectionTeams(section.id, teamSlugs, user.navIdent)
       }
       return { success: true }
     } catch (error) {
@@ -123,7 +123,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 
     try {
       await updateDevTeam(id, { name })
-      await setDevTeamNaisTeams(id, naisTeamSlugs ?? [])
+      await setDevTeamNaisTeams(id, naisTeamSlugs ?? [], user.navIdent)
       return { success: true }
     } catch (error) {
       return { error: `Kunne ikke oppdatere utviklingsteam: ${error}` }

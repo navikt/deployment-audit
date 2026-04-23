@@ -11,7 +11,7 @@ export async function getUserDevTeams(navIdent: string): Promise<DevTeamWithNais
      FROM user_dev_team_preference p
      JOIN dev_teams dt ON dt.id = p.dev_team_id
      LEFT JOIN sections s ON s.id = dt.section_id
-     LEFT JOIN dev_team_nais_teams dn ON dn.dev_team_id = dt.id
+     LEFT JOIN dev_team_nais_teams dn ON dn.dev_team_id = dt.id AND dn.deleted_at IS NULL
      WHERE p.nav_ident = $1 AND dt.is_active = true
      GROUP BY dt.id, s.slug
      ORDER BY dt.name`,

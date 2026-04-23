@@ -1,5 +1,12 @@
 import { pool } from './connection.server'
 
+/**
+ * Advisory-lock namespace (first key for pg_advisory_xact_lock(int4, int4)).
+ * Arbitrary stable integer that scopes the per-section lock to this table's
+ * write path so it cannot collide with future advisory-lock callers.
+ */
+const SECTION_TEAMS_LOCK_NAMESPACE = 1772500001
+
 export interface Section {
   id: number
   slug: string
@@ -28,7 +35,7 @@ export async function getSectionWithTeams(slug: string): Promise<SectionWithTeam
   const result = await pool.query(
     `SELECT s.*, COALESCE(array_agg(st.team_slug ORDER BY st.team_slug) FILTER (WHERE st.team_slug IS NOT NULL), '{}') as team_slugs
      FROM sections s
-     LEFT JOIN section_teams st ON st.section_id = s.id
+     LEFT JOIN section_teams st ON st.section_id = s.id AND st.deleted_at IS NULL
      WHERE s.slug = $1
      GROUP BY s.id`,
     [slug],
@@ -45,7 +52,7 @@ async function _getSectionWithTeams(id: number): Promise<SectionWithTeams | null
   const result = await pool.query(
     `SELECT s.*, COALESCE(array_agg(st.team_slug ORDER BY st.team_slug) FILTER (WHERE st.team_slug IS NOT NULL), '{}') as team_slugs
      FROM sections s
-     LEFT JOIN section_teams st ON st.section_id = s.id
+     LEFT JOIN section_teams st ON st.section_id = s.id AND st.deleted_at IS NULL
      WHERE s.id = $1
      GROUP BY s.id`,
     [id],
@@ -57,7 +64,7 @@ export async function getAllSectionsWithTeams(): Promise<SectionWithTeams[]> {
   const result = await pool.query(
     `SELECT s.*, COALESCE(array_agg(st.team_slug ORDER BY st.team_slug) FILTER (WHERE st.team_slug IS NOT NULL), '{}') as team_slugs
      FROM sections s
-     LEFT JOIN section_teams st ON st.section_id = s.id
+     LEFT JOIN section_teams st ON st.section_id = s.id AND st.deleted_at IS NULL
      WHERE s.is_active = true
      GROUP BY s.id
      ORDER BY s.name`,
@@ -96,7 +103,7 @@ async function _getTeamSlugsForSections(sectionIds: number[]): Promise<string[]>
   if (sectionIds.length === 0) return []
 
   const result = await pool.query(
-    'SELECT DISTINCT team_slug FROM section_teams WHERE section_id = ANY($1) ORDER BY team_slug',
+    'SELECT DISTINCT team_slug FROM section_teams WHERE section_id = ANY($1) AND deleted_at IS NULL ORDER BY team_slug',
     [sectionIds],
   )
   return result.rows.map((r) => r.team_slug)
@@ -147,14 +154,50 @@ export async function updateSection(
   return result.rows[0] ?? null
 }
 
-export async function setSectionTeams(sectionId: number, teamSlugs: string[]): Promise<void> {
+/**
+ * Replace the full set of Nais teams owned by a section.
+ *
+ * Soft-deletes any existing active link not in `teamSlugs` (recording
+ * `deletedBy`), and undeletes / inserts the requested links in a single
+ * transaction. Existing active links present in the new set are left
+ * untouched to avoid unnecessary row-version churn and preserve the
+ * existing row.
+ */
+export async function setSectionTeams(sectionId: number, teamSlugs: string[], deletedBy: string): Promise<void> {
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
-    await client.query('DELETE FROM section_teams WHERE section_id = $1', [sectionId])
+
+    // Serialize concurrent replace-all writes for the same section to avoid
+    // deadlocks (parallel UPDATE+UPSERT lock orderings) and lost updates
+    // (two transactions each soft-deleting the other's set, then both
+    // inserting their own → union of both sets active).
+    await client.query('SELECT pg_advisory_xact_lock($1, $2)', [SECTION_TEAMS_LOCK_NAMESPACE, sectionId])
+
+    // Soft-delete active links no longer present in the new set.
+    await client.query(
+      `UPDATE section_teams
+       SET deleted_at = NOW(), deleted_by = $2
+       WHERE section_id = $1
+         AND deleted_at IS NULL
+         AND NOT (team_slug = ANY($3::text[]))`,
+      [sectionId, deletedBy, teamSlugs],
+    )
+
+    // Insert / undelete each requested link. The WHERE guard on the
+    // DO UPDATE branch prevents already-active rows from being rewritten,
+    // so unchanged links produce no row-version churn.
     for (const slug of teamSlugs) {
-      await client.query('INSERT INTO section_teams (section_id, team_slug) VALUES ($1, $2)', [sectionId, slug])
+      await client.query(
+        `INSERT INTO section_teams (section_id, team_slug)
+         VALUES ($1, $2)
+         ON CONFLICT (section_id, team_slug)
+         DO UPDATE SET deleted_at = NULL, deleted_by = NULL
+         WHERE section_teams.deleted_at IS NOT NULL`,
+        [sectionId, slug],
+      )
     }
+
     await client.query('COMMIT')
   } catch (e) {
     await client.query('ROLLBACK')

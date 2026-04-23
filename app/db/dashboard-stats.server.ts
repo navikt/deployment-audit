@@ -71,7 +71,7 @@ export async function getSectionOverallStats(
        AND ($2::timestamptz IS NULL OR d.created_at >= $2)
        AND ($3::timestamptz IS NULL OR d.created_at < $3)
      LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id AND dgl.is_active = true
-     WHERE st.section_id = $1`,
+     WHERE st.section_id = $1 AND st.deleted_at IS NULL`,
     [sectionId, startDate ?? null, endDate ?? null],
   )
 
@@ -107,7 +107,7 @@ export async function getSectionDashboardStats(
               COALESCE(array_agg(DISTINCT dtn.nais_team_slug) FILTER (WHERE dtn.nais_team_slug IS NOT NULL), '{}') AS nais_team_slugs,
               array_agg(DISTINCT dta.monitored_app_id) FILTER (WHERE dta.monitored_app_id IS NOT NULL) AS direct_app_ids
        FROM dev_teams dt
-       LEFT JOIN dev_team_nais_teams dtn ON dtn.dev_team_id = dt.id
+       LEFT JOIN dev_team_nais_teams dtn ON dtn.dev_team_id = dt.id AND dtn.deleted_at IS NULL
        LEFT JOIN dev_team_applications dta ON dta.dev_team_id = dt.id AND dta.deleted_at IS NULL
        WHERE dt.section_id = $1 AND dt.is_active = true
        GROUP BY dt.id

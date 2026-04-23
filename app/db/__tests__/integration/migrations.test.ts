@@ -188,4 +188,26 @@ describe('Database migrations', () => {
     expect(names).toContain('idx_dev_team_applications_active')
     expect(names).not.toContain('idx_dev_team_applications_app')
   })
+
+  it('should have only the partial active index on section_teams', async () => {
+    const { rows } = await pool.query<{ indexname: string }>(`
+      SELECT indexname FROM pg_indexes
+      WHERE schemaname = 'public' AND tablename = 'section_teams'
+      ORDER BY indexname
+    `)
+    const names = rows.map((r) => r.indexname)
+    expect(names).toContain('idx_section_teams_active')
+    expect(names).not.toContain('idx_section_teams_team_slug')
+  })
+
+  it('should have only the partial active index on dev_team_nais_teams', async () => {
+    const { rows } = await pool.query<{ indexname: string }>(`
+      SELECT indexname FROM pg_indexes
+      WHERE schemaname = 'public' AND tablename = 'dev_team_nais_teams'
+      ORDER BY indexname
+    `)
+    const names = rows.map((r) => r.indexname)
+    expect(names).toContain('idx_dev_team_nais_teams_active')
+    expect(names).not.toContain('idx_dev_team_nais_teams_slug')
+  })
 })
