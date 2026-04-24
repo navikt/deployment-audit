@@ -82,8 +82,8 @@ describe('external_references soft delete', () => {
     await deleteExternalReference(krRef.id, 'A123456')
 
     const board = await getBoardWithObjectives(boardId)
-    expect(board).not.toBeNull()
-    const obj = board!.objectives[0]
+    if (!board) throw new Error('expected board to exist')
+    const obj = board.objectives[0]
     expect(obj.external_references).toHaveLength(0)
     expect(obj.key_results[0].external_references).toHaveLength(1)
     expect(obj.key_results[0].external_references[0].id).toBe(keptRef.id)
