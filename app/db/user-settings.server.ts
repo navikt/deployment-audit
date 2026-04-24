@@ -1,6 +1,6 @@
 import { pool } from './connection.server'
 
-export type LandingPage = 'my-teams' | 'sections' | `sections/${string}`
+type LandingPage = 'my-teams' | 'sections' | `sections/${string}`
 
 export async function getUserLandingPage(navIdent: string): Promise<LandingPage> {
   const result = await pool.query('SELECT landing_page FROM user_settings WHERE nav_ident = $1', [navIdent])

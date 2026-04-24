@@ -36,7 +36,7 @@ export interface BoardObjectiveProgress {
   total_linked_deployments: number
 }
 
-export interface DevTeamSummaryStats {
+interface DevTeamSummaryStats {
   total_apps: number
   total_deployments: number
   with_four_eyes: number
