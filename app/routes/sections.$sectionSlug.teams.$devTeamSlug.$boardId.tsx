@@ -1,4 +1,4 @@
-import { ChevronLeftIcon, MinusCircleIcon, PlusCircleIcon, PlusIcon, TrashIcon } from '@navikt/aksel-icons'
+import { MinusCircleIcon, PlusCircleIcon, PlusIcon, TrashIcon } from '@navikt/aksel-icons'
 import {
   Link as AkselLink,
   Alert,
@@ -15,7 +15,7 @@ import {
   VStack,
 } from '@navikt/ds-react'
 import { useEffect, useState } from 'react'
-import { Form, Link, useLoaderData, useSubmit } from 'react-router'
+import { Form, useLoaderData, useSubmit } from 'react-router'
 import {
   addExternalReference,
   type BoardKeyResultWithRefs,
@@ -162,18 +162,12 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function BoardDetail() {
-  const { devTeam, board, sectionSlug } = useLoaderData<typeof loader>()
+  const { devTeam, board } = useLoaderData<typeof loader>()
   const [showAddObjective, setShowAddObjective] = useState(false)
-  const teamBasePath = `/sections/${sectionSlug}/teams/${devTeam.slug}`
 
   return (
     <VStack gap="space-24">
       <div>
-        <HStack gap="space-8" align="center">
-          <Button as={Link} to={teamBasePath} variant="tertiary" size="small" icon={<ChevronLeftIcon aria-hidden />}>
-            Tilbake
-          </Button>
-        </HStack>
         <Heading level="1" size="large" spacing>
           {formatBoardLabel({ teamName: devTeam.name, periodLabel: board.period_label })}
         </Heading>
