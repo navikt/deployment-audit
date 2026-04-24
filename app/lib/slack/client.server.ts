@@ -45,21 +45,10 @@ import {
   type ReminderNotification,
 } from './blocks'
 
-// Re-export types and functions from slack-blocks for backward compatibility
-export type {
-  DeploymentNotification,
-  DeviationNotification,
-  HomeTabInput,
-  NewDeploymentNotification,
-  ReminderNotification,
-} from './blocks'
-export {
-  buildDeploymentBlocks,
-  buildDeviationBlocks,
-  buildHomeTabBlocks,
-  buildNewDeploymentBlocks,
-  buildReminderBlocks,
-} from './blocks'
+// NOTE: Types and block builders are exported from `./blocks` and surfaced
+// through the `~/lib/slack` barrel; do not re-export them here. Re-exporting
+// them from this server-only file forces callers that only need types/builders
+// (e.g. stories, components) to risk pulling in the server graph.
 
 // Singleton Slack app instance
 let slackApp: App | null = null

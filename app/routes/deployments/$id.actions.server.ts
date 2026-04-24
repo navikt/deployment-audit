@@ -9,7 +9,7 @@ import { getUserMappings } from '~/db/user-mappings.server'
 import { getNavIdent, getUserIdentity } from '~/lib/auth.server'
 import { lookupLegacyByCommit, lookupLegacyByPR } from '~/lib/github'
 import { logger } from '~/lib/logger.server'
-import { notifyDeploymentIfNeeded, sendDeviationNotification } from '~/lib/slack'
+import { notifyDeploymentIfNeeded, sendDeviationNotification } from '~/lib/slack/client.server'
 import { runVerification } from '~/lib/verification'
 
 export async function action({ request, params }: { request: Request; params: Record<string, string | undefined> }) {
