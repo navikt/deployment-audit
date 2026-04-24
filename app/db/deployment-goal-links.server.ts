@@ -311,7 +311,7 @@ export async function getOriginOfChangeCoverage(
   return { total, linked, coverage: total > 0 ? linked / total : 0 }
 }
 
-export interface DevTeamCoverageStats {
+interface DevTeamCoverageStats {
   total: number
   with_four_eyes: number
   four_eyes_percentage: number

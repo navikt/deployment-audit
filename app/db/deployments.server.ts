@@ -849,25 +849,8 @@ export async function getDeploymentCountByDeployer(deployerUsername: string): Pr
 }
 
 /**
- * Get recent deployments for a specific deployer
+ * Get monthly deployment counts for a deployer, grouped by goal linkage and Dependabot
  */
-export async function getDeploymentsByDeployer(deployerUsername: string, limit = 5): Promise<DeploymentWithApp[]> {
-  const result = await pool.query(
-    `SELECT 
-      d.*,
-      ma.team_slug,
-      ma.environment_name,
-      ma.app_name
-    FROM deployments d
-    JOIN monitored_applications ma ON d.monitored_app_id = ma.id
-    WHERE d.deployer_username = $1
-    ORDER BY d.created_at DESC
-    LIMIT $2`,
-    [deployerUsername, limit],
-  )
-  return result.rows
-}
-
 export interface DeployerMonthlyStats {
   month: string
   total: number
@@ -876,9 +859,6 @@ export interface DeployerMonthlyStats {
   dependabot: number
 }
 
-/**
- * Get monthly deployment counts for a deployer, grouped by goal linkage and Dependabot
- */
 export async function getDeployerMonthlyStats(
   deployerUsername: string,
   startDate?: Date | null,
@@ -926,12 +906,12 @@ export async function getDeployerMonthlyStats(
   }))
 }
 
-export interface DeployerDeploymentRow extends DeploymentWithApp {
+interface DeployerDeploymentRow extends DeploymentWithApp {
   has_goal_link: boolean
   is_dependabot: boolean
 }
 
-export interface PaginatedDeployerDeployments {
+interface PaginatedDeployerDeployments {
   deployments: DeployerDeploymentRow[]
   total: number
   page: number

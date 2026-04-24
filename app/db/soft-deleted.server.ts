@@ -17,7 +17,7 @@ import { clearUserMappingCache } from './user-mappings.server'
  * from this view (no audit info available for who/when).
  */
 
-export interface SoftDeletedUserMapping {
+interface SoftDeletedUserMapping {
   github_username: string
   display_name: string | null
   nav_ident: string | null
@@ -25,7 +25,7 @@ export interface SoftDeletedUserMapping {
   deleted_by: string | null
 }
 
-export interface SoftDeletedDeploymentComment {
+interface SoftDeletedDeploymentComment {
   id: number
   deployment_id: number
   app_name: string
@@ -37,7 +37,7 @@ export interface SoftDeletedDeploymentComment {
   deleted_by: string | null
 }
 
-export interface SoftDeletedDevTeamApplication {
+interface SoftDeletedDevTeamApplication {
   dev_team_id: number
   dev_team_name: string
   monitored_app_id: number
@@ -48,7 +48,7 @@ export interface SoftDeletedDevTeamApplication {
   deleted_by: string | null
 }
 
-export interface SoftDeletedSectionTeam {
+interface SoftDeletedSectionTeam {
   section_id: number
   section_name: string
   team_slug: string
@@ -56,7 +56,7 @@ export interface SoftDeletedSectionTeam {
   deleted_by: string | null
 }
 
-export interface SoftDeletedDevTeamNaisTeam {
+interface SoftDeletedDevTeamNaisTeam {
   dev_team_id: number
   dev_team_name: string
   nais_team_slug: string
@@ -64,7 +64,7 @@ export interface SoftDeletedDevTeamNaisTeam {
   deleted_by: string | null
 }
 
-export interface SoftDeletedExternalReference {
+interface SoftDeletedExternalReference {
   id: number
   ref_type: string
   url: string
@@ -77,7 +77,7 @@ export interface SoftDeletedExternalReference {
   deleted_by: string | null
 }
 
-export interface SoftDeletedSummary {
+interface SoftDeletedSummary {
   userMappings: SoftDeletedUserMapping[]
   deploymentComments: SoftDeletedDeploymentComment[]
   devTeamApplications: SoftDeletedDevTeamApplication[]

@@ -6,7 +6,7 @@ export interface NearbyDeploy {
   deployer_username: string | null
 }
 
-export interface NearbyDeployWithCurrent extends NearbyDeploy {
+interface NearbyDeployWithCurrent extends NearbyDeploy {
   isCurrent: boolean
 }
 

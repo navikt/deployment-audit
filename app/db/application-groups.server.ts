@@ -11,13 +11,13 @@ import { pool } from './connection.server'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export interface ApplicationGroup {
+interface ApplicationGroup {
   id: number
   name: string
   created_at: Date
 }
 
-export interface ApplicationGroupWithApps extends ApplicationGroup {
+interface ApplicationGroupWithApps extends ApplicationGroup {
   apps: Array<{
     id: number
     team_slug: string
@@ -26,7 +26,7 @@ export interface ApplicationGroupWithApps extends ApplicationGroup {
   }>
 }
 
-export interface ApplicationGroupSummary extends ApplicationGroup {
+interface ApplicationGroupSummary extends ApplicationGroup {
   app_count: number
 }
 

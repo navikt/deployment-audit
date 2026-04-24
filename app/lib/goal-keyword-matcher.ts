@@ -22,7 +22,7 @@ export interface CommitInfo {
   date: Date
 }
 
-export interface KeywordMatch {
+interface KeywordMatch {
   boardId: number
   objectiveId: number
   keyResultId: number | null
