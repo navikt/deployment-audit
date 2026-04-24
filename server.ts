@@ -6,6 +6,7 @@ import path from 'node:path'
 import url from 'node:url'
 import winston from 'winston'
 import { createAuthMiddleware } from './auth-middleware.js'
+import { createSecurityHeadersMiddleware } from './app/lib/security-headers.js'
 
 const isProd = process.env.NODE_ENV === 'production'
 
@@ -46,6 +47,7 @@ function accessLogMiddleware(req: express.Request, res: express.Response, next: 
 
 const app = express()
 app.disable('x-powered-by')
+app.use(createSecurityHeadersMiddleware({ isProd }))
 app.use(compression())
 
 // Vite build output paths
@@ -65,7 +67,22 @@ app.use(createAuthMiddleware())
 
 // React Router request handler
 const build = await import(url.pathToFileURL(buildPath).href)
-app.all('*', createRequestHandler({ build, mode: process.env.NODE_ENV }))
+app.all(
+  '*',
+  createRequestHandler({
+    build,
+    mode: process.env.NODE_ENV,
+    getLoadContext: (_req, res) => {
+      // The security-headers middleware MUST run before this handler so the nonce is set.
+      // Fail loudly rather than silently emitting a CSP-blocked page if that invariant breaks.
+      const cspNonce = res.locals.cspNonce
+      if (!cspNonce) {
+        throw new Error('cspNonce missing on res.locals — security-headers middleware not registered?')
+      }
+      return { cspNonce }
+    },
+  }),
+)
 
 // Express error handler — structured logging with stack_trace
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

@@ -16,10 +16,10 @@ import { ThemeProvider } from './hooks/useTheme'
 import { getTheme, setThemeCookie, type ThemeValue } from './lib/theme.server'
 import styles from './styles/common.module.css'
 
-// Get theme from cookie
-export async function loader({ request }: Route.LoaderArgs) {
+// Get theme from cookie + CSP nonce from Express load context
+export async function loader({ request, context }: Route.LoaderArgs) {
   const theme = await getTheme(request)
-  return { theme }
+  return { theme, cspNonce: context.cspNonce }
 }
 
 // Action to set theme cookie
@@ -40,6 +40,12 @@ export async function action({ request }: Route.ActionArgs) {
 export const links: Route.LinksFunction = () => [{ rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }]
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  // `useLoaderData` returns undefined when the root loader throws and we render
+  // ErrorBoundary instead. Without a nonce in that case the inline scripts will be
+  // blocked by CSP, which means a non-hydrated error page — acceptable trade-off for
+  // not bypassing CSP, and root loader failures are exceedingly rare in practice.
+  const data = useLoaderData<typeof loader>() as { theme: ThemeValue; cspNonce?: string } | undefined
+  const nonce = data?.cspNonce
   return (
     <html lang="no">
       <head>
@@ -50,8 +56,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         {children}
-        <ScrollRestoration />
-        <Scripts />
+        <ScrollRestoration nonce={nonce} />
+        <Scripts nonce={nonce} />
       </body>
     </html>
   )
