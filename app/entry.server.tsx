@@ -5,6 +5,7 @@ import type { RenderToPipeableStreamOptions } from 'react-dom/server'
 import { renderToPipeableStream } from 'react-dom/server'
 import type { AppLoadContext, EntryContext } from 'react-router'
 import { ServerRouter } from 'react-router'
+import './load-context'
 import { initializeServer } from './init.server'
 import { logger } from './lib/logger.server'
 
@@ -61,7 +62,7 @@ export default function handleRequest(
   responseStatusCode: number,
   responseHeaders: Headers,
   routerContext: EntryContext,
-  _loadContext: AppLoadContext,
+  loadContext: AppLoadContext,
 ) {
   // https://httpwg.org/specs/rfc9110.html#HEAD
   if (request.method.toUpperCase() === 'HEAD') {
@@ -83,38 +84,41 @@ export default function handleRequest(
     // flush down the rejected boundaries
     let timeoutId: ReturnType<typeof setTimeout> | undefined = setTimeout(() => abort(), streamTimeout + 1000)
 
-    const { pipe, abort } = renderToPipeableStream(<ServerRouter context={routerContext} url={request.url} />, {
-      [readyOption]() {
-        shellRendered = true
-        const body = new PassThrough({
-          final(callback) {
-            clearTimeout(timeoutId)
-            timeoutId = undefined
-            callback()
-          },
-        })
-        const stream = createReadableStreamFromReadable(body)
+    const { pipe, abort } = renderToPipeableStream(
+      <ServerRouter context={routerContext} url={request.url} nonce={loadContext.cspNonce} />,
+      {
+        [readyOption]() {
+          shellRendered = true
+          const body = new PassThrough({
+            final(callback) {
+              clearTimeout(timeoutId)
+              timeoutId = undefined
+              callback()
+            },
+          })
+          const stream = createReadableStreamFromReadable(body)
 
-        responseHeaders.set('Content-Type', 'text/html')
+          responseHeaders.set('Content-Type', 'text/html')
 
-        pipe(body)
+          pipe(body)
 
-        resolve(
-          new Response(stream, {
-            headers: responseHeaders,
-            status: responseStatusCode,
-          }),
-        )
+          resolve(
+            new Response(stream, {
+              headers: responseHeaders,
+              status: responseStatusCode,
+            }),
+          )
+        },
+        onShellError(error: unknown) {
+          reject(error)
+        },
+        onError(error: unknown) {
+          responseStatusCode = 500
+          if (shellRendered) {
+            logger.error('Stream rendering error', error instanceof Error ? error : undefined)
+          }
+        },
       },
-      onShellError(error: unknown) {
-        reject(error)
-      },
-      onError(error: unknown) {
-        responseStatusCode = 500
-        if (shellRendered) {
-          logger.error('Stream rendering error', error instanceof Error ? error : undefined)
-        }
-      },
-    })
+    )
   })
 }
