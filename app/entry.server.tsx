@@ -87,6 +87,13 @@ export default function handleRequest(
     const { pipe, abort } = renderToPipeableStream(
       <ServerRouter context={routerContext} url={request.url} nonce={loadContext.cspNonce} />,
       {
+        // React DOM emits its own inline `<script>` tags during streaming SSR
+        // (most notably the Suspense boundary runtime, `$RC=...`). Without a
+        // `nonce` here those scripts ship without a nonce attribute and the
+        // strict CSP `script-src 'self' 'nonce-…'` directive blocks them in
+        // the browser. The same nonce is also forwarded to <ServerRouter>
+        // above so React Router's own context/manifest scripts carry it.
+        nonce: loadContext.cspNonce,
         [readyOption]() {
           shellRendered = true
           const body = new PassThrough({
