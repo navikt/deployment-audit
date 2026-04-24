@@ -17,7 +17,6 @@ export interface DeploymentGoalLink {
 export interface DeploymentGoalLinkWithDetails extends DeploymentGoalLink {
   objective_title: string | null
   key_result_title: string | null
-  board_title: string | null
   board_period_label: string | null
   objective_is_active: boolean | null
   key_result_is_active: boolean | null
@@ -28,7 +27,6 @@ export async function getLinksForDeployment(deploymentId: number): Promise<Deplo
     `SELECT dgl.*,
        COALESCE(bo.title, bo_via_kr.title) AS objective_title,
        bkr.title AS key_result_title,
-       COALESCE(b.title, b_via_kr.title) AS board_title,
        COALESCE(b.period_label, b_via_kr.period_label) AS board_period_label,
        COALESCE(bo.is_active, bo_via_kr.is_active) AS objective_is_active,
        bkr.is_active AS key_result_is_active

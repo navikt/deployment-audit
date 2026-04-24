@@ -15,6 +15,7 @@ import {
 import { useState } from 'react'
 import { Form } from 'react-router'
 import type { DeploymentGoalLinkWithDetails } from '~/db/deployment-goal-links.server'
+import { formatBoardLabel } from '~/lib/board-periods'
 
 const LINK_METHOD_LABELS: Record<string, string> = {
   manual: 'Manuell',
@@ -25,7 +26,6 @@ const LINK_METHOD_LABELS: Record<string, string> = {
 
 interface AvailableBoard {
   id: number
-  title: string
   period_label: string
   dev_team_name?: string
   objectives: Array<{
@@ -192,8 +192,7 @@ function AddGoalLinkForm({
           <option value="">Velg tavle…</option>
           {boards.map((board) => (
             <option key={board.id} value={board.id}>
-              {board.dev_team_name ? `${board.dev_team_name} — ` : ''}
-              {board.title} ({board.period_label})
+              {formatBoardLabel({ teamName: board.dev_team_name ?? '', periodLabel: board.period_label })}
             </option>
           ))}
         </Select>

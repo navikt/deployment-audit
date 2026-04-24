@@ -55,6 +55,18 @@ export function getCurrentPeriod(type: BoardPeriodType, date = new Date()): Boar
   }
 }
 
+/**
+ * Format a board's display label as `{teamName} - {periodLabel}`.
+ * Brukes alle steder hvor en måltavle vises i UI, slik at vi har én sannhet for visningsnavnet.
+ */
+export function formatBoardLabel(input: { teamName: string; periodLabel: string }): string {
+  const teamName = input.teamName.trim()
+  const periodLabel = input.periodLabel.trim()
+  if (!teamName) return periodLabel
+  if (!periodLabel) return teamName
+  return `${teamName} - ${periodLabel}`
+}
+
 /** Get a list of periods for the given year and type. */
 export function getPeriodsForYear(type: BoardPeriodType, year: number): BoardPeriod[] {
   const count = type === 'tertiary' ? 3 : 4

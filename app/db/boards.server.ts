@@ -72,7 +72,6 @@ export async function getBoardsWithGoalsForDevTeam(
 ): Promise<
   Array<{
     id: number
-    title: string
     period_label: string
     period_start: string
     period_end: string
@@ -84,7 +83,7 @@ export async function getBoardsWithGoalsForDevTeam(
   if (asOfDate) params.push(asOfDate)
 
   const boards = await pool.query(
-    `SELECT id, title, period_label, period_start, period_end FROM boards WHERE dev_team_id = $1 AND is_active = true${dateFilter} ORDER BY period_start DESC`,
+    `SELECT id, period_label, period_start, period_end FROM boards WHERE dev_team_id = $1 AND is_active = true${dateFilter} ORDER BY period_start DESC`,
     params,
   )
 

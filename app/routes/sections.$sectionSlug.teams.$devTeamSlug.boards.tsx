@@ -5,6 +5,7 @@ import { type Board, getBoardsByDevTeam } from '~/db/boards.server'
 import { getDevTeamBySlug } from '~/db/dev-teams.server'
 import { getSectionBySlug } from '~/db/sections.server'
 import { requireUser } from '~/lib/auth.server'
+import { formatBoardLabel } from '~/lib/board-periods'
 import type { Route } from './+types/sections.$sectionSlug.teams.$devTeamSlug.boards'
 
 export function meta({ data }: Route.MetaArgs) {
@@ -52,14 +53,13 @@ export default function BoardHistory() {
           <Table.Header>
             <Table.Row>
               <Table.HeaderCell>Tavle</Table.HeaderCell>
-              <Table.HeaderCell>Periode</Table.HeaderCell>
               <Table.HeaderCell>Type</Table.HeaderCell>
               <Table.HeaderCell />
             </Table.Row>
           </Table.Header>
           <Table.Body>
             {inactiveBoards.map((board) => (
-              <BoardRow key={board.id} board={board} teamBasePath={teamBasePath} />
+              <BoardRow key={board.id} board={board} teamBasePath={teamBasePath} teamName={devTeam.name} />
             ))}
           </Table.Body>
         </Table>
@@ -68,13 +68,14 @@ export default function BoardHistory() {
   )
 }
 
-function BoardRow({ board, teamBasePath }: { board: Board; teamBasePath: string }) {
+function BoardRow({ board, teamBasePath, teamName }: { board: Board; teamBasePath: string; teamName: string }) {
   return (
     <Table.Row>
       <Table.DataCell>
-        <Link to={`${teamBasePath}/${board.id}`}>{board.title}</Link>
+        <Link to={`${teamBasePath}/${board.id}`}>
+          {formatBoardLabel({ teamName, periodLabel: board.period_label })}
+        </Link>
       </Table.DataCell>
-      <Table.DataCell>{board.period_label}</Table.DataCell>
       <Table.DataCell>
         <Tag variant="neutral" size="small">
           {board.period_type === 'tertiary' ? 'Tertial' : 'Kvartal'}

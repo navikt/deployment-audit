@@ -7,7 +7,7 @@ import { getOriginOfChangeCoverage } from '~/db/deployment-goal-links.server'
 import { getDevTeamApplications, getDevTeamBySlug } from '~/db/dev-teams.server'
 import { getSectionBySlug } from '~/db/sections.server'
 import { requireUser } from '~/lib/auth.server'
-import { type BoardPeriodType, getCurrentPeriod, getPeriodsForYear } from '~/lib/board-periods'
+import { type BoardPeriodType, formatBoardLabel, getCurrentPeriod, getPeriodsForYear } from '~/lib/board-periods'
 import type { Route } from './+types/sections.$sectionSlug.teams.$devTeamSlug.dashboard'
 
 export function meta({ data }: Route.MetaArgs) {
@@ -153,7 +153,7 @@ export default function DevTeamDashboard() {
       ) : (
         <VStack gap="space-16">
           <Heading level="2" size="medium">
-            Mål-fremdrift – {currentBoard.title}
+            Mål-fremdrift – {formatBoardLabel({ teamName: devTeam.name, periodLabel: currentBoard.period_label })}
           </Heading>
 
           {objectiveProgress.length === 0 ? (
