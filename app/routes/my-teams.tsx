@@ -13,6 +13,7 @@ import {
 import { getDevTeamAppsWithIssues } from '~/db/deployments/home.server'
 import { getDevTeamApplications } from '~/db/dev-teams.server'
 import { getUserDevTeams } from '~/db/user-dev-team-preference.server'
+import { formatBoardLabel } from '~/lib/board-periods'
 import { groupAppCards } from '~/lib/group-app-cards'
 import { getAppDeploymentStatsBatch } from '../db/deployments.server'
 import { getAllAlertCounts, getAllMonitoredApplications } from '../db/monitored-applications.server'
@@ -26,7 +27,6 @@ export function meta(_args: Route.MetaArgs) {
 
 interface BoardSummary {
   boardId: number
-  boardTitle: string
   periodLabel: string
   teamName: string
   teamSlug: string
@@ -135,7 +135,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   const boardSummaries: BoardSummary[] = await Promise.all(
     activeBoards.map(async ({ board, team }) => ({
       boardId: board.id,
-      boardTitle: board.title,
       periodLabel: board.period_label,
       teamName: team.name,
       teamSlug: team.slug,
@@ -338,14 +337,11 @@ function BoardSummaryCard({ board }: { board: BoardSummary }) {
     <Box padding="space-20" background="raised" borderRadius="4">
       <VStack gap="space-12">
         <HStack justify="space-between" align="center" wrap>
-          <VStack gap="space-4">
-            <Link to={boardUrl}>
-              <BodyShort weight="semibold">{board.boardTitle}</BodyShort>
-            </Link>
-            <Detail textColor="subtle">
-              {board.teamName} · {board.periodLabel}
-            </Detail>
-          </VStack>
+          <Link to={boardUrl}>
+            <BodyShort weight="semibold">
+              {formatBoardLabel({ teamName: board.teamName, periodLabel: board.periodLabel })}
+            </BodyShort>
+          </Link>
           <Tag variant="moderate" size="xsmall" data-color="info">
             {totalDeployments} leveranser koblet
           </Tag>

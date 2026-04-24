@@ -40,6 +40,7 @@ import { addUserDevTeam, getUserDevTeams, removeUserDevTeam } from '~/db/user-de
 import { getUserMapping, upsertUserMapping } from '~/db/user-mappings.server'
 import { getUserLandingPage, setUserLandingPage } from '~/db/user-settings.server'
 import { requireUser } from '~/lib/auth.server'
+import { formatBoardLabel } from '~/lib/board-periods'
 import { isValidEmail, isValidGitHubUsername, isValidNavIdent } from '~/lib/form-validators'
 import type { FourEyesStatus } from '~/lib/four-eyes-status'
 import { getBotDescription, getBotDisplayName, isGitHubBot } from '~/lib/github-bots'
@@ -911,7 +912,6 @@ import { forwardRef } from 'react'
 
 type AvailableBoard = {
   id: number
-  title: string
   period_label: string
   period_start: string
   period_end: string
@@ -964,7 +964,7 @@ const BulkLinkGoalModal = forwardRef<
               <option value="">Velg tavle...</option>
               {availableBoards.map((board) => (
                 <option key={board.id} value={String(board.id)}>
-                  {board.dev_team_name} – {board.title} ({board.period_label})
+                  {formatBoardLabel({ teamName: board.dev_team_name, periodLabel: board.period_label })}
                 </option>
               ))}
             </Select>
@@ -1127,7 +1127,7 @@ const SelectLinkGoalModal = forwardRef<
                   <option value="">Velg tavle...</option>
                   {relevantBoards.map((board) => (
                     <option key={board.id} value={String(board.id)}>
-                      {board.dev_team_name} – {board.title} ({board.period_label})
+                      {formatBoardLabel({ teamName: board.dev_team_name, periodLabel: board.period_label })}
                     </option>
                   ))}
                 </Select>

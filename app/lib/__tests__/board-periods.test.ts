@@ -1,5 +1,29 @@
 import { describe, expect, it } from 'vitest'
-import { getCurrentPeriod, getPeriodsForYear } from '../board-periods'
+import { formatBoardLabel, getCurrentPeriod, getPeriodsForYear } from '../board-periods'
+
+describe('formatBoardLabel', () => {
+  it('combines team name and period label with " - " separator', () => {
+    expect(formatBoardLabel({ teamName: 'Skjermbildemodernisering', periodLabel: 'T1 2026' })).toBe(
+      'Skjermbildemodernisering - T1 2026',
+    )
+  })
+
+  it('handles quarterly period labels', () => {
+    expect(formatBoardLabel({ teamName: 'Starte pensjon', periodLabel: 'Q2 2026' })).toBe('Starte pensjon - Q2 2026')
+  })
+
+  it('trims whitespace from inputs', () => {
+    expect(formatBoardLabel({ teamName: '  Team  ', periodLabel: '  T1 2026  ' })).toBe('Team - T1 2026')
+  })
+
+  it('returns just the period label when team name is empty', () => {
+    expect(formatBoardLabel({ teamName: '', periodLabel: 'T1 2026' })).toBe('T1 2026')
+  })
+
+  it('returns just the team name when period label is empty', () => {
+    expect(formatBoardLabel({ teamName: 'Team', periodLabel: '' })).toBe('Team')
+  })
+})
 
 describe('getCurrentPeriod', () => {
   describe('tertiary', () => {

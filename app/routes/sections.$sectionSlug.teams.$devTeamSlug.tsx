@@ -40,7 +40,7 @@ import {
 import { getSectionBySlug } from '~/db/sections.server'
 import { type DevTeamMember, getDevTeamMembers } from '~/db/user-dev-team-preference.server'
 import { requireUser } from '~/lib/auth.server'
-import { type BoardPeriodType, getPeriodsForYear } from '~/lib/board-periods'
+import { type BoardPeriodType, formatBoardLabel, getPeriodsForYear } from '~/lib/board-periods'
 import { groupAppCards } from '~/lib/group-app-cards'
 import type { Route } from './+types/sections.$sectionSlug.teams.$devTeamSlug'
 import type { loader as layoutLoader } from './layout'
@@ -190,20 +190,19 @@ export async function action({ request, params }: Route.ActionArgs) {
   }
 
   if (intent === 'create') {
-    const title = (formData.get('title') as string)?.trim()
     const periodType = formData.get('period_type') as BoardPeriodType
     const periodLabel = formData.get('period_label') as string
     const periodStart = formData.get('period_start') as string
     const periodEnd = formData.get('period_end') as string
 
-    if (!title || !periodType || !periodStart || !periodEnd || !periodLabel) {
+    if (!periodType || !periodStart || !periodEnd || !periodLabel) {
       return { error: 'Alle felt er påkrevd.' }
     }
 
     try {
       await createBoard({
         dev_team_id: devTeam.id,
-        title,
+        title: formatBoardLabel({ teamName: devTeam.name, periodLabel }),
         period_type: periodType,
         period_start: periodStart,
         period_end: periodEnd,
@@ -263,7 +262,12 @@ export default function DevTeamPage() {
 
       {/* Active board */}
       {activeBoard ? (
-        <ActiveBoardSection board={activeBoard} progress={activeBoardProgress} teamBasePath={teamBasePath} />
+        <ActiveBoardSection
+          board={activeBoard}
+          progress={activeBoardProgress}
+          teamBasePath={teamBasePath}
+          teamName={devTeam.name}
+        />
       ) : (
         <Alert variant="info">Ingen aktiv tavle. Opprett en ny tavle for å komme i gang.</Alert>
       )}
@@ -441,10 +445,12 @@ function ActiveBoardSection({
   board,
   progress,
   teamBasePath,
+  teamName,
 }: {
   board: Board
   progress: BoardObjectiveProgress[]
   teamBasePath: string
+  teamName: string
 }) {
   return (
     <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
@@ -452,13 +458,14 @@ function ActiveBoardSection({
         <HStack justify="space-between" align="center" wrap>
           <VStack gap="space-4">
             <Heading level="2" size="medium">
-              <Link to={`${teamBasePath}/${board.id}`}>{board.title}</Link>
+              <Link to={`${teamBasePath}/${board.id}`}>
+                {formatBoardLabel({ teamName, periodLabel: board.period_label })}
+              </Link>
             </Heading>
             <HStack gap="space-8">
               <Tag variant="success" size="xsmall">
                 Aktiv
               </Tag>
-              <Detail textColor="subtle">{board.period_label}</Detail>
             </HStack>
           </VStack>
           <Button as={Link} to={`${teamBasePath}/${board.id}`} variant="tertiary" size="small">
@@ -673,7 +680,6 @@ function CreateBoardForm({ onCancel }: { onCancel: () => void }) {
             Opprett ny tavle
           </Heading>
           <HStack gap="space-16" wrap>
-            <TextField label="Tittel" name="title" size="small" placeholder="f.eks. Mål T1 2026" autoComplete="off" />
             <Select
               label="Periodetype"
               name="period_type"

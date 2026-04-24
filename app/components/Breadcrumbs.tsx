@@ -1,6 +1,7 @@
 import { ChevronRightIcon, HouseIcon } from '@navikt/aksel-icons'
 import { Box, Detail, HStack } from '@navikt/ds-react'
 import { Link, useLocation, useMatches } from 'react-router'
+import { formatBoardLabel } from '~/lib/board-periods'
 
 interface BreadcrumbConfig {
   label: string
@@ -169,7 +170,12 @@ const dynamicBreadcrumbs: Array<{
     pattern: /^\/sections\/([^/]+)\/teams\/([^/]+)\/(\d+)$/,
     getLabel: (matches) => {
       const match = matches.find((m) => (m.data as Record<string, unknown>)?.board)
-      const board = (match?.data as Record<string, { title?: string }>)?.board
+      const data = match?.data as Record<string, { name?: string; period_label?: string; title?: string } | undefined>
+      const board = data?.board
+      const devTeam = data?.devTeam
+      if (board?.period_label && devTeam?.name) {
+        return formatBoardLabel({ teamName: devTeam.name, periodLabel: board.period_label })
+      }
       return board?.title || 'Tavle'
     },
     parent: '/sections/:slug/teams/:team',

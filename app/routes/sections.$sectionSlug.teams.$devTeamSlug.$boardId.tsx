@@ -37,10 +37,15 @@ import {
 import { getDevTeamBySlug } from '~/db/dev-teams.server'
 import { getSectionBySlug } from '~/db/sections.server'
 import { requireUser } from '~/lib/auth.server'
+import { formatBoardLabel } from '~/lib/board-periods'
 import type { Route } from './+types/sections.$sectionSlug.teams.$devTeamSlug.$boardId'
 
 export function meta({ data }: Route.MetaArgs) {
-  return [{ title: `${data?.board?.title ?? 'Tavle'} – ${data?.devTeam?.name ?? 'Team'}` }]
+  const label =
+    data?.devTeam && data?.board
+      ? formatBoardLabel({ teamName: data.devTeam.name, periodLabel: data.board.period_label })
+      : 'Tavle'
+  return [{ title: label }]
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
@@ -170,14 +175,11 @@ export default function BoardDetail() {
           </Button>
         </HStack>
         <Heading level="1" size="large" spacing>
-          {board.title}
+          {formatBoardLabel({ teamName: devTeam.name, periodLabel: board.period_label })}
         </Heading>
         <HStack gap="space-8">
           <Tag variant="neutral" size="small">
             {board.period_type === 'tertiary' ? 'Tertial' : 'Kvartal'}
-          </Tag>
-          <Tag variant="info" size="small">
-            {board.period_label}
           </Tag>
           <Tag variant={board.is_active ? 'success' : 'neutral'} size="small">
             {board.is_active ? 'Aktiv' : 'Avsluttet'}
