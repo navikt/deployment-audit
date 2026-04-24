@@ -4,6 +4,7 @@
   "ignoreDependencies": [
     "@fontsource/source-sans-pro",
     "@storybook/builder-vite",
+    "@types/express-serve-static-core",
     "testcontainers"
   ]
 }
