@@ -1233,20 +1233,6 @@ export interface AppWithIssues {
   missing_goal_links: number
 }
 
-export interface IssueDeployment {
-  id: number
-  app_name: string
-  team_slug: string
-  environment_name: string
-  commit_sha: string | null
-  deployer_username: string | null
-  four_eyes_status: string
-  github_pr_number: number | null
-  github_pr_data: GitHubPRData | null
-  title: string | null
-  created_at: Date
-}
-
 // =============================================================================
 // Deployment Status History
 // =============================================================================
@@ -1279,11 +1265,7 @@ export interface AppReminderConfig {
 
 // Re-exports from submodules
 export { getAppChangeOriginCoverage, getLastDeploymentSummary } from './deployments/api.server'
-export {
-  getAppsWithIssues,
-  getHomeTabSummaryStats,
-  getIssueDeploymentsPerApp,
-} from './deployments/home.server'
+export { getPersonalDeploymentsMissingGoalLinks } from './deployments/home.server'
 export {
   claimDeploymentForDeployNotify,
   claimDeploymentForSlackNotification,

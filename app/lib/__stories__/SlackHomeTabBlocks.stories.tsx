@@ -12,7 +12,7 @@ export default meta
 type Story = StoryObj<typeof SlackBlockPreview>
 
 export const WithIssues: Story = {
-  name: '🔔 Med mangler',
+  name: '🔔 Med mangler (begge typer)',
   args: {
     blocks: buildHomeTabBlocks(homeTabFixtures.withIssues),
   },
@@ -29,5 +29,19 @@ export const NoGithubUser: Story = {
   name: '👤 Uten GitHub-kobling',
   args: {
     blocks: buildHomeTabBlocks(homeTabFixtures.noGithubUser),
+  },
+}
+
+export const NoBoards: Story = {
+  name: '🎯 Ingen aktive måltavler',
+  args: {
+    blocks: buildHomeTabBlocks(homeTabFixtures.noBoards),
+  },
+}
+
+export const NoMapping: Story = {
+  name: '🆕 Ikke mappet til NDA (onboarding)',
+  args: {
+    blocks: buildHomeTabBlocks(homeTabFixtures.noMapping),
   },
 }

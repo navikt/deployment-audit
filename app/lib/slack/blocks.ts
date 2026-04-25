@@ -55,41 +55,58 @@ export interface NewDeploymentNotification {
   deployMethod: 'pull_request' | 'direct_push' | 'legacy'
 }
 
+export interface PersonalHomeTabKeyResult {
+  id: number
+  title: string
+  keywords: string[]
+}
+
+export interface PersonalHomeTabObjective {
+  id: number
+  title: string
+  keywords: string[]
+  key_results: PersonalHomeTabKeyResult[]
+}
+
+export interface PersonalHomeTabBoard {
+  id: number
+  period_label: string
+  team_name: string
+  team_slug: string
+  section_slug: string
+  objectives: PersonalHomeTabObjective[]
+}
+
+export interface PersonalHomeTabTeamIssues {
+  /** Number of monitored applications (in the user's dev teams) with at least one open issue. */
+  appsWithIssuesCount: number
+  withoutFourEyes: number
+  pendingVerification: number
+  alertCount: number
+}
+
 export interface HomeTabInput {
   slackUserId: string
+  /** Resolved from user_mappings; null = no mapping or mapping without GitHub username. */
   githubUsername: string | null | undefined
+  /** Resolved from user_mappings; null = no mapping. */
+  navIdent: string | null | undefined
   baseUrl: string
-  stats: {
-    totalApps: number
-    totalDeployments: number
-    withoutFourEyes: number
-    pendingVerification: number
-  }
-  appsWithIssues: Array<{
-    app_name: string
-    team_slug: string
-    environment_name: string
-    without_four_eyes: number
-    pending_verification: number
-    alert_count: number
-  }>
-  issueDeployments: Map<
-    string,
-    Array<{
-      id: number
-      commit_sha: string | null
-      deployer_username: string | null
-      four_eyes_status: string
-      github_pr_number: number | null
-      github_pr_data: { title?: string; creator?: { username?: string } } | null
-      title: string | null
-      created_at: Date
-      app_name: string
-      team_slug: string
-      environment_name: string
-    }>
-  >
+  /** Active boards (with goals + key results + keywords) for each dev team the user is on. */
+  boards: PersonalHomeTabBoard[]
+  /** Aggregated team-scoped approval/alert issues across all the user's dev teams. */
+  teamIssues: PersonalHomeTabTeamIssues
+  /**
+   * Personal-scope: deployments where the user is deployer or PR creator AND the deployment
+   * has no goal-link. `null` if the user has no `githubUsername` (cannot be computed).
+   */
+  personalMissingGoalLinks: number | null
 }
+
+/** Cap board count per home view to stay well under Slack's 100-block limit. */
+const MAX_BOARDS_IN_HOME_TAB = 3
+/** Cap objectives shown per board. */
+const MAX_OBJECTIVES_PER_BOARD = 5
 
 // =============================================================================
 // Helpers
@@ -354,139 +371,239 @@ export function buildDeviationBlocks(notification: DeviationNotification): Known
 }
 
 /**
- * Build blocks for Slack Home Tab
+ * Build blocks for the personalised Slack Home Tab.
+ *
+ * Layout (no global "ingress"; each section is opt-in):
+ * 1. Per dev-team: active boards with mål, nøkkelresultater, kodeord (inline
+ *    code) and a "Vis kodeord"-button per KR with keywords (opens a modal
+ *    that's easier to copy from than the home tab itself).
+ * 2. Team-scoped approval/alert summary with a link to NDA `/my-apps`.
+ * 3. Personal-scoped goal-link summary (only when the user has a
+ *    `githubUsername`).
+ * 4. Friendly fallback when the user is not yet onboarded.
  */
-export function buildHomeTabBlocks({ baseUrl, stats, appsWithIssues, issueDeployments }: HomeTabInput): KnownBlock[] {
+export function buildHomeTabBlocks({
+  baseUrl,
+  navIdent,
+  githubUsername,
+  boards,
+  teamIssues,
+  personalMissingGoalLinks,
+}: HomeTabInput): KnownBlock[] {
   const blocks: KnownBlock[] = []
 
-  // Header
-  blocks.push({
-    type: 'header',
-    text: {
-      type: 'plain_text',
-      text: '📊 Deployment Audit',
-      emoji: true,
-    },
-  })
-
-  blocks.push({ type: 'divider' })
-
-  // Section 1: Overview stats
-  blocks.push({
-    type: 'section',
-    text: {
-      type: 'mrkdwn',
-      text: '*📈 Oversikt*',
-    },
-  })
-
-  blocks.push({
-    type: 'section',
-    fields: [
-      {
-        type: 'mrkdwn',
-        text: `*Overvåkede applikasjoner:*\n${stats.totalApps}`,
-      },
-      {
-        type: 'mrkdwn',
-        text: `*Totalt deployments:*\n${stats.totalDeployments}`,
-      },
-      {
-        type: 'mrkdwn',
-        text: `*⚠️ Mangler godkjenning:*\n${stats.withoutFourEyes}`,
-      },
-      {
-        type: 'mrkdwn',
-        text: `*⏳ Venter verifisering:*\n${stats.pendingVerification}`,
-      },
-    ],
-  })
-
-  blocks.push({
-    type: 'actions',
-    elements: [
-      {
-        type: 'button',
-        text: {
-          type: 'plain_text',
-          text: '🏠 Åpne dashboard',
-          emoji: true,
-        },
-        url: baseUrl,
-        action_id: 'open_dashboard',
-      },
-    ],
-  })
-
-  blocks.push({ type: 'divider' })
-
-  // Section 2: Apps with issues + sample deployments
-  if (appsWithIssues.length > 0) {
+  // --- Onboarding fallback when the user has no NDA mapping at all. ---
+  if (!navIdent) {
     blocks.push({
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `*🔔 Applikasjoner med mangler* (${appsWithIssues.length})`,
+        text:
+          '*👋 Velkommen til Deployment Audit!*\n' +
+          'Vi fant ikke en kobling fra Slack-brukeren din til NDA. ' +
+          'Logg inn i NDA og legg til Slack-IDen din i profilen for å få en personlig oversikt her.',
       },
     })
+    blocks.push({
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Åpne NDA', emoji: true },
+          url: baseUrl,
+          action_id: 'open_nda_onboarding',
+        },
+      ],
+    })
+    return blocks
+  }
 
-    for (const app of appsWithIssues) {
-      const issues: string[] = []
-      if (app.without_four_eyes > 0) {
-        issues.push(`⚠️ ${app.without_four_eyes} uten godkjenning`)
-      }
-      if (app.pending_verification > 0) {
-        issues.push(`⏳ ${app.pending_verification} venter verifisering`)
-      }
-      if (app.alert_count > 0) {
-        issues.push(`🚨 ${app.alert_count} varsler`)
-      }
+  // --- Boards section (per dev-team / per board). ---
+  const boardsToShow = boards.slice(0, MAX_BOARDS_IN_HOME_TAB)
+  const omittedBoards = boards.length - boardsToShow.length
 
-      const deploymentsUrl = `${baseUrl}/team/${app.team_slug}/env/${app.environment_name}/app/${app.app_name}/deployments?status=not_approved`
+  if (boardsToShow.length === 0) {
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text:
+          '*🎯 Ingen aktive måltavler*\n' +
+          'Ingen av dine valgte dev-team har en aktiv måltavle. Opprett en tavle i NDA for å koble leveranser til mål.',
+      },
+    })
+  } else {
+    for (const board of boardsToShow) {
+      const boardUrl = `${baseUrl}/sections/${board.section_slug}/teams/${board.team_slug}/${board.id}`
       blocks.push({
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `*<${deploymentsUrl}|${app.app_name}>* (${app.environment_name})\n${issues.join('  •  ')}`,
+          text: `*🎯 <${boardUrl}|${escapeMrkdwn(board.team_name)} — ${escapeMrkdwn(board.period_label)}>*`,
         },
       })
 
-      // Show sample deployments with issues for this app
-      const key = `${app.team_slug}/${app.environment_name}/${app.app_name}`
-      const deployments = issueDeployments.get(key)
-      if (deployments && deployments.length > 0) {
-        const lines = deployments.map((d) => {
-          const shortSha = d.commit_sha?.substring(0, 7) || 'ukjent'
-          const deployer = d.deployer_username || 'ukjent'
-          const prAuthor = d.github_pr_data?.creator?.username
-          const prTitle = d.github_pr_data?.title || d.title
-          const prNumber = d.github_pr_number ? `#${d.github_pr_number}` : ''
-          const statusEmoji = d.four_eyes_status === 'pending' ? '⏳' : '⚠️'
+      const objectivesToShow = board.objectives.slice(0, MAX_OBJECTIVES_PER_BOARD)
+      const omittedObjectives = board.objectives.length - objectivesToShow.length
 
-          let line = `${statusEmoji} \`${shortSha}\``
-          if (prNumber && prTitle) {
-            line += ` ${prNumber} _${prTitle.substring(0, 50)}${prTitle.length > 50 ? '…' : ''}_`
+      if (objectivesToShow.length === 0) {
+        blocks.push({
+          type: 'context',
+          elements: [{ type: 'mrkdwn', text: '_Ingen mål er lagt til ennå._' }],
+        })
+      }
+
+      for (const objective of objectivesToShow) {
+        const objLines: string[] = [`*${escapeMrkdwn(objective.title)}*`]
+        if (objective.keywords.length > 0) {
+          objLines.push(`Kodeord: ${formatKeywordsInline(objective.keywords)}`)
+        }
+        for (const kr of objective.key_results) {
+          objLines.push(`• ${escapeMrkdwn(kr.title)}`)
+          if (kr.keywords.length > 0) {
+            objLines.push(`   Kodeord: ${formatKeywordsInline(kr.keywords)}`)
           }
-          line += ` · ${prAuthor || deployer}`
-          return line
+        }
+        blocks.push({
+          type: 'section',
+          text: { type: 'mrkdwn', text: objLines.join('\n') },
         })
 
+        // Add one "Vis kodeord"-button per objective/KR that has keywords.
+        const copyButtons = buildKeywordCopyButtons(objective)
+        if (copyButtons.length > 0) {
+          blocks.push({ type: 'actions', elements: copyButtons })
+        }
+      }
+
+      if (omittedObjectives > 0) {
         blocks.push({
           type: 'context',
           elements: [
             {
               type: 'mrkdwn',
-              text: lines.join('\n'),
+              text: `_+ ${omittedObjectives} flere mål — <${boardUrl}|se hele tavla i NDA>_`,
             },
           ],
         })
       }
+
+      blocks.push({ type: 'divider' })
     }
 
-    blocks.push({ type: 'divider' })
+    if (omittedBoards > 0) {
+      blocks.push({
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: `_+ ${omittedBoards} flere måltavler — <${baseUrl}/my-teams|se alle i NDA>_`,
+          },
+        ],
+      })
+      blocks.push({ type: 'divider' })
+    }
   }
 
-  // Footer
+  // --- Team-scoped issue summary (godkjenning + alerts). ---
+  const teamIssueLines: string[] = []
+  if (teamIssues.withoutFourEyes > 0) {
+    teamIssueLines.push(`• ⚠️ ${teamIssues.withoutFourEyes} deployments uten godkjenning`)
+  }
+  if (teamIssues.pendingVerification > 0) {
+    teamIssueLines.push(`• ⏳ ${teamIssues.pendingVerification} deployments venter verifisering`)
+  }
+  if (teamIssues.alertCount > 0) {
+    teamIssueLines.push(`• 🚨 ${teamIssues.alertCount} åpne varsler`)
+  }
+
+  if (teamIssueLines.length > 0) {
+    const headerCount = teamIssues.appsWithIssuesCount
+    const headerText =
+      headerCount > 0
+        ? `*🔔 Mine team har ${headerCount} ${headerCount === 1 ? 'applikasjon' : 'applikasjoner'} som trenger oppfølging*`
+        : '*🔔 Mine team har deployments som trenger oppfølging*'
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: [headerText, ...teamIssueLines].join('\n') },
+    })
+    blocks.push({
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Åpne mine apper i NDA', emoji: true },
+          url: `${baseUrl}/my-apps`,
+          action_id: 'open_my_apps',
+        },
+      ],
+    })
+  } else {
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: '*✅ Ingen åpne godkjennings- eller varselmangler i mine team*',
+      },
+    })
+  }
+
+  blocks.push({ type: 'divider' })
+
+  // --- Person-scoped: deployments missing goal-link. ---
+  if (personalMissingGoalLinks === null) {
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text:
+          '*🔗 Endringsopphav*\n' +
+          'For å se dine egne deployments som mangler kobling til mål, må du legge til GitHub-brukernavnet ditt i NDA-profilen.',
+      },
+    })
+    blocks.push({
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Åpne min profil', emoji: true },
+          url: `${baseUrl}/users/${navIdent}`,
+          action_id: 'open_profile',
+        },
+      ],
+    })
+  } else if (personalMissingGoalLinks > 0) {
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text:
+          `*🔗 ${personalMissingGoalLinks} av dine deployments mangler endringsopphav*\n` +
+          'Koble dem til mål eller nøkkelresultater i NDA.',
+      },
+    })
+    const profileUrl = githubUsername ? `${baseUrl}/users/${githubUsername}` : `${baseUrl}/users/${navIdent}`
+    blocks.push({
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Koble mine deployments i NDA', emoji: true },
+          url: profileUrl,
+          action_id: 'open_personal_missing_links',
+        },
+      ],
+    })
+  } else {
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: '*✅ Alle dine deployments har endringsopphav*',
+      },
+    })
+  }
+
   blocks.push({
     type: 'context',
     elements: [
@@ -498,6 +615,166 @@ export function buildHomeTabBlocks({ baseUrl, stats, appsWithIssues, issueDeploy
   })
 
   return blocks
+}
+
+/** Format an array of keywords as space-separated inline-code spans. */
+function formatKeywordsInline(keywords: string[]): string {
+  return keywords.map((k) => `\`${sanitizeForInlineCode(k)}\``).join('  ')
+}
+
+/**
+ * Slack mrkdwn has no escape mechanism inside an inline-code span — a literal
+ * backtick will close the span and break formatting. Strip backticks (and other
+ * format-breaking control characters) before interpolation.
+ */
+function sanitizeForInlineCode(value: string): string {
+  // Remove backticks (would close the inline-code span) and any newlines.
+  return value.replace(/`/g, '').replace(/\r?\n/g, ' ')
+}
+
+/**
+ * Escape characters that Slack mrkdwn treats as HTML entities (`&`, `<`, `>`).
+ *
+ * Note: this intentionally does NOT escape `*`, `_`, or `~` — the call sites
+ * wrap user-supplied text in those characters (e.g. `*${escapeMrkdwn(title)}*`)
+ * and need them to retain their formatting meaning. If user content needs to
+ * be displayed verbatim, use {@link sanitizeForInlineCode} or a code block.
+ */
+function escapeMrkdwn(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+interface KeywordCopyButtonElement {
+  type: 'button'
+  text: { type: 'plain_text'; text: string; emoji?: boolean }
+  action_id: string
+  value: string
+}
+
+function buildKeywordCopyButtons(objective: PersonalHomeTabObjective): KeywordCopyButtonElement[] {
+  const buttons: KeywordCopyButtonElement[] = []
+
+  if (objective.keywords.length > 0) {
+    buttons.push({
+      type: 'button',
+      text: { type: 'plain_text', text: '📋 Kodeord (mål)', emoji: true },
+      action_id: `${SHOW_KEYWORDS_ACTION_ID}:obj:${objective.id}`,
+      value: encodeKeywordsButtonValue({
+        title: objective.title,
+        keywords: objective.keywords,
+      }),
+    })
+  }
+
+  for (const kr of objective.key_results) {
+    if (kr.keywords.length === 0) continue
+    buttons.push({
+      type: 'button',
+      text: {
+        type: 'plain_text',
+        text: `📋 Kodeord (KR: ${truncate(kr.title, 30)})`,
+        emoji: true,
+      },
+      action_id: `${SHOW_KEYWORDS_ACTION_ID}:kr:${kr.id}`,
+      value: encodeKeywordsButtonValue({ title: kr.title, keywords: kr.keywords }),
+    })
+  }
+
+  // Slack: max 25 actions in an `actions` block. Practically we cap before that
+  // because long button labels also make the layout messy.
+  return buttons.slice(0, 5)
+}
+
+/** Action ID prefix for the "Vis kodeord" button. */
+export const SHOW_KEYWORDS_ACTION_ID = 'show_kr_keywords'
+
+interface KeywordsButtonValue {
+  title: string
+  keywords: string[]
+}
+
+/**
+ * Encode the button value as JSON, capped to Slack's 2000-character limit on
+ * `value`. If a title or keyword list is long enough to risk overflow, we fall
+ * back to a minimal payload (title only) — the modal opener can still look
+ * keywords up by the action_id suffix as a future enhancement.
+ */
+export function encodeKeywordsButtonValue(value: KeywordsButtonValue): string {
+  const json = JSON.stringify(value)
+  if (json.length <= 2000) return json
+  return JSON.stringify({ title: value.title, keywords: [] })
+}
+
+export function decodeKeywordsButtonValue(raw: string): KeywordsButtonValue | null {
+  try {
+    const parsed = JSON.parse(raw) as Partial<KeywordsButtonValue>
+    if (typeof parsed.title !== 'string' || !Array.isArray(parsed.keywords)) return null
+    return { title: parsed.title, keywords: parsed.keywords.filter((k): k is string => typeof k === 'string') }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Build the modal view that lists each keyword on its own line in inline code.
+ * This is the closest thing Slack supports to a "copy" affordance: each
+ * keyword is visually isolated so the user can double-click (desktop) or
+ * long-press (mobile) to select and copy without grabbing surrounding text.
+ */
+export function buildKeywordsModalView(value: KeywordsButtonValue): {
+  type: 'modal'
+  title: { type: 'plain_text'; text: string }
+  close: { type: 'plain_text'; text: string }
+  blocks: KnownBlock[]
+} {
+  const blocks: KnownBlock[] = [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*${escapeMrkdwn(value.title)}*`,
+      },
+    },
+    {
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: 'Marker et kodeord (dobbelklikk på desktop, lang-trykk på mobil) og kopier:',
+        },
+      ],
+    },
+  ]
+
+  if (value.keywords.length === 0) {
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: '_Ingen kodeord er lagt til._' },
+    })
+  } else {
+    for (const keyword of value.keywords) {
+      blocks.push({
+        type: 'section',
+        text: { type: 'mrkdwn', text: `\`${sanitizeForInlineCode(keyword)}\`` },
+      })
+    }
+  }
+
+  // Slack modal titles are capped at 24 characters — the cap applies to the
+  // *rendered* string including any ellipsis. `truncate` appends `...` after
+  // taking the first N chars, so we pass `MAX - 3` to leave room for the
+  // ellipsis it adds (or use the raw text when it already fits).
+  const SLACK_MODAL_TITLE_MAX = 24
+  const rawTitle = `Kodeord: ${value.title}`
+  const titleText =
+    rawTitle.length <= SLACK_MODAL_TITLE_MAX ? rawTitle : `${rawTitle.slice(0, SLACK_MODAL_TITLE_MAX - 3)}...`
+
+  return {
+    type: 'modal',
+    title: { type: 'plain_text', text: titleText },
+    close: { type: 'plain_text', text: 'Lukk' },
+    blocks,
+  }
 }
 
 // =============================================================================
