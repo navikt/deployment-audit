@@ -5,7 +5,7 @@
 
 import { Pool } from 'pg'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { getBoardObjectiveProgress } from '../../dashboard-stats.server'
+import { getBoardObjectiveProgress, getDevTeamSummaryStats } from '../../dashboard-stats.server'
 import { seedApp, seedDevTeam, seedSection, truncateAllTables } from './helpers'
 
 let pool: Pool
@@ -145,7 +145,56 @@ describe('getSectionOverallStats SQL', () => {
   })
 })
 
-/** Helper to create a deployment with a specific four_eyes_status */
+describe('getDevTeamSummaryStats SQL', () => {
+  it('unions naisTeamSlugs and directAppIds when both are provided', async () => {
+    // App reachable only via nais team slug
+    const naisAppId = await seedApp(pool, { teamSlug: 'team-nais', appName: 'nais-app', environment: 'prod' })
+    // App reachable only via direct attachment
+    const directAppId = await seedApp(pool, { teamSlug: 'other-team', appName: 'direct-app', environment: 'prod' })
+
+    const now = new Date()
+    await seedDeploymentWithStatus(pool, naisAppId, 'team-nais', now, 'approved_pr')
+    await seedDeploymentWithStatus(pool, naisAppId, 'team-nais', now, 'direct_push')
+    await seedDeploymentWithStatus(pool, directAppId, 'other-team', now, 'approved_pr')
+    await seedDeploymentWithStatus(pool, directAppId, 'other-team', now, 'pending')
+
+    const stats = await getDevTeamSummaryStats(['team-nais'], [directAppId])
+
+    expect(stats.total_apps).toBe(2)
+    expect(stats.total_deployments).toBe(4)
+    expect(stats.with_four_eyes).toBe(2)
+    expect(stats.without_four_eyes).toBe(1)
+    expect(stats.pending_verification).toBe(1)
+  })
+
+  it('uses only naisTeamSlugs when directAppIds is empty/undefined', async () => {
+    const naisAppId = await seedApp(pool, { teamSlug: 'team-only-nais', appName: 'a', environment: 'prod' })
+    await seedDeploymentWithStatus(pool, naisAppId, 'team-only-nais', new Date(), 'approved_pr')
+
+    const stats = await getDevTeamSummaryStats(['team-only-nais'])
+    expect(stats.total_apps).toBe(1)
+    expect(stats.total_deployments).toBe(1)
+  })
+
+  it('uses only directAppIds when naisTeamSlugs is empty', async () => {
+    const directAppId = await seedApp(pool, { teamSlug: 'unrelated', appName: 'd', environment: 'prod' })
+    await seedDeploymentWithStatus(pool, directAppId, 'unrelated', new Date(), 'approved_pr')
+
+    const stats = await getDevTeamSummaryStats([], [directAppId])
+    expect(stats.total_apps).toBe(1)
+    expect(stats.total_deployments).toBe(1)
+  })
+
+  it('does not double-count an app that matches both nais slug and direct id', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'team-overlap', appName: 'overlap', environment: 'prod' })
+    await seedDeploymentWithStatus(pool, appId, 'team-overlap', new Date(), 'approved_pr')
+
+    const stats = await getDevTeamSummaryStats(['team-overlap'], [appId])
+    expect(stats.total_apps).toBe(1)
+    expect(stats.total_deployments).toBe(1)
+  })
+})
+
 async function seedDeploymentWithStatus(
   pool: Pool,
   monitoredAppId: number,

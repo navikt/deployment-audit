@@ -93,7 +93,9 @@ export async function getSectionOverallStats(
 
 /**
  * Get dashboard stats for all dev teams in a section within a date range.
- * Uses direct app links (dev_team_applications) when available, falling back to nais team links.
+ * The per-team scope is the **union** of direct app links
+ * (dev_team_applications) and nais team links (dev_team_nais_teams), so a
+ * deployment is counted if it matches either side.
  */
 export async function getSectionDashboardStats(
   sectionId: number,
@@ -121,10 +123,8 @@ export async function getSectionDashboardStats(
               COUNT(DISTINCT dgl.deployment_id) AS linked_to_goal
        FROM team_apps ta
        LEFT JOIN deployments d ON (
-         CASE
-           WHEN ta.direct_app_ids IS NOT NULL THEN d.monitored_app_id = ANY(ta.direct_app_ids)
-           ELSE d.team_slug = ANY(ta.nais_team_slugs)
-         END
+         d.team_slug = ANY(ta.nais_team_slugs)
+         OR d.monitored_app_id = ANY(COALESCE(ta.direct_app_ids, '{}'::int[]))
        ) AND ($2::timestamptz IS NULL OR d.created_at >= $2)
          AND ($3::timestamptz IS NULL OR d.created_at < $3)
        LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id AND dgl.is_active = true
@@ -152,27 +152,27 @@ export async function getSectionDashboardStats(
 
 /**
  * Get summary stats for a single dev team.
- * Uses direct app links when available, otherwise falls back to nais team slugs.
- * Optional startDate filters deployments to a date range (e.g. YTD).
+ *
+ * The scope is the **union** of `naisTeamSlugs` (apps owned via the team's
+ * nais team slugs) and `directAppIds` (apps explicitly attached to the dev
+ * team in NDA). An app is included if it matches either side — matches
+ * `getDevTeamAppsWithIssues` so that summary stats and issue lists agree.
+ *
+ * Optional `startDate` filters deployments to a date range (e.g. YTD).
  */
 export async function getDevTeamSummaryStats(
   naisTeamSlugs: string[],
   directAppIds?: number[],
   startDate?: Date,
 ): Promise<DevTeamSummaryStats> {
-  const useDirectApps = directAppIds && directAppIds.length > 0
+  const ids = directAppIds ?? []
 
   const result = await pool.query(
     `WITH team_apps AS (
        SELECT ma.id, ma.audit_start_year
        FROM monitored_applications ma
        WHERE ma.is_active = true
-         AND (
-           CASE
-             WHEN $2::boolean THEN ma.id = ANY($3::int[])
-             ELSE ma.team_slug = ANY($1::text[])
-           END
-         )
+         AND (ma.team_slug = ANY($1::text[]) OR ma.id = ANY($2::int[]))
      ),
      app_stats AS (
        SELECT d.monitored_app_id,
@@ -183,8 +183,8 @@ export async function getDevTeamSummaryStats(
               COUNT(DISTINCT dgl.deployment_id) AS linked_to_goal
        FROM team_apps ta
        JOIN deployments d ON d.monitored_app_id = ta.id
-         AND ($4::timestamptz IS NULL OR d.created_at >= $4)
-         AND ($4::timestamptz IS NOT NULL OR ta.audit_start_year IS NULL OR d.created_at >= make_date(ta.audit_start_year, 1, 1))
+         AND ($3::timestamptz IS NULL OR d.created_at >= $3)
+         AND ($3::timestamptz IS NOT NULL OR ta.audit_start_year IS NULL OR d.created_at >= make_date(ta.audit_start_year, 1, 1))
        LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id AND dgl.is_active = true
        GROUP BY d.monitored_app_id
      ),
@@ -205,7 +205,7 @@ export async function getDevTeamSummaryStats(
      FROM team_apps ta
      LEFT JOIN app_stats s ON s.monitored_app_id = ta.id
      LEFT JOIN app_alerts a ON a.monitored_app_id = ta.id`,
-    [naisTeamSlugs, useDirectApps ?? false, directAppIds ?? [], startDate ?? null],
+    [naisTeamSlugs, ids, startDate ?? null],
   )
 
   const row = result.rows[0]
