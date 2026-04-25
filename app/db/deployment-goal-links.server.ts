@@ -1,6 +1,7 @@
 import { APPROVED_STATUSES } from '~/lib/four-eyes-status'
 import { AUDIT_START_YEAR_FILTER } from './audit-start-year'
 import { pool } from './connection.server'
+import { lowerUsernames, userDeploymentMatchAnySql, userDeploymentMatchSql } from './user-deployment-match'
 
 export interface DeploymentGoalLink {
   id: number
@@ -163,7 +164,7 @@ export async function getUnlinkedDependabotDeploymentIds(
   endDate?: Date | null,
   appName?: string,
 ): Promise<number[]> {
-  let whereSql = `WHERE d.deployer_username = $1
+  let whereSql = `WHERE ${userDeploymentMatchSql(1)}
     AND LOWER(d.github_pr_data->'creator'->>'username') = 'dependabot[bot]'
     AND ${AUDIT_START_YEAR_FILTER}
     AND NOT EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = d.id AND dgl.is_active = true)`
@@ -350,11 +351,11 @@ export async function getDevTeamCoverageStats(
      FROM deployments d
      JOIN monitored_applications ma ON d.monitored_app_id = ma.id
      WHERE d.monitored_app_id = ANY($1::int[])
-       AND d.deployer_username = ANY($2::text[])
+       AND ${userDeploymentMatchAnySql(2)}
        AND d.created_at >= $3
        AND d.created_at < $5
        AND ${AUDIT_START_YEAR_FILTER}`,
-    [monitoredAppIds, deployerUsernames, startDate, APPROVED_STATUSES, endDate],
+    [monitoredAppIds, lowerUsernames(deployerUsernames), startDate, APPROVED_STATUSES, endDate],
   )
 
   const row = result.rows[0]

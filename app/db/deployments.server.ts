@@ -2,6 +2,7 @@ import { APPROVED_STATUSES_SQL, NOT_APPROVED_STATUSES, PENDING_STATUSES } from '
 import { AUDIT_START_YEAR_FILTER } from './audit-start-year'
 import { pool } from './connection.server'
 import { logStatusTransition } from './deployments/status-history.server'
+import { userDeploymentMatchSql } from './user-deployment-match'
 
 export interface UnverifiedCommit {
   sha: string
@@ -840,14 +841,24 @@ export interface AppDeploymentStats {
 }
 
 /**
- * Get deployment count for a specific deployer
+ * Tell deployments hvor en GitHub-bruker er involvert — enten som
+ * deployer eller som PR-skaper. Match er case-insensitivt
+ * (GitHub-brukernavn er case-insensitive). Brukes på `/users/:username`
+ * og må holdes konsistent med Slack home tab via felles
+ * {@link userDeploymentMatchSql}-helper.
+ *
+ * Funksjonsnavnet beholdes (`*Deployer*`) av historiske grunner —
+ * semantikken er «mine deployments», ikke strengt deployer-only.
+ *
+ * @param deployerUsername GitHub-brukernavn som matches mot både
+ *   `deployer_username` og `github_pr_data.creator.username`.
  */
 export async function getDeploymentCountByDeployer(deployerUsername: string): Promise<number> {
   const result = await pool.query(
     `SELECT COUNT(*) as count
      FROM deployments d
      JOIN monitored_applications ma ON d.monitored_app_id = ma.id
-     WHERE d.deployer_username = $1
+     WHERE ${userDeploymentMatchSql(1)}
        AND ${AUDIT_START_YEAR_FILTER}`,
     [deployerUsername],
   )
@@ -855,7 +866,12 @@ export async function getDeploymentCountByDeployer(deployerUsername: string): Pr
 }
 
 /**
- * Get monthly deployment counts for a deployer, grouped by goal linkage and Dependabot
+ * Månedlige deployment-tellinger for en GitHub-bruker, gruppert på
+ * målkobling og Dependabot. Matcher deployments hvor brukeren enten
+ * er deployer eller PR-skaper (case-insensitivt) — se
+ * {@link userDeploymentMatchSql}.
+ *
+ * Funksjonsnavnet beholdes (`*Deployer*`) av historiske grunner.
  */
 export interface DeployerMonthlyStats {
   month: string
@@ -870,7 +886,7 @@ export async function getDeployerMonthlyStats(
   startDate?: Date | null,
   endDate?: Date | null,
 ): Promise<DeployerMonthlyStats[]> {
-  let whereSql = `WHERE d.deployer_username = $1 AND ${AUDIT_START_YEAR_FILTER}`
+  let whereSql = `WHERE ${userDeploymentMatchSql(1)} AND ${AUDIT_START_YEAR_FILTER}`
   const params: (string | Date)[] = [deployerUsername]
   let paramIndex = 2
 
@@ -934,8 +950,14 @@ export interface DeployerTableFilters {
 }
 
 /**
- * Get paginated deployments for a deployer with goal-link indicator.
- * Supports filtering by goal linkage, dependabot status, and app name.
+ * Paginert liste over deployments hvor en GitHub-bruker er involvert
+ * — enten som deployer eller som PR-skaper (case-insensitivt). Drives
+ * av {@link userDeploymentMatchSql} og må stemme overens med tellingene
+ * i Slack home tab og {@link getDeploymentCountByDeployer}.
+ *
+ * Støtter filtrering på målkobling, Dependabot-status, godkjenning og
+ * applikasjonsnavn. Funksjonsnavnet beholdes (`*Deployer*`) av
+ * historiske grunner — semantikken er «mine deployments».
  */
 export async function getDeployerDeploymentsPaginated(
   deployerUsername: string,
@@ -947,7 +969,7 @@ export async function getDeployerDeploymentsPaginated(
 ): Promise<PaginatedDeployerDeployments> {
   const offset = (page - 1) * perPage
 
-  let whereSql = `WHERE d.deployer_username = $1 AND ${AUDIT_START_YEAR_FILTER}`
+  let whereSql = `WHERE ${userDeploymentMatchSql(1)} AND ${AUDIT_START_YEAR_FILTER}`
   const countParams: (string | Date | number)[] = [deployerUsername]
   let paramIndex = 2
 
@@ -1033,14 +1055,19 @@ export async function getDeployerDeploymentsPaginated(
 }
 
 /**
- * Get distinct app names deployed by a user
+ * Distinkte applikasjonsnavn for deployments hvor en GitHub-bruker er
+ * involvert — enten som deployer eller som PR-skaper (case-insensitivt).
+ * Brukes som datakilde til app-filteret på `/users/:username`-siden.
+ *
+ * Funksjonsnavnet beholdes (`*Deployer*`) av historiske grunner — se
+ * {@link userDeploymentMatchSql} for matche-semantikken.
  */
 export async function getDeployerApps(deployerUsername: string): Promise<string[]> {
   const result = await pool.query(
     `SELECT DISTINCT ma.app_name
      FROM deployments d
      JOIN monitored_applications ma ON d.monitored_app_id = ma.id
-     WHERE d.deployer_username = $1
+     WHERE ${userDeploymentMatchSql(1)}
        AND ${AUDIT_START_YEAR_FILTER}
      ORDER BY ma.app_name`,
     [deployerUsername],
