@@ -230,6 +230,9 @@ export async function getDevTeamSummaryStats(
 
 /**
  * Get objective progress for a board — how many deployments are linked to each objective/key result.
+ *
+ * Implementation: 3 queries total (objectives, key results with link counts, objective-level links)
+ * regardless of hierarchy size.
  */
 export async function getBoardObjectiveProgress(boardId: number): Promise<BoardObjectiveProgress[]> {
   const objectives = await pool.query(
@@ -237,41 +240,49 @@ export async function getBoardObjectiveProgress(boardId: number): Promise<BoardO
     [boardId],
   )
 
-  const result: BoardObjectiveProgress[] = []
+  if (objectives.rows.length === 0) return []
 
-  for (const obj of objectives.rows) {
-    const krResult = await pool.query(
-      `SELECT bkr.id, bkr.title,
-              COUNT(DISTINCT dgl.deployment_id) AS linked_deployments
-       FROM board_key_results bkr
-       LEFT JOIN deployment_goal_links dgl ON dgl.key_result_id = bkr.id AND dgl.is_active = true
-       WHERE bkr.objective_id = $1 AND bkr.is_active = true
-       GROUP BY bkr.id, bkr.title
-       ORDER BY bkr.sort_order, bkr.id`,
-      [obj.id],
-    )
+  const objectiveIds = objectives.rows.map((o: { id: number }) => o.id)
 
-    const objLinks = await pool.query(
-      'SELECT COUNT(DISTINCT deployment_id) AS cnt FROM deployment_goal_links WHERE objective_id = $1 AND is_active = true',
-      [obj.id],
-    )
+  const krResult = await pool.query(
+    `SELECT bkr.id, bkr.objective_id, bkr.title,
+            COUNT(DISTINCT dgl.deployment_id)::int AS linked_deployments
+     FROM board_key_results bkr
+     LEFT JOIN deployment_goal_links dgl ON dgl.key_result_id = bkr.id AND dgl.is_active = true
+     WHERE bkr.objective_id = ANY($1::int[]) AND bkr.is_active = true
+     GROUP BY bkr.id, bkr.objective_id, bkr.title
+     ORDER BY bkr.sort_order, bkr.id`,
+    [objectiveIds],
+  )
 
-    const krLinkedTotal = krResult.rows.reduce(
-      (sum: number, kr: { linked_deployments: string }) => sum + Number(kr.linked_deployments),
-      0,
-    )
+  const objLinksResult = await pool.query(
+    `SELECT objective_id, COUNT(DISTINCT deployment_id)::int AS cnt
+     FROM deployment_goal_links
+     WHERE objective_id = ANY($1::int[]) AND is_active = true
+     GROUP BY objective_id`,
+    [objectiveIds],
+  )
 
-    result.push({
-      objective_id: obj.id,
-      objective_title: obj.title,
-      key_results: krResult.rows.map((kr) => ({
-        id: kr.id,
-        title: kr.title,
-        linked_deployments: Number(kr.linked_deployments),
-      })),
-      total_linked_deployments: Number(objLinks.rows[0]?.cnt ?? 0) + krLinkedTotal,
-    })
+  const objLinksMap = new Map<number, number>()
+  for (const row of objLinksResult.rows) {
+    objLinksMap.set(row.objective_id, Number(row.cnt))
   }
 
-  return result
+  const krByObjective = new Map<number, { id: number; title: string; linked_deployments: number }[]>()
+  for (const kr of krResult.rows) {
+    const list = krByObjective.get(kr.objective_id) ?? []
+    list.push({ id: kr.id, title: kr.title, linked_deployments: Number(kr.linked_deployments) })
+    krByObjective.set(kr.objective_id, list)
+  }
+
+  return objectives.rows.map((obj: { id: number; title: string }) => {
+    const keyResults = krByObjective.get(obj.id) ?? []
+    const krLinkedTotal = keyResults.reduce((sum, kr) => sum + kr.linked_deployments, 0)
+    return {
+      objective_id: obj.id,
+      objective_title: obj.title,
+      key_results: keyResults,
+      total_linked_deployments: (objLinksMap.get(obj.id) ?? 0) + krLinkedTotal,
+    }
+  })
 }
