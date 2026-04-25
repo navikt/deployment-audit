@@ -1,4 +1,5 @@
 import { APPROVED_STATUSES_SQL } from '~/lib/four-eyes-status'
+import { AUDIT_START_YEAR_FILTER } from './audit-start-year'
 import { pool } from './connection.server'
 
 export interface SectionOverallStats {
@@ -70,6 +71,8 @@ export async function getSectionOverallStats(
      JOIN deployments d ON d.team_slug = st.team_slug
        AND ($2::timestamptz IS NULL OR d.created_at >= $2)
        AND ($3::timestamptz IS NULL OR d.created_at < $3)
+     JOIN monitored_applications ma ON ma.id = d.monitored_app_id
+       AND ${AUDIT_START_YEAR_FILTER}
      LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id AND dgl.is_active = true
      WHERE st.section_id = $1 AND st.deleted_at IS NULL`,
     [sectionId, startDate ?? null, endDate ?? null],
@@ -122,11 +125,18 @@ export async function getSectionDashboardStats(
               COUNT(d.id) FILTER (WHERE d.four_eyes_status IN ('pending', 'pending_baseline', 'pending_approval', 'unknown')) AS pending_verification,
               COUNT(DISTINCT dgl.deployment_id) AS linked_to_goal
        FROM team_apps ta
-       LEFT JOIN deployments d ON (
-         d.team_slug = ANY(ta.nais_team_slugs)
-         OR d.monitored_app_id = ANY(COALESCE(ta.direct_app_ids, '{}'::int[]))
-       ) AND ($2::timestamptz IS NULL OR d.created_at >= $2)
-         AND ($3::timestamptz IS NULL OR d.created_at < $3)
+       LEFT JOIN LATERAL (
+         SELECT d.*
+         FROM deployments d
+         JOIN monitored_applications ma ON ma.id = d.monitored_app_id
+         WHERE (
+           d.team_slug = ANY(ta.nais_team_slugs)
+           OR d.monitored_app_id = ANY(COALESCE(ta.direct_app_ids, '{}'::int[]))
+         )
+           AND ($2::timestamptz IS NULL OR d.created_at >= $2)
+           AND ($3::timestamptz IS NULL OR d.created_at < $3)
+           AND ${AUDIT_START_YEAR_FILTER}
+       ) d ON true
        LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id AND dgl.is_active = true
        GROUP BY ta.dev_team_id
      )
@@ -184,7 +194,7 @@ export async function getDevTeamSummaryStats(
        FROM team_apps ta
        JOIN deployments d ON d.monitored_app_id = ta.id
          AND ($3::timestamptz IS NULL OR d.created_at >= $3)
-         AND ($3::timestamptz IS NOT NULL OR ta.audit_start_year IS NULL OR d.created_at >= make_date(ta.audit_start_year, 1, 1))
+         AND (ta.audit_start_year IS NULL OR d.created_at >= make_date(ta.audit_start_year, 1, 1))
        LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id AND dgl.is_active = true
        GROUP BY d.monitored_app_id
      ),

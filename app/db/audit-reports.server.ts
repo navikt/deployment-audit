@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { ReportPeriodType } from '~/lib/report-periods'
 import { generateReportId } from '~/lib/report-periods'
+import { AUDIT_START_YEAR_FILTER } from './audit-start-year'
 import { pool } from './connection.server'
 import { getDeviationsForPeriod } from './deviations.server'
 
@@ -218,6 +219,7 @@ export async function checkAuditReadiness(
        AND d.created_at >= $2
        AND d.created_at <= $3
        AND ma.environment_name IN ('prod-fss', 'prod-gcp')
+       AND ${AUDIT_START_YEAR_FILTER}
      ORDER BY d.created_at ASC`,
     [monitoredAppId, startDate, endDate],
   )
@@ -328,6 +330,7 @@ export async function getAuditReportData(
        AND d.created_at >= $2
        AND d.created_at <= $3
        AND ma.environment_name IN ('prod-fss', 'prod-gcp')
+       AND ${AUDIT_START_YEAR_FILTER}
      ORDER BY d.created_at ASC`,
     [monitoredAppId, startDate, endDate],
   )

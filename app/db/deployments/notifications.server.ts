@@ -1,4 +1,5 @@
 import { NOT_APPROVED_STATUSES, PENDING_STATUSES } from '~/lib/four-eyes-status'
+import { AUDIT_START_YEAR_FILTER } from '../audit-start-year'
 import { pool } from '../connection.server'
 import type { AppReminderConfig, DeploymentWithApp } from '../deployments.server'
 import { getDeploymentById } from '../deployments.server'
@@ -133,6 +134,7 @@ export async function getUnapprovedDeployments(monitoredAppId: number): Promise<
      JOIN monitored_applications ma ON d.monitored_app_id = ma.id
      WHERE d.monitored_app_id = $1
        AND d.four_eyes_status = ANY($2)
+       AND ${AUDIT_START_YEAR_FILTER}
      ORDER BY d.created_at DESC`,
     [monitoredAppId, [...NOT_APPROVED_STATUSES, ...PENDING_STATUSES]],
   )

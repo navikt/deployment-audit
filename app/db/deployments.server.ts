@@ -1,4 +1,5 @@
 import { APPROVED_STATUSES_SQL, NOT_APPROVED_STATUSES, PENDING_STATUSES } from '~/lib/four-eyes-status'
+import { AUDIT_START_YEAR_FILTER } from './audit-start-year'
 import { pool } from './connection.server'
 import { logStatusTransition } from './deployments/status-history.server'
 
@@ -842,9 +843,14 @@ export interface AppDeploymentStats {
  * Get deployment count for a specific deployer
  */
 export async function getDeploymentCountByDeployer(deployerUsername: string): Promise<number> {
-  const result = await pool.query('SELECT COUNT(*) as count FROM deployments WHERE deployer_username = $1', [
-    deployerUsername,
-  ])
+  const result = await pool.query(
+    `SELECT COUNT(*) as count
+     FROM deployments d
+     JOIN monitored_applications ma ON d.monitored_app_id = ma.id
+     WHERE d.deployer_username = $1
+       AND ${AUDIT_START_YEAR_FILTER}`,
+    [deployerUsername],
+  )
   return parseInt(result.rows[0].count, 10) || 0
 }
 
@@ -864,7 +870,7 @@ export async function getDeployerMonthlyStats(
   startDate?: Date | null,
   endDate?: Date | null,
 ): Promise<DeployerMonthlyStats[]> {
-  let whereSql = 'WHERE d.deployer_username = $1'
+  let whereSql = `WHERE d.deployer_username = $1 AND ${AUDIT_START_YEAR_FILTER}`
   const params: (string | Date)[] = [deployerUsername]
   let paramIndex = 2
 
@@ -891,6 +897,7 @@ export async function getDeployerMonthlyStats(
          WHERE LOWER(d.github_pr_data->'creator'->>'username') IS DISTINCT FROM 'dependabot[bot]'
        )::int AS with_goal_non_dep
      FROM deployments d
+     JOIN monitored_applications ma ON d.monitored_app_id = ma.id
      LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id AND dgl.is_active = true
      ${whereSql}
      GROUP BY DATE_TRUNC('month', d.created_at)
@@ -940,7 +947,7 @@ export async function getDeployerDeploymentsPaginated(
 ): Promise<PaginatedDeployerDeployments> {
   const offset = (page - 1) * perPage
 
-  let whereSql = 'WHERE d.deployer_username = $1'
+  let whereSql = `WHERE d.deployer_username = $1 AND ${AUDIT_START_YEAR_FILTER}`
   const countParams: (string | Date | number)[] = [deployerUsername]
   let paramIndex = 2
 
@@ -985,13 +992,14 @@ export async function getDeployerDeploymentsPaginated(
 
   const dataParams = [...countParams, perPage, offset]
 
-  const needsJoin = !!filters?.appName
-  const countFrom = needsJoin
-    ? 'FROM deployments d JOIN monitored_applications ma ON d.monitored_app_id = ma.id'
-    : 'FROM deployments d'
-
   const [countResult, dataResult] = await Promise.all([
-    pool.query(`SELECT COUNT(*)::int AS total ${countFrom} ${whereSql}`, countParams),
+    pool.query(
+      `SELECT COUNT(*)::int AS total
+       FROM deployments d
+       JOIN monitored_applications ma ON d.monitored_app_id = ma.id
+       ${whereSql}`,
+      countParams,
+    ),
     pool.query(
       `SELECT
          d.*,
@@ -1033,6 +1041,7 @@ export async function getDeployerApps(deployerUsername: string): Promise<string[
      FROM deployments d
      JOIN monitored_applications ma ON d.monitored_app_id = ma.id
      WHERE d.deployer_username = $1
+       AND ${AUDIT_START_YEAR_FILTER}
      ORDER BY ma.app_name`,
     [deployerUsername],
   )

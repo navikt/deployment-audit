@@ -1,4 +1,5 @@
 import { APPROVED_STATUSES } from '~/lib/four-eyes-status'
+import { AUDIT_START_YEAR_FILTER } from './audit-start-year'
 import { pool } from './connection.server'
 
 export interface DeploymentGoalLink {
@@ -164,6 +165,7 @@ export async function getUnlinkedDependabotDeploymentIds(
 ): Promise<number[]> {
   let whereSql = `WHERE d.deployer_username = $1
     AND LOWER(d.github_pr_data->'creator'->>'username') = 'dependabot[bot]'
+    AND ${AUDIT_START_YEAR_FILTER}
     AND NOT EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = d.id AND dgl.is_active = true)`
   const params: (string | Date)[] = [deployerUsername]
   let idx = 2
@@ -280,10 +282,12 @@ export async function getOriginOfChangeCoverage(
          COUNT(DISTINCT d.id) AS total,
          COUNT(DISTINCT dgl.deployment_id) AS linked
        FROM deployments d
+       JOIN monitored_applications ma ON d.monitored_app_id = ma.id
        LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id AND dgl.is_active = true
        WHERE d.monitored_app_id IN (${placeholders})
          AND d.created_at >= $${directAppIds.length + 1}
-         AND d.created_at < $${directAppIds.length + 2}`,
+         AND d.created_at < $${directAppIds.length + 2}
+         AND ${AUDIT_START_YEAR_FILTER}`,
       [...directAppIds, startDate, endDate],
     )
     const total = Number(result.rows[0]?.total ?? 0)
@@ -297,10 +301,12 @@ export async function getOriginOfChangeCoverage(
        COUNT(DISTINCT d.id) AS total,
        COUNT(DISTINCT dgl.deployment_id) AS linked
      FROM deployments d
+     JOIN monitored_applications ma ON d.monitored_app_id = ma.id
      LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id AND dgl.is_active = true
      WHERE d.team_slug IN (${placeholders})
        AND d.created_at >= $${naisTeamSlugs.length + 1}
-       AND d.created_at < $${naisTeamSlugs.length + 2}`,
+       AND d.created_at < $${naisTeamSlugs.length + 2}
+       AND ${AUDIT_START_YEAR_FILTER}`,
     [...naisTeamSlugs, startDate, endDate],
   )
 
@@ -342,10 +348,12 @@ export async function getDevTeamCoverageStats(
          WHERE dgl.deployment_id = d.id AND dgl.is_active = true
        )) AS with_origin
      FROM deployments d
+     JOIN monitored_applications ma ON d.monitored_app_id = ma.id
      WHERE d.monitored_app_id = ANY($1::int[])
        AND d.deployer_username = ANY($2::text[])
        AND d.created_at >= $3
-       AND d.created_at < $5`,
+       AND d.created_at < $5
+       AND ${AUDIT_START_YEAR_FILTER}`,
     [monitoredAppIds, deployerUsernames, startDate, APPROVED_STATUSES, endDate],
   )
 
