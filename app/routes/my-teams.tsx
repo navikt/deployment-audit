@@ -1,19 +1,15 @@
 import { BarChartIcon, CheckmarkCircleIcon, ExclamationmarkTriangleIcon, LinkIcon } from '@navikt/aksel-icons'
-import { Alert, BodyShort, Box, Button, Detail, Heading, HGrid, HStack, LinkCard, Tag, VStack } from '@navikt/ds-react'
+import { Alert, BodyShort, Box, Button, Detail, Heading, HGrid, HStack, VStack } from '@navikt/ds-react'
 import type { ReactNode } from 'react'
 import { Link, useRouteLoaderData } from 'react-router'
 import { AppCard, type AppCardData } from '~/components/AppCard'
+import { type BoardSummary, BoardSummaryCard } from '~/components/BoardSummaryCard'
 import { getAllActiveRepositories } from '~/db/application-repositories.server'
 import { getBoardsByDevTeam } from '~/db/boards.server'
-import {
-  type BoardObjectiveProgress,
-  getBoardObjectiveProgress,
-  getDevTeamSummaryStats,
-} from '~/db/dashboard-stats.server'
+import { getBoardObjectiveProgress, getDevTeamSummaryStats } from '~/db/dashboard-stats.server'
 import { getDevTeamAppsWithIssues } from '~/db/deployments/home.server'
 import { getDevTeamApplications } from '~/db/dev-teams.server'
 import { getUserDevTeams } from '~/db/user-dev-team-preference.server'
-import { formatBoardLabel } from '~/lib/board-periods'
 import { groupAppCards } from '~/lib/group-app-cards'
 import { getAppDeploymentStatsBatch } from '../db/deployments.server'
 import { getAllAlertCounts, getAllMonitoredApplications } from '../db/monitored-applications.server'
@@ -23,15 +19,6 @@ import type { loader as layoutLoader } from './layout'
 
 export function meta(_args: Route.MetaArgs) {
   return [{ title: 'NDA' }, { name: 'description', content: 'Audit Nais deployments for godkjenningsstatus' }]
-}
-
-interface BoardSummary {
-  boardId: number
-  periodLabel: string
-  teamName: string
-  teamSlug: string
-  sectionSlug: string
-  objectives: BoardObjectiveProgress[]
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -326,49 +313,5 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         </VStack>
       )}
     </VStack>
-  )
-}
-
-function BoardSummaryCard({ board }: { board: BoardSummary }) {
-  const boardUrl = `/sections/${board.sectionSlug}/teams/${board.teamSlug}/${board.boardId}`
-  const totalDeployments = board.objectives.reduce((sum, o) => sum + o.total_linked_deployments, 0)
-
-  return (
-    <LinkCard>
-      <LinkCard.Title as="h3">
-        <LinkCard.Anchor asChild>
-          <Link to={boardUrl}>{formatBoardLabel({ teamName: board.teamName, periodLabel: board.periodLabel })}</Link>
-        </LinkCard.Anchor>
-      </LinkCard.Title>
-      <LinkCard.Description>
-        <VStack gap="space-12">
-          <HStack>
-            <Tag variant="moderate" size="xsmall" data-color="info">
-              {totalDeployments} leveranser koblet
-            </Tag>
-          </HStack>
-          {board.objectives.length > 0 ? (
-            <VStack gap="space-8">
-              {board.objectives.map((obj) => (
-                <HStack key={obj.objective_id} gap="space-8" align="start">
-                  <BodyShort size="small" style={{ flex: 1 }}>
-                    {obj.objective_title}
-                  </BodyShort>
-                  <Tag
-                    variant="moderate"
-                    size="xsmall"
-                    data-color={obj.total_linked_deployments > 0 ? 'success' : 'neutral'}
-                  >
-                    {obj.total_linked_deployments}
-                  </Tag>
-                </HStack>
-              ))}
-            </VStack>
-          ) : (
-            <Detail textColor="subtle">Ingen mål er lagt til ennå.</Detail>
-          )}
-        </VStack>
-      </LinkCard.Description>
-    </LinkCard>
   )
 }
