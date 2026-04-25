@@ -646,7 +646,7 @@ function registerEventHandlers(app: App): void {
 
     try {
       const userId = event.user
-      const baseUrl = process.env.BASE_URL || 'https://pensjon-deployment-audit.ansatt.nav.no'
+      const baseUrl = process.env.BASE_URL || 'https://nda.ansatt.nav.no'
 
       const homeTabInput = await buildPersonalizedHomeTabInput({ slackUserId: userId, baseUrl })
 

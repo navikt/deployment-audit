@@ -6,7 +6,7 @@ import type {
   ReminderNotification,
 } from '~/lib/slack'
 
-const BASE_URL = 'https://pensjon-deployment-audit.ansatt.nav.no'
+const BASE_URL = 'https://nda.ansatt.nav.no'
 
 // =============================================================================
 // Deployment Notification Fixtures

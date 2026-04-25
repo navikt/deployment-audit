@@ -167,7 +167,7 @@ export async function action({ request, params }: { request: Request; params: Re
       const deviationChannelConfig = await getDeviationSlackChannel()
       if (deviationChannelConfig.channel_id) {
         const appUrl = app ? `/team/${app.team_slug}/env/${app.environment_name}/app/${app.app_name}` : ''
-        const baseUrl = process.env.BASE_URL || 'https://pensjon-deployment-audit.ansatt.nav.no'
+        const baseUrl = process.env.BASE_URL || 'https://nda.ansatt.nav.no'
         await sendDeviationNotification(
           {
             deploymentId,

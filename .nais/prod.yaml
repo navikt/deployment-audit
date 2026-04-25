@@ -10,7 +10,6 @@ spec:
   port: 3000
 
   ingresses:
-    - https://pensjon-deployment-audit.ansatt.nav.no
     - https://nda.ansatt.nav.no
 
   liveness:

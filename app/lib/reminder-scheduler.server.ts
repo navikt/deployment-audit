@@ -82,7 +82,7 @@ export async function sendReminderForApp(
   const deployments = await getUnapprovedDeployments(appId)
   if (deployments.length === 0) return false
 
-  const baseUrl = process.env.BASE_URL || 'https://pensjon-deployment-audit.ansatt.nav.no'
+  const baseUrl = process.env.BASE_URL || 'https://nda.ansatt.nav.no'
 
   const reminderDeployments: ReminderDeployment[] = await Promise.all(
     deployments.map(async (d) => {

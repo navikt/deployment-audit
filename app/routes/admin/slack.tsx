@@ -48,7 +48,7 @@ export async function action({ request }: Route.ActionArgs) {
       prNumber: 1234,
       prUrl: 'https://github.com/navikt/test-app/pull/1234',
       status: 'unverified',
-      detailsUrl: 'https://pensjon-deployment-audit.ansatt.nav.no',
+      detailsUrl: 'https://nda.ansatt.nav.no',
     }
 
     try {
