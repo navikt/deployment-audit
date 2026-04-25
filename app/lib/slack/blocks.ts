@@ -582,7 +582,9 @@ export function buildHomeTabBlocks({
           'Koble dem til mål eller nøkkelresultater i NDA.',
       },
     })
-    const profileUrl = githubUsername ? `${baseUrl}/users/${githubUsername}` : `${baseUrl}/users/${navIdent}`
+    const profileUrl = githubUsername
+      ? `${baseUrl}/users/${githubUsername}?goal=without_goal`
+      : `${baseUrl}/users/${navIdent}?goal=without_goal`
     blocks.push({
       type: 'actions',
       elements: [
