@@ -84,20 +84,40 @@ export async function getMonitoredApplicationByIdentity(
   return result.rows[0] || null
 }
 
+/**
+ * Insert a monitored application, or refresh `updated_at` if it already exists.
+ *
+ * `audit_start_year` is only set on initial INSERT. Re-adding an existing app
+ * does NOT overwrite the existing audit window — that would silently change
+ * which historical deployments are in audit scope. To change the audit year,
+ * use the dedicated admin update flow.
+ */
 export async function createMonitoredApplication(data: {
   team_slug: string
   environment_name: string
   app_name: string
+  audit_start_year?: number | null
 }): Promise<MonitoredApplication> {
+  const hasAuditYear = data.audit_start_year !== undefined
   const result = await pool.query(
-    `INSERT INTO monitored_applications 
-      (team_slug, environment_name, app_name)
-    VALUES ($1, $2, $3)
-    ON CONFLICT (team_slug, environment_name, app_name) 
-    DO UPDATE SET 
-      updated_at = CURRENT_TIMESTAMP
-    RETURNING *`,
-    [data.team_slug, data.environment_name, data.app_name],
+    hasAuditYear
+      ? `INSERT INTO monitored_applications
+          (team_slug, environment_name, app_name, audit_start_year)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (team_slug, environment_name, app_name)
+        DO UPDATE SET
+          updated_at = CURRENT_TIMESTAMP
+        RETURNING *`
+      : `INSERT INTO monitored_applications
+          (team_slug, environment_name, app_name)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (team_slug, environment_name, app_name)
+        DO UPDATE SET
+          updated_at = CURRENT_TIMESTAMP
+        RETURNING *`,
+    hasAuditYear
+      ? [data.team_slug, data.environment_name, data.app_name, data.audit_start_year]
+      : [data.team_slug, data.environment_name, data.app_name],
   )
   return result.rows[0]
 }

@@ -5,6 +5,7 @@ import { ActionAlert } from '~/components/ActionAlert'
 import { upsertApplicationRepository } from '../db/application-repositories.server'
 import { createMonitoredApplication, getAllMonitoredApplications } from '../db/monitored-applications.server'
 import { requireAdmin } from '../lib/auth.server'
+import { getFormString } from '../lib/form-validators'
 import { logger } from '../lib/logger.server'
 import { fetchAllTeamsAndApplications, getApplicationInfo } from '../lib/nais.server'
 import type { Route } from './+types/apps.add'
@@ -52,12 +53,23 @@ export async function action({ request }: Route.ActionArgs) {
 
   // Add single application
   if (intent === 'add') {
-    const teamSlug = formData.get('team_slug') as string
-    const environmentName = formData.get('environment_name') as string
-    const appName = formData.get('app_name') as string
+    const teamSlug = getFormString(formData, 'team_slug')
+    const environmentName = getFormString(formData, 'environment_name')
+    const appName = getFormString(formData, 'app_name')
+    const auditStartYearRaw = getFormString(formData, 'audit_start_year')
 
     if (!teamSlug || !environmentName || !appName) {
       return { error: 'Mangler påkrevde felt', success: null }
+    }
+
+    let auditStartYear: number | null | undefined
+    if (auditStartYearRaw !== null && auditStartYearRaw !== '') {
+      const currentYear = new Date().getFullYear()
+      const parsed = /^\d+$/.test(auditStartYearRaw) ? Number(auditStartYearRaw) : Number.NaN
+      if (!Number.isInteger(parsed) || parsed < 2000 || parsed > currentYear + 1) {
+        return { error: `Startår må være et helt tall mellom 2000 og ${currentYear + 1}.`, success: null }
+      }
+      auditStartYear = parsed
     }
 
     try {
@@ -69,6 +81,7 @@ export async function action({ request }: Route.ActionArgs) {
         team_slug: teamSlug,
         environment_name: environmentName,
         app_name: appName,
+        ...(auditStartYear !== undefined ? { audit_start_year: auditStartYear } : {}),
       })
 
       // If we found a repository, add it as active
@@ -105,6 +118,7 @@ export default function AppsDiscover({ loaderData, actionData }: Route.Component
   const navigation = useNavigation()
   const isAdding = navigation.state === 'submitting'
   const addingApp = navigation.formData?.get('app_name') as string | null
+  const currentYear = new Date().getFullYear()
 
   const [searchQuery, setSearchQuery] = useState('')
   const monitoredKeys = new Set(loaderData.monitoredKeys)
@@ -216,16 +230,28 @@ export default function AppsDiscover({ loaderData, actionData }: Route.Component
                                           <input type="hidden" name="team_slug" value={teamSlug} />
                                           <input type="hidden" name="environment_name" value={envName} />
                                           <input type="hidden" name="app_name" value={app.appName} />
-                                          <Button
-                                            type="submit"
-                                            size="xsmall"
-                                            variant="secondary"
-                                            icon={<PlusIcon aria-hidden />}
-                                            disabled={isAdding}
-                                            loading={isAddingThis}
-                                          >
-                                            Legg til
-                                          </Button>
+                                          <HStack gap="space-8" align="end">
+                                            <TextField
+                                              label="Startår for revisjon"
+                                              size="small"
+                                              name="audit_start_year"
+                                              type="number"
+                                              defaultValue={String(currentYear)}
+                                              htmlSize={6}
+                                              min={2000}
+                                              max={currentYear + 1}
+                                            />
+                                            <Button
+                                              type="submit"
+                                              size="small"
+                                              variant="secondary"
+                                              icon={<PlusIcon aria-hidden />}
+                                              disabled={isAdding}
+                                              loading={isAddingThis}
+                                            >
+                                              Legg til
+                                            </Button>
+                                          </HStack>
                                         </Form>
                                       )}
                                     </HStack>
