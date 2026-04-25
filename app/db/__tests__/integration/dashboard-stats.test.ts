@@ -5,7 +5,8 @@
 
 import { Pool } from 'pg'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { seedApp, seedSection, truncateAllTables } from './helpers'
+import { getBoardObjectiveProgress } from '../../dashboard-stats.server'
+import { seedApp, seedDevTeam, seedSection, truncateAllTables } from './helpers'
 
 let pool: Pool
 
@@ -163,3 +164,100 @@ async function seedDeploymentWithStatus(
   )
   return rows[0].id
 }
+
+describe('getBoardObjectiveProgress', () => {
+  it('returns empty array for board with no objectives', async () => {
+    const sectionId = await seedSection(pool, 'sec-bop-empty')
+    const devTeamId = await seedDevTeam(pool, 'team-bop-empty', 'BOP', sectionId)
+    const { rows } = await pool.query(
+      `INSERT INTO boards (dev_team_id, title, period_type, period_start, period_end, period_label)
+       VALUES ($1, 'B', 'tertiary', '2026-01-01', '2026-04-30', 'T1') RETURNING id`,
+      [devTeamId],
+    )
+    expect(await getBoardObjectiveProgress(rows[0].id)).toEqual([])
+  })
+
+  it('aggregates linked deployment counts per objective and key result in constant queries', async () => {
+    const sectionId = await seedSection(pool, 'sec-bop')
+    const devTeamId = await seedDevTeam(pool, 'team-bop', 'BOP', sectionId)
+    const { rows: br } = await pool.query(
+      `INSERT INTO boards (dev_team_id, title, period_type, period_start, period_end, period_label)
+       VALUES ($1, 'B', 'tertiary', '2026-01-01', '2026-04-30', 'T1') RETURNING id`,
+      [devTeamId],
+    )
+    const boardId = br[0].id
+
+    const { rows: o1 } = await pool.query(
+      "INSERT INTO board_objectives (board_id, title, sort_order) VALUES ($1, 'O1', 0) RETURNING id",
+      [boardId],
+    )
+    const { rows: o2 } = await pool.query(
+      "INSERT INTO board_objectives (board_id, title, sort_order) VALUES ($1, 'O2-no-kr', 1) RETURNING id",
+      [boardId],
+    )
+    // inactive objective should be skipped
+    await pool.query(
+      "INSERT INTO board_objectives (board_id, title, sort_order, is_active) VALUES ($1, 'O-inactive', 2, false)",
+      [boardId],
+    )
+    const { rows: kr1 } = await pool.query(
+      "INSERT INTO board_key_results (objective_id, title, sort_order) VALUES ($1, 'KR1', 0) RETURNING id",
+      [o1[0].id],
+    )
+    const { rows: kr2 } = await pool.query(
+      "INSERT INTO board_key_results (objective_id, title, sort_order) VALUES ($1, 'KR2', 1) RETURNING id",
+      [o1[0].id],
+    )
+    // inactive KR should be skipped
+    await pool.query(
+      "INSERT INTO board_key_results (objective_id, title, sort_order, is_active) VALUES ($1, 'KR-inactive', 2, false)",
+      [o1[0].id],
+    )
+
+    const appId = await seedApp(pool, { teamSlug: 'team-bop', appName: 'app-bop', environment: 'prod' })
+    const d1 = await seedDeploymentWithStatus(pool, appId, 'team-bop', new Date(), 'approved_pr')
+    const d2 = await seedDeploymentWithStatus(pool, appId, 'team-bop', new Date(), 'approved_pr')
+    const d3 = await seedDeploymentWithStatus(pool, appId, 'team-bop', new Date(), 'approved_pr')
+
+    // 2 deployments linked to KR1, 1 to KR2, 1 directly to objective O1
+    await pool.query(
+      "INSERT INTO deployment_goal_links (deployment_id, key_result_id, link_method) VALUES ($1, $2, 'manual')",
+      [d1, kr1[0].id],
+    )
+    await pool.query(
+      "INSERT INTO deployment_goal_links (deployment_id, key_result_id, link_method) VALUES ($1, $2, 'manual')",
+      [d2, kr1[0].id],
+    )
+    await pool.query(
+      "INSERT INTO deployment_goal_links (deployment_id, key_result_id, link_method) VALUES ($1, $2, 'manual')",
+      [d2, kr2[0].id],
+    )
+    await pool.query(
+      "INSERT INTO deployment_goal_links (deployment_id, objective_id, link_method) VALUES ($1, $2, 'manual')",
+      [d3, o1[0].id],
+    )
+    // inactive link should be ignored
+    await pool.query(
+      "INSERT INTO deployment_goal_links (deployment_id, key_result_id, link_method, is_active) VALUES ($1, $2, 'manual', false)",
+      [d1, kr2[0].id],
+    )
+
+    const result = await getBoardObjectiveProgress(boardId)
+    expect(result).toHaveLength(2)
+
+    const r1 = result.find((r) => r.objective_id === o1[0].id)
+    if (!r1) throw new Error('expected r1')
+    expect(r1.objective_title).toBe('O1')
+    expect(r1.key_results.map((k) => ({ id: k.id, linked: k.linked_deployments }))).toEqual([
+      { id: kr1[0].id, linked: 2 },
+      { id: kr2[0].id, linked: 1 },
+    ])
+    // 1 (objective-direct) + 2 (KR1) + 1 (KR2) = 4
+    expect(r1.total_linked_deployments).toBe(4)
+
+    const r2 = result.find((r) => r.objective_id === o2[0].id)
+    if (!r2) throw new Error('expected r2')
+    expect(r2.key_results).toEqual([])
+    expect(r2.total_linked_deployments).toBe(0)
+  })
+})
