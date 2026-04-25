@@ -1,6 +1,7 @@
 import { NOT_APPROVED_STATUSES, PENDING_STATUSES } from '~/lib/four-eyes-status'
 import { pool } from '../connection.server'
 import type { AppWithIssues, DeploymentWithApp } from '../deployments.server'
+import { userDeploymentMatchSql } from '../user-deployment-match'
 
 /**
  * Get apps with issues filtered to a dev team's scope.
@@ -94,10 +95,7 @@ export async function getPersonalDeploymentsMissingGoalLinks(githubUsername: str
      JOIN monitored_applications ma ON d.monitored_app_id = ma.id
      WHERE ma.is_active = true
        AND (ma.audit_start_year IS NULL OR d.created_at >= make_date(ma.audit_start_year, 1, 1))
-       AND (
-         LOWER(d.deployer_username) = LOWER($1)
-         OR LOWER(d.github_pr_data->'creator'->>'username') = LOWER($1)
-       )
+       AND ${userDeploymentMatchSql(1)}
        AND NOT EXISTS (
          SELECT 1 FROM deployment_goal_links dgl
          WHERE dgl.deployment_id = d.id AND dgl.is_active = true

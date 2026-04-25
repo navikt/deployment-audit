@@ -1,6 +1,7 @@
 import { APPROVED_STATUSES, NOT_APPROVED_STATUSES, PENDING_STATUSES } from '~/lib/four-eyes-status'
 import { pool } from '../connection.server'
 import type { AppDeploymentStats } from '../deployments.server'
+import { lowerUsernames, userDeploymentMatchAnySql } from '../user-deployment-match'
 
 export async function getAppDeploymentStats(
   monitoredAppId: number,
@@ -84,10 +85,12 @@ export async function getAppDeploymentStatsBatch(
   // to the app (regardless of deployer), so AppCard's "last deployment" link/timestamp
   // doesn't silently change meaning when filtering by team members.
   // Empty array ⇒ counts are 0 (FILTER clause matches nothing).
+  // Matches both deployer_username and PR creator (case-insensitive) so a team
+  // member's PR deployed by a bot still counts toward the team's stats.
   const hasDeployerFilter = deployerUsernames !== undefined
-  const deployerFilterClause = hasDeployerFilter ? ' AND deployer_username = ANY($5::text[])' : ''
+  const deployerFilterClause = hasDeployerFilter ? ` AND ${userDeploymentMatchAnySql(5, 'deployments')}` : ''
   const baseParams: any[] = [appIds, APPROVED_STATUSES, NOT_APPROVED_STATUSES, PENDING_STATUSES]
-  if (hasDeployerFilter) baseParams.push(deployerUsernames)
+  if (hasDeployerFilter) baseParams.push(lowerUsernames(deployerUsernames))
 
   const result = await pool.query(
     `SELECT 
