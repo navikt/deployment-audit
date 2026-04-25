@@ -144,6 +144,106 @@ describe('getSectionOverallStats SQL', () => {
   })
 })
 
+describe('getDevTeamSummaryStats SQL — union scope', () => {
+  it('should include apps from both nais_team_slugs and directAppIds when both are non-empty', async () => {
+    // App matched via nais team slug
+    const naisAppId = await seedApp(pool, { teamSlug: 'nais-team-x', appName: 'nais-app', environment: 'prod' })
+    // App matched via direct app ID (different team slug, not reachable via slug filter alone)
+    const directAppId = await seedApp(pool, { teamSlug: 'other-team', appName: 'direct-app', environment: 'prod' })
+
+    const now = new Date()
+    await seedDeploymentWithStatus(pool, naisAppId, 'nais-team-x', now, 'approved_pr')
+    await seedDeploymentWithStatus(pool, naisAppId, 'nais-team-x', now, 'direct_push')
+    await seedDeploymentWithStatus(pool, directAppId, 'other-team', now, 'approved_pr')
+
+    const naisTeamSlugs = ['nais-team-x']
+    const directAppIds = [directAppId]
+    const startDate = null
+
+    const result = await pool.query(
+      `WITH team_apps AS (
+         SELECT ma.id, ma.audit_start_year
+         FROM monitored_applications ma
+         WHERE ma.is_active = true
+           AND (
+             ma.team_slug = ANY($1::text[]) OR ma.id = ANY($2::int[])
+           )
+       ),
+       app_stats AS (
+         SELECT d.monitored_app_id,
+                COUNT(d.id) AS total_deployments,
+                COUNT(d.id) FILTER (WHERE d.four_eyes_status IN ('approved', 'approved_pr', 'implicitly_approved', 'manually_approved', 'no_changes')) AS with_four_eyes,
+                COUNT(d.id) FILTER (WHERE d.four_eyes_status IN ('direct_push', 'unverified_commits', 'approved_pr_with_unreviewed', 'unauthorized_repository', 'unauthorized_branch')) AS without_four_eyes,
+                COUNT(d.id) FILTER (WHERE d.four_eyes_status IN ('pending', 'pending_baseline', 'pending_approval', 'unknown')) AS pending_verification
+         FROM team_apps ta
+         JOIN deployments d ON d.monitored_app_id = ta.id
+           AND ($3::timestamptz IS NULL OR d.created_at >= $3)
+           AND ($3::timestamptz IS NOT NULL OR ta.audit_start_year IS NULL OR d.created_at >= make_date(ta.audit_start_year, 1, 1))
+         GROUP BY d.monitored_app_id
+       )
+       SELECT
+         (SELECT COUNT(*) FROM team_apps)::int AS total_apps,
+         COALESCE(SUM(s.total_deployments), 0)::int AS total_deployments,
+         COALESCE(SUM(s.with_four_eyes), 0)::int AS with_four_eyes,
+         COALESCE(SUM(s.without_four_eyes), 0)::int AS without_four_eyes,
+         COALESCE(SUM(s.pending_verification), 0)::int AS pending_verification
+       FROM team_apps ta
+       LEFT JOIN app_stats s ON s.monitored_app_id = ta.id`,
+      [naisTeamSlugs, directAppIds, startDate],
+    )
+
+    const row = result.rows[0]
+    expect(row.total_apps).toBe(2)
+    expect(row.total_deployments).toBe(3)
+    expect(row.with_four_eyes).toBe(2)
+    expect(row.without_four_eyes).toBe(1)
+    expect(row.pending_verification).toBe(0)
+  })
+
+  it('should not double-count an app that matches both nais slug and direct app ID', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'shared-team', appName: 'shared-app', environment: 'prod' })
+
+    const now = new Date()
+    await seedDeploymentWithStatus(pool, appId, 'shared-team', now, 'approved_pr')
+    await seedDeploymentWithStatus(pool, appId, 'shared-team', now, 'direct_push')
+
+    // App is reachable via both slug AND direct ID — should appear only once
+    const naisTeamSlugs = ['shared-team']
+    const directAppIds = [appId]
+    const startDate = null
+
+    const result = await pool.query(
+      `WITH team_apps AS (
+         SELECT ma.id, ma.audit_start_year
+         FROM monitored_applications ma
+         WHERE ma.is_active = true
+           AND (
+             ma.team_slug = ANY($1::text[]) OR ma.id = ANY($2::int[])
+           )
+       ),
+       app_stats AS (
+         SELECT d.monitored_app_id,
+                COUNT(d.id) AS total_deployments
+         FROM team_apps ta
+         JOIN deployments d ON d.monitored_app_id = ta.id
+           AND ($3::timestamptz IS NULL OR d.created_at >= $3)
+           AND ($3::timestamptz IS NOT NULL OR ta.audit_start_year IS NULL OR d.created_at >= make_date(ta.audit_start_year, 1, 1))
+         GROUP BY d.monitored_app_id
+       )
+       SELECT
+         (SELECT COUNT(*) FROM team_apps)::int AS total_apps,
+         COALESCE(SUM(s.total_deployments), 0)::int AS total_deployments
+       FROM team_apps ta
+       LEFT JOIN app_stats s ON s.monitored_app_id = ta.id`,
+      [naisTeamSlugs, directAppIds, startDate],
+    )
+
+    const row = result.rows[0]
+    expect(row.total_apps).toBe(1)
+    expect(row.total_deployments).toBe(2)
+  })
+})
+
 /** Helper to create a deployment with a specific four_eyes_status */
 async function seedDeploymentWithStatus(
   pool: Pool,

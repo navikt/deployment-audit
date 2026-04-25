@@ -152,7 +152,7 @@ export async function getSectionDashboardStats(
 
 /**
  * Get summary stats for a single dev team.
- * Uses direct app links when available, otherwise falls back to nais team slugs.
+ * Includes apps matched by nais team slugs OR by direct app IDs (union of both scopes).
  * Optional startDate filters deployments to a date range (e.g. YTD).
  */
 export async function getDevTeamSummaryStats(
@@ -160,18 +160,13 @@ export async function getDevTeamSummaryStats(
   directAppIds?: number[],
   startDate?: Date,
 ): Promise<DevTeamSummaryStats> {
-  const useDirectApps = directAppIds && directAppIds.length > 0
-
   const result = await pool.query(
     `WITH team_apps AS (
        SELECT ma.id, ma.audit_start_year
        FROM monitored_applications ma
        WHERE ma.is_active = true
          AND (
-           CASE
-             WHEN $2::boolean THEN ma.id = ANY($3::int[])
-             ELSE ma.team_slug = ANY($1::text[])
-           END
+           ma.team_slug = ANY($1::text[]) OR ma.id = ANY($2::int[])
          )
      ),
      app_stats AS (
@@ -183,8 +178,8 @@ export async function getDevTeamSummaryStats(
               COUNT(DISTINCT dgl.deployment_id) AS linked_to_goal
        FROM team_apps ta
        JOIN deployments d ON d.monitored_app_id = ta.id
-         AND ($4::timestamptz IS NULL OR d.created_at >= $4)
-         AND ($4::timestamptz IS NOT NULL OR ta.audit_start_year IS NULL OR d.created_at >= make_date(ta.audit_start_year, 1, 1))
+         AND ($3::timestamptz IS NULL OR d.created_at >= $3)
+         AND ($3::timestamptz IS NOT NULL OR ta.audit_start_year IS NULL OR d.created_at >= make_date(ta.audit_start_year, 1, 1))
        LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id AND dgl.is_active = true
        GROUP BY d.monitored_app_id
      ),
@@ -205,7 +200,7 @@ export async function getDevTeamSummaryStats(
      FROM team_apps ta
      LEFT JOIN app_stats s ON s.monitored_app_id = ta.id
      LEFT JOIN app_alerts a ON a.monitored_app_id = ta.id`,
-    [naisTeamSlugs, useDirectApps ?? false, directAppIds ?? [], startDate ?? null],
+    [naisTeamSlugs, directAppIds ?? [], startDate ?? null],
   )
 
   const row = result.rows[0]
