@@ -1,5 +1,6 @@
 import { Pool } from 'pg'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { getBoardsWithGoalsForDevTeam, getBoardWithObjectives } from '../../boards.server'
 import { seedApp, seedDeployment, seedDevTeam, seedSection, truncateAllTables } from './helpers'
 
 let pool: Pool
@@ -239,5 +240,147 @@ describe('boards', () => {
     const { rows } = await pool.query('SELECT * FROM boards WHERE id = $1', [board.id])
     expect(rows[0].title).toBe('Updated')
     expect(rows[0].is_active).toBe(false)
+  })
+})
+
+describe('getBoardsWithGoalsForDevTeam', () => {
+  it('returns empty array when dev team has no boards', async () => {
+    const sectionId = await seedSection(pool, 'sec-empty')
+    const devTeamId = await seedDevTeam(pool, 'team-empty', 'Empty', sectionId)
+    expect(await getBoardsWithGoalsForDevTeam(devTeamId)).toEqual([])
+  })
+
+  it('returns board with empty objectives when board has none', async () => {
+    const { board, devTeamId } = await seedBoardStack(pool)
+    const result = await getBoardsWithGoalsForDevTeam(devTeamId)
+    expect(result).toHaveLength(1)
+    expect(result[0].id).toBe(board.id)
+    expect(result[0].objectives).toEqual([])
+  })
+
+  it('returns full hierarchy for multiple boards/objectives/key results in 3 queries', async () => {
+    const sectionId = await seedSection(pool, 'sec-multi')
+    const devTeamId = await seedDevTeam(pool, 'team-multi', 'Multi', sectionId)
+    const { rows: b1 } = await pool.query(
+      `INSERT INTO boards (dev_team_id, title, period_type, period_start, period_end, period_label)
+       VALUES ($1, 'B1', 'tertiary', '2026-01-01', '2026-04-30', 'T1') RETURNING id`,
+      [devTeamId],
+    )
+    const { rows: b2 } = await pool.query(
+      `INSERT INTO boards (dev_team_id, title, period_type, period_start, period_end, period_label)
+       VALUES ($1, 'B2', 'tertiary', '2026-05-01', '2026-08-31', 'T2') RETURNING id`,
+      [devTeamId],
+    )
+
+    const { rows: o1 } = await pool.query(
+      "INSERT INTO board_objectives (board_id, title, sort_order) VALUES ($1, 'O1', 0) RETURNING id",
+      [b1[0].id],
+    )
+    await pool.query(
+      "INSERT INTO board_objectives (board_id, title, sort_order) VALUES ($1, 'O2-no-kr', 1) RETURNING id",
+      [b1[0].id],
+    )
+    const { rows: o3 } = await pool.query(
+      "INSERT INTO board_objectives (board_id, title, sort_order) VALUES ($1, 'O3', 0) RETURNING id",
+      [b2[0].id],
+    )
+    // inactive objective should be excluded
+    await pool.query(
+      "INSERT INTO board_objectives (board_id, title, sort_order, is_active) VALUES ($1, 'O-inactive', 2, false)",
+      [b1[0].id],
+    )
+
+    await pool.query("INSERT INTO board_key_results (objective_id, title, sort_order) VALUES ($1, 'KR1', 0)", [
+      o1[0].id,
+    ])
+    await pool.query("INSERT INTO board_key_results (objective_id, title, sort_order) VALUES ($1, 'KR2', 1)", [
+      o1[0].id,
+    ])
+    await pool.query("INSERT INTO board_key_results (objective_id, title, sort_order) VALUES ($1, 'KR3', 0)", [
+      o3[0].id,
+    ])
+    // inactive KR should be excluded
+    await pool.query(
+      "INSERT INTO board_key_results (objective_id, title, sort_order, is_active) VALUES ($1, 'KR-inactive', 2, false)",
+      [o1[0].id],
+    )
+
+    const result = await getBoardsWithGoalsForDevTeam(devTeamId)
+    expect(result.map((b) => b.id)).toEqual([b2[0].id, b1[0].id]) // sorted by period_start DESC
+
+    const board2 = result[0]
+    const board1 = result[1]
+    expect(board2.objectives.map((o) => o.title)).toEqual(['O3'])
+    expect(board2.objectives[0].key_results.map((k) => k.title)).toEqual(['KR3'])
+
+    expect(board1.objectives.map((o) => o.title)).toEqual(['O1', 'O2-no-kr'])
+    expect(board1.objectives[0].key_results.map((k) => k.title)).toEqual(['KR1', 'KR2'])
+    expect(board1.objectives[1].key_results).toEqual([])
+  })
+})
+
+describe('getBoardWithObjectives', () => {
+  it('returns null for unknown board', async () => {
+    expect(await getBoardWithObjectives(999_999)).toBeNull()
+  })
+
+  it('returns board with empty objectives array when no objectives exist', async () => {
+    const { board } = await seedBoardStack(pool)
+    const result = await getBoardWithObjectives(board.id)
+    expect(result).not.toBeNull()
+    expect(result?.objectives).toEqual([])
+  })
+
+  it('returns full hierarchy with external_references on objectives and key results', async () => {
+    const { board } = await seedBoardStack(pool)
+    const { rows: o1 } = await pool.query(
+      "INSERT INTO board_objectives (board_id, title, sort_order) VALUES ($1, 'O1', 0) RETURNING id",
+      [board.id],
+    )
+    const { rows: o2 } = await pool.query(
+      "INSERT INTO board_objectives (board_id, title, sort_order) VALUES ($1, 'O2-no-kr', 1) RETURNING id",
+      [board.id],
+    )
+    const { rows: kr1 } = await pool.query(
+      "INSERT INTO board_key_results (objective_id, title, sort_order) VALUES ($1, 'KR1', 0) RETURNING id",
+      [o1[0].id],
+    )
+    const { rows: kr2 } = await pool.query(
+      "INSERT INTO board_key_results (objective_id, title, sort_order) VALUES ($1, 'KR2', 1) RETURNING id",
+      [o1[0].id],
+    )
+
+    await pool.query(
+      "INSERT INTO external_references (ref_type, url, title, objective_id) VALUES ('jira', 'https://j/o1', 'O1-ref', $1)",
+      [o1[0].id],
+    )
+    // soft-deleted objective ref should be excluded
+    await pool.query(
+      "INSERT INTO external_references (ref_type, url, title, objective_id, deleted_at, deleted_by) VALUES ('jira', 'https://j/o1-del', 'O1-del', $1, NOW(), 'A1')",
+      [o1[0].id],
+    )
+    await pool.query(
+      "INSERT INTO external_references (ref_type, url, title, key_result_id) VALUES ('github_issue', 'https://g/kr1', 'KR1-ref', $1)",
+      [kr1[0].id],
+    )
+    await pool.query(
+      "INSERT INTO external_references (ref_type, url, title, key_result_id) VALUES ('slack', 'https://s/kr2', 'KR2-ref', $1)",
+      [kr2[0].id],
+    )
+
+    const result = await getBoardWithObjectives(board.id)
+    expect(result).not.toBeNull()
+    expect(result?.id).toBe(board.id)
+    expect(result?.objectives.map((o) => o.id)).toEqual([o1[0].id, o2[0].id])
+
+    const obj1 = result?.objectives[0]
+    expect(obj1?.external_references.map((r) => r.title)).toEqual(['O1-ref'])
+    expect(obj1?.key_results.map((k) => k.id)).toEqual([kr1[0].id, kr2[0].id])
+    expect(obj1?.key_results[0].external_references.map((r) => r.title)).toEqual(['KR1-ref'])
+    expect(obj1?.key_results[1].external_references.map((r) => r.title)).toEqual(['KR2-ref'])
+
+    const obj2 = result?.objectives[1]
+    expect(obj2?.external_references).toEqual([])
+    expect(obj2?.key_results).toEqual([])
   })
 })

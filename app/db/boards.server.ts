@@ -65,7 +65,14 @@ export async function getBoardsByDevTeam(devTeamId: number): Promise<Board[]> {
   return result.rows
 }
 
-/** Lightweight board list with objectives and key results (titles/IDs only) for goal linking UI. */
+/**
+ * Lightweight board list with objectives and key results (titles/IDs only)
+ * for goal linking UI.
+ *
+ * Implementation: 3 queries total (boards, objectives across all boards, key
+ * results across all objectives) regardless of hierarchy size, so this scales
+ * with team size rather than O(boards × objectives).
+ */
 export async function getBoardsWithGoalsForDevTeam(
   devTeamId: number,
   asOfDate?: string,
@@ -82,28 +89,51 @@ export async function getBoardsWithGoalsForDevTeam(
   const params: unknown[] = [devTeamId]
   if (asOfDate) params.push(asOfDate)
 
-  const boards = await pool.query(
+  const boardsResult = await pool.query(
     `SELECT id, period_label, period_start, period_end FROM boards WHERE dev_team_id = $1 AND is_active = true${dateFilter} ORDER BY period_start DESC`,
     params,
   )
+  const boardIds = boardsResult.rows.map((b) => b.id as number)
+  if (boardIds.length === 0) return []
 
-  const result = []
-  for (const board of boards.rows) {
-    const objectives = await pool.query(
-      `SELECT bo.id, bo.title FROM board_objectives bo WHERE bo.board_id = $1 AND bo.is_active = true ORDER BY bo.sort_order, bo.id`,
-      [board.id],
-    )
-    const objectivesWithKr = []
-    for (const obj of objectives.rows) {
-      const keyResults = await pool.query(
-        `SELECT id, title FROM board_key_results WHERE objective_id = $1 AND is_active = true ORDER BY sort_order, id`,
-        [obj.id],
-      )
-      objectivesWithKr.push({ ...obj, key_results: keyResults.rows })
-    }
-    result.push({ ...board, objectives: objectivesWithKr })
+  const objectivesResult = await pool.query(
+    `SELECT id, board_id, title
+     FROM board_objectives
+     WHERE board_id = ANY($1::int[]) AND is_active = true
+     ORDER BY sort_order, id`,
+    [boardIds],
+  )
+  const objectiveIds = objectivesResult.rows.map((o) => o.id as number)
+
+  const krResult =
+    objectiveIds.length === 0
+      ? { rows: [] as Array<{ id: number; objective_id: number; title: string }> }
+      : await pool.query(
+          `SELECT id, objective_id, title
+           FROM board_key_results
+           WHERE objective_id = ANY($1::int[]) AND is_active = true
+           ORDER BY sort_order, id`,
+          [objectiveIds],
+        )
+
+  const krByObjective = new Map<number, Array<{ id: number; title: string }>>()
+  for (const kr of krResult.rows) {
+    const list = krByObjective.get(kr.objective_id) ?? []
+    list.push({ id: kr.id, title: kr.title })
+    krByObjective.set(kr.objective_id, list)
   }
-  return result
+
+  const objectivesByBoard = new Map<
+    number,
+    Array<{ id: number; title: string; key_results: Array<{ id: number; title: string }> }>
+  >()
+  for (const obj of objectivesResult.rows) {
+    const list = objectivesByBoard.get(obj.board_id) ?? []
+    list.push({ id: obj.id, title: obj.title, key_results: krByObjective.get(obj.id) ?? [] })
+    objectivesByBoard.set(obj.board_id, list)
+  }
+
+  return boardsResult.rows.map((board) => ({ ...board, objectives: objectivesByBoard.get(board.id) ?? [] }))
 }
 
 interface BoardKeywordsKeyResult {
@@ -196,6 +226,14 @@ async function getBoardById(id: number): Promise<Board | null> {
   return result.rows[0] ?? null
 }
 
+/**
+ * Full board with objectives, key results and external_references on both
+ * objectives and key results.
+ *
+ * Implementation: 5 queries total (board, objectives, key results, objective
+ * external_references, key-result external_references) regardless of
+ * hierarchy size.
+ */
 export async function getBoardWithObjectives(boardId: number): Promise<BoardWithObjectives | null> {
   const board = await getBoardById(boardId)
   if (!board) return null
@@ -204,30 +242,61 @@ export async function getBoardWithObjectives(boardId: number): Promise<BoardWith
     'SELECT * FROM board_objectives WHERE board_id = $1 ORDER BY sort_order, id',
     [boardId],
   )
+  const objectiveIds = objectivesResult.rows.map((o) => o.id as number)
 
-  const objectives: ObjectiveWithKeyResults[] = []
-  for (const obj of objectivesResult.rows) {
-    const krResult = await pool.query(
-      'SELECT * FROM board_key_results WHERE objective_id = $1 ORDER BY sort_order, id',
-      [obj.id],
-    )
+  const krResult =
+    objectiveIds.length === 0
+      ? { rows: [] as BoardKeyResult[] }
+      : await pool.query(
+          'SELECT * FROM board_key_results WHERE objective_id = ANY($1::int[]) ORDER BY sort_order, id',
+          [objectiveIds],
+        )
+  const keyResultIds = krResult.rows.map((kr) => kr.id as number)
 
-    const objRefsResult = await pool.query(
-      'SELECT * FROM external_references WHERE objective_id = $1 AND deleted_at IS NULL ORDER BY id',
-      [obj.id],
-    )
+  const objRefsResult =
+    objectiveIds.length === 0
+      ? { rows: [] as ExternalReference[] }
+      : await pool.query(
+          'SELECT * FROM external_references WHERE objective_id = ANY($1::int[]) AND deleted_at IS NULL ORDER BY id',
+          [objectiveIds],
+        )
 
-    const keyResults: BoardKeyResultWithRefs[] = []
-    for (const kr of krResult.rows) {
-      const krRefsResult = await pool.query(
-        'SELECT * FROM external_references WHERE key_result_id = $1 AND deleted_at IS NULL ORDER BY id',
-        [kr.id],
-      )
-      keyResults.push({ ...kr, external_references: krRefsResult.rows })
-    }
+  const krRefsResult =
+    keyResultIds.length === 0
+      ? { rows: [] as ExternalReference[] }
+      : await pool.query(
+          'SELECT * FROM external_references WHERE key_result_id = ANY($1::int[]) AND deleted_at IS NULL ORDER BY id',
+          [keyResultIds],
+        )
 
-    objectives.push({ ...obj, key_results: keyResults, external_references: objRefsResult.rows })
+  const krRefsByKr = new Map<number, ExternalReference[]>()
+  for (const ref of krRefsResult.rows) {
+    if (ref.key_result_id == null) continue
+    const list = krRefsByKr.get(ref.key_result_id) ?? []
+    list.push(ref)
+    krRefsByKr.set(ref.key_result_id, list)
   }
+
+  const krsByObjective = new Map<number, BoardKeyResultWithRefs[]>()
+  for (const kr of krResult.rows) {
+    const list = krsByObjective.get(kr.objective_id) ?? []
+    list.push({ ...kr, external_references: krRefsByKr.get(kr.id) ?? [] })
+    krsByObjective.set(kr.objective_id, list)
+  }
+
+  const objRefsByObjective = new Map<number, ExternalReference[]>()
+  for (const ref of objRefsResult.rows) {
+    if (ref.objective_id == null) continue
+    const list = objRefsByObjective.get(ref.objective_id) ?? []
+    list.push(ref)
+    objRefsByObjective.set(ref.objective_id, list)
+  }
+
+  const objectives: ObjectiveWithKeyResults[] = objectivesResult.rows.map((obj) => ({
+    ...obj,
+    key_results: krsByObjective.get(obj.id) ?? [],
+    external_references: objRefsByObjective.get(obj.id) ?? [],
+  }))
 
   return { ...board, objectives }
 }
