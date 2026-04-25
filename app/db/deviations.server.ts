@@ -1,4 +1,5 @@
 import type { DeviationFollowUpRole, DeviationIntent, DeviationSeverity } from '~/lib/deviation-constants'
+import { AUDIT_START_YEAR_FILTER } from './audit-start-year'
 import { query } from './connection.server'
 
 interface DeploymentDeviation {
@@ -75,7 +76,8 @@ export async function getDeviationsByAppId(
     FROM deployment_deviations dd
     JOIN deployments d ON dd.deployment_id = d.id
     JOIN monitored_applications ma ON d.monitored_app_id = ma.id
-    WHERE d.monitored_app_id = $1`
+    WHERE d.monitored_app_id = $1
+      AND ${AUDIT_START_YEAR_FILTER}`
   const params: (number | boolean)[] = [monitoredAppId]
   let paramIndex = 2
 
@@ -112,6 +114,7 @@ export async function getDeviationsForPeriod(
      JOIN deployments d ON dd.deployment_id = d.id
      JOIN monitored_applications ma ON d.monitored_app_id = ma.id
      WHERE d.monitored_app_id = $1 AND dd.created_at >= $2 AND dd.created_at <= $3
+       AND ${AUDIT_START_YEAR_FILTER}
      ORDER BY dd.created_at ASC`,
     [monitoredAppId, startDate, endDate],
   )
@@ -141,7 +144,9 @@ async function _getDeviationCountByAppId(monitoredAppId: number): Promise<{ open
        COUNT(*) AS total
      FROM deployment_deviations dd
      JOIN deployments d ON dd.deployment_id = d.id
-     WHERE d.monitored_app_id = $1`,
+     JOIN monitored_applications ma ON d.monitored_app_id = ma.id
+     WHERE d.monitored_app_id = $1
+       AND ${AUDIT_START_YEAR_FILTER}`,
     [monitoredAppId],
   )
   return {

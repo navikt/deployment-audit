@@ -88,16 +88,29 @@ export async function createMonitoredApplication(data: {
   team_slug: string
   environment_name: string
   app_name: string
+  audit_start_year?: number | null
 }): Promise<MonitoredApplication> {
+  const hasAuditYear = data.audit_start_year !== undefined
   const result = await pool.query(
-    `INSERT INTO monitored_applications 
-      (team_slug, environment_name, app_name)
-    VALUES ($1, $2, $3)
-    ON CONFLICT (team_slug, environment_name, app_name) 
-    DO UPDATE SET 
-      updated_at = CURRENT_TIMESTAMP
-    RETURNING *`,
-    [data.team_slug, data.environment_name, data.app_name],
+    hasAuditYear
+      ? `INSERT INTO monitored_applications
+          (team_slug, environment_name, app_name, audit_start_year)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (team_slug, environment_name, app_name)
+        DO UPDATE SET
+          updated_at = CURRENT_TIMESTAMP,
+          audit_start_year = EXCLUDED.audit_start_year
+        RETURNING *`
+      : `INSERT INTO monitored_applications
+          (team_slug, environment_name, app_name)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (team_slug, environment_name, app_name)
+        DO UPDATE SET
+          updated_at = CURRENT_TIMESTAMP
+        RETURNING *`,
+    hasAuditYear
+      ? [data.team_slug, data.environment_name, data.app_name, data.audit_start_year]
+      : [data.team_slug, data.environment_name, data.app_name],
   )
   return result.rows[0]
 }

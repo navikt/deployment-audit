@@ -171,9 +171,20 @@ export async function action({ request, params }: Route.ActionArgs) {
     const teamSlug = (formData.get('team_slug') as string)?.trim()
     const environmentName = (formData.get('environment_name') as string)?.trim()
     const appName = (formData.get('app_name') as string)?.trim()
+    const auditStartYearRaw = (formData.get('audit_start_year') as string | null)?.trim()
 
     if (!teamSlug || !environmentName || !appName) {
       return { error: 'Alle felt er påkrevd for å legge til ny applikasjon.' }
+    }
+
+    let auditStartYear: number | null | undefined
+    if (auditStartYearRaw) {
+      const parsed = Number.parseInt(auditStartYearRaw, 10)
+      const currentYear = new Date().getFullYear()
+      if (!Number.isInteger(parsed) || parsed < 2000 || parsed > currentYear + 1) {
+        return { error: `Startår må være et helt tall mellom 2000 og ${currentYear + 1}.` }
+      }
+      auditStartYear = parsed
     }
 
     try {
@@ -181,6 +192,7 @@ export async function action({ request, params }: Route.ActionArgs) {
         team_slug: teamSlug,
         environment_name: environmentName,
         app_name: appName,
+        ...(auditStartYear !== undefined ? { audit_start_year: auditStartYear } : {}),
       })
       await addAppToDevTeam(devTeam.id, monitoredApp.id)
       return { success: `La til ${appName} (${environmentName}) og koblet den til teamet.` }
@@ -634,6 +646,16 @@ const AddAppsDialog = forwardRef<
                       )}
                     </Select>
                     <TextField label="Applikasjonsnavn" name="app_name" size="small" autoComplete="off" />
+                    <TextField
+                      label="Startår for revisjon"
+                      name="audit_start_year"
+                      size="small"
+                      type="number"
+                      defaultValue={String(new Date().getFullYear())}
+                      htmlSize={6}
+                      min={2000}
+                      max={new Date().getFullYear() + 1}
+                    />
                   </HStack>
                   <HStack gap="space-8">
                     <Button type="submit" size="small" loading={isSubmitting}>

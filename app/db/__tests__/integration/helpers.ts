@@ -32,15 +32,27 @@ export async function seedSection(pool: Pool, slug: string, name?: string): Prom
 
 /**
  * Insert a monitored application and return its id.
+ *
+ * When `auditStartYear` is omitted, the DB default for `audit_start_year`
+ * applies (matches production behavior). Pass `null` explicitly to opt out
+ * of any audit window; pass a number to override.
  */
 export async function seedApp(
   pool: Pool,
-  opts: { teamSlug: string; appName: string; environment: string },
+  opts: { teamSlug: string; appName: string; environment: string; auditStartYear?: number | null },
 ): Promise<number> {
+  if (opts.auditStartYear === undefined) {
+    const { rows } = await pool.query<{ id: number }>(
+      `INSERT INTO monitored_applications (team_slug, app_name, environment_name, is_active)
+       VALUES ($1, $2, $3, true) RETURNING id`,
+      [opts.teamSlug, opts.appName, opts.environment],
+    )
+    return rows[0].id
+  }
   const { rows } = await pool.query<{ id: number }>(
-    `INSERT INTO monitored_applications (team_slug, app_name, environment_name, is_active)
-     VALUES ($1, $2, $3, true) RETURNING id`,
-    [opts.teamSlug, opts.appName, opts.environment],
+    `INSERT INTO monitored_applications (team_slug, app_name, environment_name, is_active, audit_start_year)
+     VALUES ($1, $2, $3, true, $4) RETURNING id`,
+    [opts.teamSlug, opts.appName, opts.environment, opts.auditStartYear],
   )
   return rows[0].id
 }
@@ -71,6 +83,8 @@ export async function seedDeployment(
     fourEyesStatus?: string
     githubOwner?: string
     githubRepo?: string
+    deployerUsername?: string | null
+    githubPrData?: Record<string, unknown> | null
   },
 ): Promise<number> {
   const naisId = `deploy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -78,8 +92,9 @@ export async function seedDeployment(
     `INSERT INTO deployments (
       monitored_app_id, nais_deployment_id, team_slug, app_name, environment_name,
       commit_sha, created_at, title, four_eyes_status,
-      detected_github_owner, detected_github_repo_name
-    ) VALUES ($1, $2, $3, 'test-app', $4, $5, $6, $7, $8, $9, $10)
+      detected_github_owner, detected_github_repo_name,
+      deployer_username, github_pr_data
+    ) VALUES ($1, $2, $3, 'test-app', $4, $5, $6, $7, $8, $9, $10, $11, $12)
     RETURNING id`,
     [
       opts.monitoredAppId,
@@ -92,6 +107,8 @@ export async function seedDeployment(
       opts.fourEyesStatus ?? 'pending',
       opts.githubOwner ?? null,
       opts.githubRepo ?? null,
+      opts.deployerUsername ?? null,
+      opts.githubPrData ? JSON.stringify(opts.githubPrData) : null,
     ],
   )
   return rows[0].id
