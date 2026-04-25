@@ -41,6 +41,7 @@ import { getSectionBySlug } from '~/db/sections.server'
 import { type DevTeamMember, getDevTeamMembers } from '~/db/user-dev-team-preference.server'
 import { requireUser } from '~/lib/auth.server'
 import { type BoardPeriodType, formatBoardLabel, getPeriodsForYear } from '~/lib/board-periods'
+import { getFormString } from '~/lib/form-validators'
 import { groupAppCards } from '~/lib/group-app-cards'
 import type { Route } from './+types/sections.$sectionSlug.teams.$devTeamSlug'
 import type { loader as layoutLoader } from './layout'
@@ -168,12 +169,23 @@ export async function action({ request, params }: Route.ActionArgs) {
   }
 
   if (intent === 'add_app') {
-    const teamSlug = (formData.get('team_slug') as string)?.trim()
-    const environmentName = (formData.get('environment_name') as string)?.trim()
-    const appName = (formData.get('app_name') as string)?.trim()
+    const teamSlug = getFormString(formData, 'team_slug')
+    const environmentName = getFormString(formData, 'environment_name')
+    const appName = getFormString(formData, 'app_name')
+    const auditStartYearRaw = getFormString(formData, 'audit_start_year')
 
     if (!teamSlug || !environmentName || !appName) {
       return { error: 'Alle felt er påkrevd for å legge til ny applikasjon.' }
+    }
+
+    let auditStartYear: number | null | undefined
+    if (auditStartYearRaw) {
+      const currentYear = new Date().getFullYear()
+      const parsed = /^\d+$/.test(auditStartYearRaw) ? Number(auditStartYearRaw) : Number.NaN
+      if (!Number.isInteger(parsed) || parsed < 2000 || parsed > currentYear + 1) {
+        return { error: `Startår må være et helt tall mellom 2000 og ${currentYear + 1}.` }
+      }
+      auditStartYear = parsed
     }
 
     try {
@@ -181,6 +193,7 @@ export async function action({ request, params }: Route.ActionArgs) {
         team_slug: teamSlug,
         environment_name: environmentName,
         app_name: appName,
+        ...(auditStartYear !== undefined ? { audit_start_year: auditStartYear } : {}),
       })
       await addAppToDevTeam(devTeam.id, monitoredApp.id)
       return { success: `La til ${appName} (${environmentName}) og koblet den til teamet.` }
@@ -545,6 +558,7 @@ const AddAppsDialog = forwardRef<
   }, [filteredApps])
 
   const environments = useMemo(() => [...new Set(availableApps.map((a) => a.environment_name))].sort(), [availableApps])
+  const currentYear = new Date().getFullYear()
 
   const closeModal = () => {
     if (typeof ref === 'object' && ref?.current) ref.current.close()
@@ -634,6 +648,16 @@ const AddAppsDialog = forwardRef<
                       )}
                     </Select>
                     <TextField label="Applikasjonsnavn" name="app_name" size="small" autoComplete="off" />
+                    <TextField
+                      label="Startår for revisjon"
+                      name="audit_start_year"
+                      size="small"
+                      type="number"
+                      defaultValue={String(currentYear)}
+                      htmlSize={6}
+                      min={2000}
+                      max={currentYear + 1}
+                    />
                   </HStack>
                   <HStack gap="space-8">
                     <Button type="submit" size="small" loading={isSubmitting}>

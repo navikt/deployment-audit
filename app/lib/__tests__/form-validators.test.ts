@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { isValidEmail, isValidGitHubUsername, isValidNavIdent, isValidSlackChannel } from '../form-validators'
+import {
+  getFormString,
+  isValidEmail,
+  isValidGitHubUsername,
+  isValidNavIdent,
+  isValidSlackChannel,
+} from '../form-validators'
 
 describe('form-validators', () => {
   describe('isValidEmail', () => {
@@ -73,5 +79,30 @@ describe('form-validators', () => {
       expect(isValidGitHubUsername('double--hyphen')).toBe(false)
       expect(isValidGitHubUsername('a'.repeat(40))).toBe(false)
     })
+  })
+})
+
+describe('getFormString', () => {
+  it('returnerer trimmet streng for string-feltet', () => {
+    const fd = new FormData()
+    fd.append('key', '  hello  ')
+    expect(getFormString(fd, 'key')).toBe('hello')
+  })
+
+  it('returnerer null når feltet mangler', () => {
+    const fd = new FormData()
+    expect(getFormString(fd, 'missing')).toBeNull()
+  })
+
+  it('returnerer null når feltet er en File (ikke string)', () => {
+    const fd = new FormData()
+    fd.append('upload', new File(['data'], 'x.txt', { type: 'text/plain' }))
+    expect(getFormString(fd, 'upload')).toBeNull()
+  })
+
+  it('returnerer tom streng for tom string-verdi', () => {
+    const fd = new FormData()
+    fd.append('key', '   ')
+    expect(getFormString(fd, 'key')).toBe('')
   })
 })
