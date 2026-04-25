@@ -14,35 +14,42 @@
 
 import { App, type BlockAction, LogLevel } from '@slack/bolt'
 import type { KnownBlock } from '@slack/types'
+import { getActiveBoardsWithKeywordsForDevTeam } from '~/db/boards.server'
+import { getDevTeamAppsWithIssues } from '~/db/deployments/home.server'
 import {
   claimDeploymentForDeployNotify,
   claimDeploymentForSlackNotification,
   type DeploymentWithApp,
   type GitHubPRData,
-  getAppsWithIssues,
   getDeploymentsNeedingDeployNotify,
-  getHomeTabSummaryStats,
-  getIssueDeploymentsPerApp,
+  getPersonalDeploymentsMissingGoalLinks,
 } from '~/db/deployments.server'
+import { getDevTeamApplications } from '~/db/dev-teams.server'
 import {
   createSlackNotification,
   getSlackNotificationByMessage,
   logSlackInteraction,
   updateSlackNotification,
 } from '~/db/slack-notifications.server'
+import { getUserDevTeams } from '~/db/user-dev-team-preference.server'
 import { getUserMappingBySlackId } from '~/db/user-mappings.server'
 import { logger } from '~/lib/logger.server'
 import {
   buildDeploymentBlocks,
   buildDeviationBlocks,
   buildHomeTabBlocks,
+  buildKeywordsModalView,
   buildNewDeploymentBlocks,
   buildReminderBlocks,
   type DeploymentNotification,
   type DeviationNotification,
+  decodeKeywordsButtonValue,
   getStatusEmoji,
   type NewDeploymentNotification,
+  type PersonalHomeTabBoard,
+  type PersonalHomeTabTeamIssues,
   type ReminderNotification,
+  SHOW_KEYWORDS_ACTION_ID,
 } from './blocks'
 
 // NOTE: Types and block builders are exported from `./blocks` and surfaced
@@ -639,38 +646,13 @@ function registerEventHandlers(app: App): void {
 
     try {
       const userId = event.user
+      const baseUrl = process.env.BASE_URL || 'https://pensjon-deployment-audit.ansatt.nav.no'
 
-      // Try to find matching GitHub username from user mappings using Slack member ID
-      logger.info('[Slack Home Tab] Looking up user mapping for Slack ID:', { userId })
-      const userMapping = await getUserMappingBySlackId(userId)
-      const githubUsername = userMapping?.github_username
-      logger.info('[Slack Home Tab] User mapping result:', { githubUsername, hasMapping: !!userMapping })
+      const homeTabInput = await buildPersonalizedHomeTabInput({ slackUserId: userId, baseUrl })
 
-      // Fetch data for Home Tab
-      logger.info('[Slack Home Tab] Fetching data...')
-
-      const [stats, appsWithIssues] = await Promise.all([getHomeTabSummaryStats(), getAppsWithIssues()])
-
-      // Fetch sample issue deployments per app
-      const issueDeployments = await getIssueDeploymentsPerApp(appsWithIssues, 3)
-
-      logger.info('[Slack Home Tab] Data fetched:', {
-        stats,
-        appsWithIssuesCount: appsWithIssues.length,
-      })
-
-      // Build and publish Home Tab
-      const blocks = buildHomeTabBlocks({
-        slackUserId: userId,
-        githubUsername,
-        baseUrl: process.env.BASE_URL || 'https://pensjon-deployment-audit.ansatt.nav.no',
-        stats,
-        appsWithIssues,
-        issueDeployments,
-      })
+      const blocks = buildHomeTabBlocks(homeTabInput)
       logger.info('[Slack Home Tab] Built blocks, count:', { count: blocks.length })
 
-      logger.info('[Slack Home Tab] Publishing view...')
       await client.views.publish({
         user_id: userId,
         view: {
@@ -684,5 +666,122 @@ function registerEventHandlers(app: App): void {
     }
   })
 
-  logger.info('[Slack] Event handlers registered (app_home_opened)')
+  // Handle "Vis kodeord"-button: open a copy-friendly modal listing each
+  // keyword on its own line. The button's `value` carries the title +
+  // keywords as JSON so we don't need a DB round-trip.
+  app.action(/^show_kr_keywords:.*/, async ({ ack, body, client }) => {
+    await ack()
+    try {
+      const action = (body as BlockAction).actions[0]
+      if (!action || action.type !== 'button') {
+        logger.warn('[Slack Home Tab] show_kr_keywords action without button payload')
+        return
+      }
+      const decoded = decodeKeywordsButtonValue(action.value ?? '')
+      if (!decoded) {
+        logger.warn('[Slack Home Tab] Could not decode keywords button value')
+        return
+      }
+      const triggerId = (body as BlockAction).trigger_id
+      await client.views.open({
+        trigger_id: triggerId,
+        view: buildKeywordsModalView(decoded),
+      })
+    } catch (error) {
+      logger.error(`[Slack Home Tab] Error opening keywords modal: ${(error as Error).message}`)
+    }
+  })
+
+  logger.info(`[Slack] Event handlers registered (app_home_opened, ${SHOW_KEYWORDS_ACTION_ID})`)
+}
+
+/**
+ * Assemble the personalised home-tab payload for a given Slack user.
+ *
+ * Module-private helper exercised end-to-end via the `app_home_opened` handler
+ * and unit-tested at the block-builder level via fixtures.
+ */
+async function buildPersonalizedHomeTabInput({
+  slackUserId,
+  baseUrl,
+}: {
+  slackUserId: string
+  baseUrl: string
+}): Promise<Parameters<typeof buildHomeTabBlocks>[0]> {
+  const userMapping = await getUserMappingBySlackId(slackUserId)
+  const navIdent = userMapping?.nav_ident ?? null
+  const githubUsername = userMapping?.github_username ?? null
+
+  // No NDA mapping at all → render onboarding-only home tab.
+  if (!navIdent) {
+    return {
+      slackUserId,
+      navIdent: null,
+      githubUsername: null,
+      baseUrl,
+      boards: [],
+      teamIssues: { appsWithIssuesCount: 0, withoutFourEyes: 0, pendingVerification: 0, alertCount: 0 },
+      personalMissingGoalLinks: null,
+    }
+  }
+
+  const devTeams = await getUserDevTeams(navIdent)
+
+  // Per-team work in parallel: boards, direct apps + issue apps. For users in
+  // many dev teams sequential awaits would noticeably slow down the
+  // `app_home_opened` handler (which Slack expects us to ack within 3s).
+  const perTeamResults = await Promise.all(
+    devTeams.map(async (team) => {
+      const [teamBoards, directApps] = await Promise.all([
+        getActiveBoardsWithKeywordsForDevTeam(team.id),
+        getDevTeamApplications(team.id),
+      ])
+      const directAppIds = directApps.map((a) => a.monitored_app_id)
+      const issueApps = await getDevTeamAppsWithIssues(team.nais_team_slugs, directAppIds)
+      return { teamBoards, issueApps }
+    }),
+  )
+
+  const boards: PersonalHomeTabBoard[] = []
+  const teamIssues: PersonalHomeTabTeamIssues = {
+    appsWithIssuesCount: 0,
+    withoutFourEyes: 0,
+    pendingVerification: 0,
+    alertCount: 0,
+  }
+
+  // Dedupe issue apps across teams (an app can match more than one team if a
+  // user belongs to multiple dev teams that share monitored apps).
+  const seenAppKeys = new Set<string>()
+  for (const { teamBoards, issueApps } of perTeamResults) {
+    boards.push(...teamBoards)
+    for (const app of issueApps) {
+      const key = `${app.team_slug}/${app.environment_name}/${app.app_name}`
+      if (seenAppKeys.has(key)) continue
+      seenAppKeys.add(key)
+      // Count an app under "trenger oppfølging" only if it has issues in the
+      // categories surfaced in the home tab (approval / verification / alerts).
+      // `getDevTeamAppsWithIssues` also returns apps where only
+      // `missing_goal_links > 0`, but those are reflected in the personal
+      // section instead so counting them here would inflate the header
+      // relative to the breakdown shown.
+      const surfaced = app.without_four_eyes > 0 || app.pending_verification > 0 || app.alert_count > 0
+      if (surfaced) teamIssues.appsWithIssuesCount += 1
+      teamIssues.withoutFourEyes += app.without_four_eyes
+      teamIssues.pendingVerification += app.pending_verification
+      teamIssues.alertCount += app.alert_count
+    }
+  }
+
+  const personalMissingGoalLinks = githubUsername ? await getPersonalDeploymentsMissingGoalLinks(githubUsername) : null
+
+  return {
+    slackUserId,
+    navIdent,
+    githubUsername,
+    baseUrl,
+    boards,
+    teamIssues,
+    personalMissingGoalLinks,
+  }
 }

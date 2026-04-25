@@ -106,6 +106,91 @@ export async function getBoardsWithGoalsForDevTeam(
   return result
 }
 
+interface BoardKeywordsKeyResult {
+  id: number
+  title: string
+  keywords: string[]
+}
+
+interface BoardKeywordsObjective {
+  id: number
+  title: string
+  keywords: string[]
+  key_results: BoardKeywordsKeyResult[]
+}
+
+interface BoardKeywordsBoard {
+  id: number
+  period_label: string
+  team_name: string
+  team_slug: string
+  section_slug: string
+  objectives: BoardKeywordsObjective[]
+}
+
+/**
+ * Active boards (one or more) for a dev team, with full goal hierarchy and
+ * keywords used by the auto-link pipeline. Used by the personalised Slack
+ * home tab to render mål/nøkkelresultater/kodeord.
+ *
+ * Returns boards sorted by `period_start DESC`. Inactive objectives and key
+ * results are excluded.
+ *
+ * Implementation: 3 queries total (boards, objectives across all boards, key
+ * results across all objectives) regardless of hierarchy size, so this scales
+ * with team size rather than O(boards × objectives).
+ */
+export async function getActiveBoardsWithKeywordsForDevTeam(devTeamId: number): Promise<BoardKeywordsBoard[]> {
+  const boardsResult = await pool.query(
+    `SELECT b.id, b.period_label, dt.name AS team_name, dt.slug AS team_slug, s.slug AS section_slug
+     FROM boards b
+     JOIN dev_teams dt ON dt.id = b.dev_team_id
+     JOIN sections s ON s.id = dt.section_id
+     WHERE b.dev_team_id = $1 AND b.is_active = true
+     ORDER BY b.period_start DESC`,
+    [devTeamId],
+  )
+
+  const boardIds = boardsResult.rows.map((b) => b.id as number)
+  if (boardIds.length === 0) return []
+
+  const objectivesResult = await pool.query(
+    `SELECT id, board_id, title, COALESCE(keywords, '{}'::text[]) AS keywords
+     FROM board_objectives
+     WHERE board_id = ANY($1::int[]) AND is_active = true
+     ORDER BY sort_order, id`,
+    [boardIds],
+  )
+  const objectiveIds = objectivesResult.rows.map((o) => o.id as number)
+
+  const krResult =
+    objectiveIds.length === 0
+      ? { rows: [] as Array<{ id: number; objective_id: number; title: string; keywords: string[] }> }
+      : await pool.query(
+          `SELECT id, objective_id, title, COALESCE(keywords, '{}'::text[]) AS keywords
+           FROM board_key_results
+           WHERE objective_id = ANY($1::int[]) AND is_active = true
+           ORDER BY sort_order, id`,
+          [objectiveIds],
+        )
+
+  const krByObjective = new Map<number, BoardKeywordsKeyResult[]>()
+  for (const kr of krResult.rows) {
+    const list = krByObjective.get(kr.objective_id) ?? []
+    list.push({ id: kr.id, title: kr.title, keywords: kr.keywords })
+    krByObjective.set(kr.objective_id, list)
+  }
+
+  const objectivesByBoard = new Map<number, BoardKeywordsObjective[]>()
+  for (const obj of objectivesResult.rows) {
+    const list = objectivesByBoard.get(obj.board_id) ?? []
+    list.push({ id: obj.id, title: obj.title, keywords: obj.keywords, key_results: krByObjective.get(obj.id) ?? [] })
+    objectivesByBoard.set(obj.board_id, list)
+  }
+
+  return boardsResult.rows.map((board) => ({ ...board, objectives: objectivesByBoard.get(board.id) ?? [] }))
+}
+
 async function getBoardById(id: number): Promise<Board | null> {
   const result = await pool.query('SELECT * FROM boards WHERE id = $1', [id])
   return result.rows[0] ?? null

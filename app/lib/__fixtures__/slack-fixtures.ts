@@ -74,144 +74,142 @@ export const deploymentFixtures = {
 // Home Tab Fixtures
 // =============================================================================
 
-const issueDeploymentsMap = new Map([
-  [
-    'pensjondeployer/prod-gcp/pensjon-pen',
-    [
+const sampleBoards = [
+  {
+    id: 1,
+    period_label: 'T1 2026',
+    team_name: 'Skjermbildemodernisering',
+    team_slug: 'skjermbildemodernisering',
+    section_slug: 'pensjon',
+    objectives: [
       {
-        id: 100,
-        commit_sha: 'abc1234',
-        deployer_username: 'o123456',
-        four_eyes_status: 'unverified_commits',
-        github_pr_number: 123,
-        github_pr_data: { title: 'feat: ny pensjonsberegning', creator: { username: 'dev-user' } },
-        title: 'feat: ny pensjonsberegning',
-        created_at: new Date('2026-02-13T10:00:00Z'),
-        app_name: 'pensjon-pen',
-        team_slug: 'pensjondeployer',
-        environment_name: 'prod-gcp',
+        id: 11,
+        title: 'Forbedre brukeropplevelse i saksbehandlerverktøy',
+        keywords: ['saksbehandler', 'sbh-modernisering'],
+        key_results: [
+          {
+            id: 111,
+            title: 'Lansere ny saksbehandlerflyt i Q1',
+            keywords: ['saksbehandler-flyt', 'ny-flyt'],
+          },
+          {
+            id: 112,
+            title: 'Redusere klikk per oppgave med 30%',
+            keywords: ['klikk-reduksjon'],
+          },
+        ],
       },
       {
-        id: 101,
-        commit_sha: 'def5678',
-        deployer_username: 'k654321',
-        four_eyes_status: 'pending',
-        github_pr_number: 124,
-        github_pr_data: { title: 'chore: bump dependencies', creator: { username: 'dependabot[bot]' } },
-        title: 'chore: bump dependencies',
-        created_at: new Date('2026-02-13T09:00:00Z'),
-        app_name: 'pensjon-pen',
-        team_slug: 'pensjondeployer',
-        environment_name: 'prod-gcp',
-      },
-    ],
-  ],
-  [
-    'pensjondeployer/prod-gcp/pensjon-selvbetjening',
-    [
-      {
-        id: 200,
-        commit_sha: '9876abc',
-        deployer_username: 'o123456',
-        four_eyes_status: 'direct_push',
-        github_pr_number: null,
-        github_pr_data: null,
-        title: 'hotfix: fiks login-feil',
-        created_at: new Date('2026-02-12T15:00:00Z'),
-        app_name: 'pensjon-selvbetjening',
-        team_slug: 'pensjondeployer',
-        environment_name: 'prod-gcp',
+        id: 12,
+        title: 'Modernisere komponentbibliotek',
+        keywords: [],
+        key_results: [
+          {
+            id: 121,
+            title: 'Migrere alle skjemaer til Aksel',
+            keywords: ['aksel-migrering'],
+          },
+        ],
       },
     ],
-  ],
-])
+  },
+  {
+    id: 2,
+    period_label: 'T1 2026',
+    team_name: 'Starte pensjon',
+    team_slug: 'starte-pensjon',
+    section_slug: 'pensjon',
+    objectives: [
+      {
+        id: 21,
+        title: 'Lansere ny pensjonskalkulator',
+        keywords: ['pensjonskalkulator'],
+        key_results: [
+          {
+            id: 211,
+            title: 'Stabilisere beregningsmotor',
+            keywords: ['beregningsmotor', 'stabilisering'],
+          },
+        ],
+      },
+    ],
+  },
+]
 
 export const homeTabFixtures = {
   withIssues: {
     slackUserId: 'U12345678',
     githubUsername: 'ola-nordmann',
+    navIdent: 'O123456',
     baseUrl: BASE_URL,
-    stats: {
-      totalApps: 12,
-      totalDeployments: 847,
-      withoutFourEyes: 23,
-      pendingVerification: 5,
+    boards: sampleBoards,
+    teamIssues: {
+      appsWithIssuesCount: 3,
+      withoutFourEyes: 15,
+      pendingVerification: 3,
+      alertCount: 1,
     },
-    appsWithIssues: [
-      {
-        app_name: 'pensjon-pen',
-        team_slug: 'pensjondeployer',
-        environment_name: 'prod-gcp',
-        without_four_eyes: 15,
-        pending_verification: 3,
-        alert_count: 1,
-      },
-      {
-        app_name: 'pensjon-selvbetjening',
-        team_slug: 'pensjondeployer',
-        environment_name: 'prod-gcp',
-        without_four_eyes: 8,
-        pending_verification: 2,
-        alert_count: 0,
-      },
-    ],
-    issueDeployments: issueDeploymentsMap,
+    personalMissingGoalLinks: 8,
   },
 
   noIssues: {
     slackUserId: 'U12345678',
     githubUsername: 'kari-nordmann',
+    navIdent: 'K654321',
     baseUrl: BASE_URL,
-    stats: {
-      totalApps: 12,
-      totalDeployments: 847,
+    boards: [sampleBoards[0]],
+    teamIssues: {
+      appsWithIssuesCount: 0,
       withoutFourEyes: 0,
       pendingVerification: 0,
+      alertCount: 0,
     },
-    appsWithIssues: [],
-    issueDeployments: new Map(),
+    personalMissingGoalLinks: 0,
   },
 
   noGithubUser: {
     slackUserId: 'U99999999',
     githubUsername: null,
+    navIdent: 'P987654',
     baseUrl: BASE_URL,
-    stats: {
-      totalApps: 5,
-      totalDeployments: 123,
+    boards: [sampleBoards[0]],
+    teamIssues: {
+      appsWithIssuesCount: 1,
       withoutFourEyes: 2,
       pendingVerification: 1,
+      alertCount: 0,
     },
-    appsWithIssues: [
-      {
-        app_name: 'pensjon-pen',
-        team_slug: 'pensjondeployer',
-        environment_name: 'prod-gcp',
-        without_four_eyes: 2,
-        pending_verification: 1,
-        alert_count: 0,
-      },
-    ],
-    issueDeployments: new Map([
-      [
-        'pensjondeployer/prod-gcp/pensjon-pen',
-        [
-          {
-            id: 300,
-            commit_sha: 'aaa1111',
-            deployer_username: null,
-            four_eyes_status: 'unverified_commits',
-            github_pr_number: null,
-            github_pr_data: null,
-            title: null,
-            created_at: new Date('2026-02-11T08:00:00Z'),
-            app_name: 'pensjon-pen',
-            team_slug: 'pensjondeployer',
-            environment_name: 'prod-gcp',
-          },
-        ],
-      ],
-    ]),
+    personalMissingGoalLinks: null,
+  },
+
+  noBoards: {
+    slackUserId: 'U11111111',
+    githubUsername: 'per-deploy',
+    navIdent: 'P111111',
+    baseUrl: BASE_URL,
+    boards: [],
+    teamIssues: {
+      appsWithIssuesCount: 0,
+      withoutFourEyes: 0,
+      pendingVerification: 0,
+      alertCount: 0,
+    },
+    personalMissingGoalLinks: 0,
+  },
+
+  noMapping: {
+    slackUserId: 'U22222222',
+    githubUsername: null,
+    navIdent: null,
+    baseUrl: BASE_URL,
+    boards: [],
+    teamIssues: {
+      appsWithIssuesCount: 0,
+      withoutFourEyes: 0,
+      pendingVerification: 0,
+      alertCount: 0,
+    },
+    personalMissingGoalLinks: null,
   },
 } satisfies Record<string, HomeTabInput>
 
