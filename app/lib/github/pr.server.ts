@@ -17,13 +17,29 @@ interface PullRequest {
   state: string
 }
 
+/**
+ * Result from `getPullRequestForCommit`: the PR matched by the (optional)
+ * baseBranch filter (or null if none), plus the full unfiltered list of PRs
+ * associated with the commit and their actual base branches.
+ *
+ * `allAssociatedPrs` is used by callers to:
+ *  - Cache the canonical {number, baseBranch} pairs (instead of the requested
+ *    baseBranch which is what schema v2 mistakenly stored).
+ *  - Detect base-branch mismatch (a PR exists for the commit, but on a branch
+ *    other than the configured `default_branch`).
+ */
+interface PullRequestLookupResult {
+  pr: PullRequest | null
+  allAssociatedPrs: Array<{ number: number; baseBranch: string }>
+}
+
 export async function getPullRequestForCommit(
   owner: string,
   repo: string,
   sha: string,
   verifyCommitIsInPR: boolean = false,
   baseBranch?: string,
-): Promise<PullRequest | null> {
+): Promise<PullRequestLookupResult> {
   const client = getGitHubClient()
 
   try {
@@ -39,9 +55,11 @@ export async function getPullRequestForCommit(
 
     logger.info(`📊 Found ${response.data.length} PR(s) associated with commit ${sha}`)
 
+    const allAssociatedPrs = response.data.map((pr) => ({ number: pr.number, baseBranch: pr.base.ref }))
+
     if (response.data.length === 0) {
       logger.info(`❌ No PRs found for commit ${sha}`)
-      return null
+      return { pr: null, allAssociatedPrs }
     }
 
     // Filter to only PRs targeting the base branch if specified
@@ -60,7 +78,7 @@ export async function getPullRequestForCommit(
 
     if (filteredPRs.length === 0) {
       logger.info(`❌ No PRs found for commit ${sha} targeting ${baseBranch}`)
-      return null
+      return { pr: null, allAssociatedPrs }
     }
 
     // When verifyCommitIsInPR is true, we need to check that the commit is actually
@@ -77,11 +95,14 @@ export async function getPullRequestForCommit(
         if (pr.merge_commit_sha === sha) {
           logger.info(`✅ Commit ${sha.substring(0, 7)} is the merge/squash commit for PR #${pr.number}`)
           return {
-            number: pr.number,
-            title: pr.title,
-            html_url: pr.html_url,
-            merged_at: pr.merged_at,
-            state: pr.state,
+            pr: {
+              number: pr.number,
+              title: pr.title,
+              html_url: pr.html_url,
+              merged_at: pr.merged_at,
+              state: pr.state,
+            },
+            allAssociatedPrs,
           }
         }
 
@@ -141,11 +162,14 @@ export async function getPullRequestForCommit(
         if (isInPR) {
           logger.info(`✅ Commit ${sha.substring(0, 7)} is an original commit in PR #${pr.number}`)
           return {
-            number: pr.number,
-            title: pr.title,
-            html_url: pr.html_url,
-            merged_at: pr.merged_at,
-            state: pr.state,
+            pr: {
+              number: pr.number,
+              title: pr.title,
+              html_url: pr.html_url,
+              merged_at: pr.merged_at,
+              state: pr.state,
+            },
+            allAssociatedPrs,
           }
         }
 
@@ -185,14 +209,17 @@ export async function getPullRequestForCommit(
                   `✅ Commit ${sha.substring(0, 7)} matches PR #${pr.number} via rebase (original: ${prCommit.sha.substring(0, 7)})`,
                 )
                 return {
-                  number: pr.number,
-                  title: pr.title,
-                  html_url: pr.html_url,
-                  merged_at: pr.merged_at,
-                  state: pr.state,
-                  _rebase_matched: true,
-                  _matched_original_sha: prCommit.sha,
-                } as PullRequestWithMatchInfo
+                  pr: {
+                    number: pr.number,
+                    title: pr.title,
+                    html_url: pr.html_url,
+                    merged_at: pr.merged_at,
+                    state: pr.state,
+                    _rebase_matched: true,
+                    _matched_original_sha: prCommit.sha,
+                  } as PullRequestWithMatchInfo,
+                  allAssociatedPrs,
+                }
               }
             }
           } catch (err) {
@@ -207,7 +234,7 @@ export async function getPullRequestForCommit(
 
       // None of the associated PRs contain this commit as an original commit
       logger.info(`❌ Commit ${sha.substring(0, 7)} was not an original commit in any associated PR`)
-      return null
+      return { pr: null, allAssociatedPrs }
     }
 
     // Return the first (most relevant) PR (default behavior for backward compatibility)
@@ -215,11 +242,14 @@ export async function getPullRequestForCommit(
     logger.info(`✅ Using PR #${pr.number} for verification`)
 
     return {
-      number: pr.number,
-      title: pr.title,
-      html_url: pr.html_url,
-      merged_at: pr.merged_at,
-      state: pr.state,
+      pr: {
+        number: pr.number,
+        title: pr.title,
+        html_url: pr.html_url,
+        merged_at: pr.merged_at,
+        state: pr.state,
+      },
+      allAssociatedPrs,
     }
   } catch (error) {
     logger.error(`❌ Error fetching PR for commit ${sha}:`, error)
@@ -229,7 +259,7 @@ export async function getPullRequestForCommit(
       throw error
     }
 
-    return null
+    return { pr: null, allAssociatedPrs: [] }
   }
 }
 

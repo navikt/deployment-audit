@@ -10,9 +10,10 @@ import {
   getDeploymentByNaisId,
   getLatestDeploymentForApp,
 } from '~/db/deployments.server'
-import { getMonitoredApplicationByIdentity } from '~/db/monitored-applications.server'
+import { getMonitoredApplicationById, getMonitoredApplicationByIdentity } from '~/db/monitored-applications.server'
 import { logger } from '~/lib/logger.server'
 import { fetchApplicationDeployments, fetchNewDeployments } from '~/lib/nais.server'
+import { syncDefaultBranchForApp } from './default-branch-sync.server'
 
 /**
  * Step 1: Sync deployments from Nais API to database
@@ -191,6 +192,8 @@ async function syncDeploymentsFromNais(
     totalProcessed,
   })
 
+  await runDefaultBranchSync(monitoredApp.id)
+
   return {
     newCount,
     skippedCount,
@@ -320,5 +323,40 @@ export async function syncNewDeploymentsFromNais(
   }
 
   logger.info(`✅ Incremental sync complete: ${newCount} new, ${alertsCreated} alerts`)
+
+  await runDefaultBranchSync(monitoredAppId)
+
   return { newCount, alertsCreated, stoppedEarly }
+}
+
+/**
+ * Trigger a default_branch sync for the app using its currently active repository.
+ *
+ * Best-effort: failures are logged but don't break the calling sync. The
+ * helper itself enforces a 24h cooldown to keep GitHub API usage predictable.
+ */
+async function runDefaultBranchSync(monitoredAppId: number): Promise<void> {
+  try {
+    const repos = await getRepositoriesByAppId(monitoredAppId)
+    const activeRepo = repos.find((r) => r.status === 'active')
+    if (!activeRepo) {
+      return
+    }
+
+    const app = await getMonitoredApplicationById(monitoredAppId)
+    if (!app) {
+      return
+    }
+
+    await syncDefaultBranchForApp({
+      monitoredAppId,
+      appName: app.app_name,
+      currentDefaultBranch: app.default_branch,
+      defaultBranchSyncedAt: app.default_branch_synced_at,
+      owner: activeRepo.github_owner,
+      repo: activeRepo.github_repo_name,
+    })
+  } catch (error) {
+    logger.warn('⚠️ default_branch sync failed (non-fatal):', error as Record<string, unknown>)
+  }
 }

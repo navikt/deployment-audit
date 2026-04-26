@@ -87,7 +87,22 @@ export async function fetchVerificationData(
   )
 
   // Get deployed commit's PR
-  const deployedPr = await fetchDeployedPrData(owner, repo, commitSha, baseBranch, options)
+  const deployedPrResult = await fetchDeployedPrData(owner, repo, commitSha, baseBranch, options)
+  const deployedPr = deployedPrResult.deployedPr
+
+  // Track branch mismatches for the deployed PR. We ONLY aggregate mismatch
+  // when no PR was found on the configured baseBranch — having a matching PR
+  // means the data is valid for verification, even if other associated PRs
+  // exist (e.g. cherry-picks or backports to release branches).
+  const mismatchedSet = new Map<string, Set<number>>()
+  if (deployedPr === null) {
+    for (let i = 0; i < deployedPrResult.mismatchedBaseBranches.length; i++) {
+      const branch = deployedPrResult.mismatchedBaseBranches[i]
+      const prNumber = deployedPrResult.mismatchedPrNumbers[i]
+      if (!mismatchedSet.has(branch)) mismatchedSet.set(branch, new Set())
+      mismatchedSet.get(branch)?.add(prNumber)
+    }
+  }
 
   // Get commits between deployments
   let commitsBetween: VerificationInput['commitsBetween'] = []
@@ -106,6 +121,35 @@ export async function fetchVerificationData(
       compareFailed = true
     } else {
       commitsBetween = result
+    }
+  }
+
+  // Aggregate base-branch mismatches discovered during commitsBetween enrichment.
+  // Only aggregate for commits where NO matching PR was found on baseBranch —
+  // a present `commit.pr` means we have valid data for the configured branch.
+  for (const commit of commitsBetween) {
+    if (commit.pr) continue
+    if (commit.mismatchedBaseBranches) {
+      for (let i = 0; i < commit.mismatchedBaseBranches.length; i++) {
+        const branch = commit.mismatchedBaseBranches[i]
+        const prNumber = commit.mismatchedPrNumbers?.[i]
+        if (prNumber == null) continue
+        if (!mismatchedSet.has(branch)) mismatchedSet.set(branch, new Set())
+        mismatchedSet.get(branch)?.add(prNumber)
+      }
+    }
+  }
+
+  let branchMismatch: VerificationInput['branchMismatch']
+  if (mismatchedSet.size > 0) {
+    const detectedBranches = Array.from(mismatchedSet.keys())
+    const prNumbers = Array.from(new Set(Array.from(mismatchedSet.values()).flatMap((s) => Array.from(s)))).sort(
+      (a, b) => a - b,
+    )
+    branchMismatch = {
+      expectedBranch: baseBranch,
+      detectedBranches,
+      prNumbers,
     }
   }
 
@@ -193,6 +237,7 @@ export async function fetchVerificationData(
     compareFailed,
     nearbyApprovedDeployWithSameCommit,
     nearbyApprovedDeploy,
+    branchMismatch,
     dataFreshness: {
       deployedPrFetchedAt: deployedPr ? new Date() : null,
       commitsFetchedAt: commitsBetween.length > 0 ? new Date() : null,
@@ -300,11 +345,20 @@ async function fetchDeployedPrData(
   commitSha: string,
   baseBranch: string,
   options?: FetchOptions,
-): Promise<VerificationInput['deployedPr']> {
+): Promise<{
+  deployedPr: VerificationInput['deployedPr']
+  mismatchedBaseBranches: string[]
+  mismatchedPrNumbers: number[]
+}> {
   // First, find PR number for this commit
-  const prNumber = await findPrForCommit(owner, repo, commitSha, baseBranch)
+  const { prNumber, mismatchedBaseBranches, mismatchedPrNumbers } = await findPrForCommit(
+    owner,
+    repo,
+    commitSha,
+    baseBranch,
+  )
   if (!prNumber) {
-    return null
+    return { deployedPr: null, mismatchedBaseBranches, mismatchedPrNumbers }
   }
 
   // Check if we have cached data
@@ -321,11 +375,15 @@ async function fetchDeployedPrData(
         // Fall through to GitHub fetch to get complete data
       } else {
         return {
-          number: prNumber,
-          url: `https://github.com/${owner}/${repo}/pull/${prNumber}`,
-          metadata,
-          reviews,
-          commits,
+          deployedPr: {
+            number: prNumber,
+            url: `https://github.com/${owner}/${repo}/pull/${prNumber}`,
+            metadata,
+            reviews,
+            commits,
+          },
+          mismatchedBaseBranches,
+          mismatchedPrNumbers,
         }
       }
     }
@@ -344,51 +402,91 @@ async function fetchDeployedPrData(
   ])
 
   return {
-    number: prNumber,
-    url: `https://github.com/${owner}/${repo}/pull/${prNumber}`,
-    metadata,
-    reviews,
-    commits,
+    deployedPr: {
+      number: prNumber,
+      url: `https://github.com/${owner}/${repo}/pull/${prNumber}`,
+      metadata,
+      reviews,
+      commits,
+    },
+    mismatchedBaseBranches,
+    mismatchedPrNumbers,
   }
 }
 
+/**
+ * Find the PR number for a commit and detect any base-branch mismatches.
+ *
+ * Returns:
+ *  - prNumber: the PR number matching `baseBranch` (or any associated PR if
+ *    baseBranch is not specified). null if no matching PR.
+ *  - mismatchedBaseBranches: the actual base branches of PRs associated with
+ *    this commit but NOT matching `baseBranch`. Used to surface a warning
+ *    when, e.g., the configured `default_branch` doesn't match the actual
+ *    repo default branch.
+ *  - mismatchedPrNumbers: the PR numbers of those mismatched PRs (parallel to
+ *    mismatchedBaseBranches by index).
+ *
+ * Cache shape (schema v3+) stores all associated PRs with their actual base
+ * branches. Schema v2 stored only the requested base branch and is treated as
+ * unusable for mismatch detection — refetched on demand.
+ */
 async function findPrForCommit(
   owner: string,
   repo: string,
   commitSha: string,
   baseBranch?: string,
   cacheOnly = false,
-): Promise<number | null> {
+): Promise<{
+  prNumber: number | null
+  mismatchedBaseBranches: string[]
+  mismatchedPrNumbers: number[]
+}> {
   // First check our cached PR associations
   const cached = await getLatestCommitSnapshot(owner, repo, commitSha, 'prs')
   if (cached && cached.schemaVersion >= CURRENT_SCHEMA_VERSION) {
     const prs = (cached.data as { prs: Array<{ number: number; baseBranch: string }> }).prs
-    // Filter by base branch if specified
     const matchingPrs = baseBranch ? prs.filter((pr) => pr.baseBranch === baseBranch) : prs
+    const mismatchedPrs = baseBranch ? prs.filter((pr) => pr.baseBranch !== baseBranch) : []
     if (matchingPrs.length > 0) {
-      return matchingPrs[0].number
+      return {
+        prNumber: matchingPrs[0].number,
+        mismatchedBaseBranches: mismatchedPrs.map((p) => p.baseBranch),
+        mismatchedPrNumbers: mismatchedPrs.map((p) => p.number),
+      }
     }
-    // If we have cached data (even empty), return null in cache-only mode
-    if (cacheOnly) return null
+    // Cache hit but no match for this baseBranch
+    if (cacheOnly || prs.length === 0) {
+      return {
+        prNumber: null,
+        mismatchedBaseBranches: mismatchedPrs.map((p) => p.baseBranch),
+        mismatchedPrNumbers: mismatchedPrs.map((p) => p.number),
+      }
+    }
+    // Fall through to GitHub when cache says "associated PRs exist but none on baseBranch"
+    // — we still want to refresh in case the PR was retargeted.
   }
 
   // In cache-only mode, don't fetch from GitHub
-  if (cacheOnly) return null
-
-  // Fetch from GitHub API
-  const prInfo = await getPullRequestForCommit(owner, repo, commitSha, true, baseBranch)
-
-  if (prInfo) {
-    // Store the result to database for future lookups
-    await saveCommitSnapshot(owner, repo, commitSha, 'prs', {
-      prs: [{ number: prInfo.number, baseBranch: baseBranch || 'unknown' }],
-    })
-    return prInfo.number
+  if (cacheOnly) {
+    return { prNumber: null, mismatchedBaseBranches: [], mismatchedPrNumbers: [] }
   }
 
-  // No PR found - also cache this negative result
-  await saveCommitSnapshot(owner, repo, commitSha, 'prs', { prs: [] })
-  return null
+  // Fetch from GitHub API
+  const { pr, allAssociatedPrs } = await getPullRequestForCommit(owner, repo, commitSha, true, baseBranch)
+
+  // Persist all associated PRs with their actual base branches (schema v3 shape)
+  await saveCommitSnapshot(owner, repo, commitSha, 'prs', {
+    prs: allAssociatedPrs.map((p) => ({ number: p.number, baseBranch: p.baseBranch })),
+  })
+
+  const mismatchedPrs = baseBranch ? allAssociatedPrs.filter((p) => p.baseBranch !== baseBranch) : []
+
+  return {
+    prNumber: pr?.number ?? null,
+    mismatchedBaseBranches: mismatchedPrs.map((p) => p.baseBranch),
+    mismatchedPrNumbers: mismatchedPrs.map((p) => p.number),
+  }
 }
 
 async function fetchPrFromGitHub(
@@ -604,7 +702,13 @@ export async function buildCommitsBetweenFromCache(
   const cacheOnly = options?.cacheOnly ?? false
 
   for (const commit of compareData.commits) {
-    const prNumber = await findPrForCommit(owner, repo, commit.sha, baseBranch, cacheOnly)
+    const { prNumber, mismatchedBaseBranches, mismatchedPrNumbers } = await findPrForCommit(
+      owner,
+      repo,
+      commit.sha,
+      baseBranch,
+      cacheOnly,
+    )
 
     let prData: VerificationInput['commitsBetween'][0]['pr'] = null
 
@@ -670,6 +774,8 @@ export async function buildCommitsBetweenFromCache(
       parentShas: commit.parentShas,
       htmlUrl: commit.htmlUrl,
       pr: prData,
+      mismatchedBaseBranches: mismatchedBaseBranches.length > 0 ? mismatchedBaseBranches : undefined,
+      mismatchedPrNumbers: mismatchedPrNumbers.length > 0 ? mismatchedPrNumbers : undefined,
     })
   }
 

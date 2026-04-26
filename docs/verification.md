@@ -41,6 +41,11 @@ For hvert deployment sjekker systemet:
 |-------|-----------|-----|
 | **Nais API** | Deployments (app, tidspunkt, commit-SHA, miljø) | Periodisk hvert 5. minutt |
 | **GitHub API** | Commits mellom deployments, PR-metadata, reviews, godkjenninger | Ved verifisering av hvert deployment |
+| **GitHub API (repo metadata)** | `default_branch` for hver overvåket app | Periodisk, maks én gang per app per 24 timer |
+
+#### Auto-deteksjon av default_branch
+
+`monitored_applications.default_branch` brukes til å filtrere PR-er ved verifisering — kun PR-er med `base.ref` som matcher denne verdien telles. For å unngå feilkonfigurasjon (f.eks. konfigurert `main` mens repoet faktisk bruker `master`) hentes feltet fra GitHub som del av synkroniseringssyklusen, med 24t cooldown per app. Når en PR detekteres som er merget til en annen branch enn konfigurert default-branch, vises en advarsel på deployment-detaljsiden inntil neste sync har korrigert verdien.
 
 ### Prosessflyt på overordnet nivå
 

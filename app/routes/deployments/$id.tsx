@@ -297,8 +297,28 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 
   const isAdmin = currentUser?.role === 'admin'
 
-  // Fetch verification run data for admin download
-  const verificationRun = isAdmin ? await getLatestVerificationRun(deploymentId) : null
+  // Fetch verification run data. Used to surface warnings (e.g. branch mismatch)
+  // to all viewers, and for admin-only debug/download UI gated separately below.
+  // To avoid exposing the full verification payload (snapshot IDs, internal
+  // status, etc.) to non-admins, we strip down to the minimal shape needed for
+  // the public warning when the user is not an admin.
+  const fullVerificationRun = await getLatestVerificationRun(deploymentId)
+  const verificationRun = isAdmin
+    ? fullVerificationRun
+    : fullVerificationRun
+      ? ({
+          status: fullVerificationRun.status,
+          runAt: fullVerificationRun.runAt,
+          schemaVersion: fullVerificationRun.schemaVersion,
+          result: {
+            branchMismatch: (
+              fullVerificationRun.result as {
+                branchMismatch?: { expectedBranch: string; detectedBranches: string[]; prNumbers: number[] }
+              } | null
+            )?.branchMismatch,
+          },
+        } as typeof fullVerificationRun)
+      : null
 
   return {
     deployment,
@@ -546,6 +566,47 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
         </BodyShort>
       </div>
       <ActionAlert data={actionData} />
+      {/* Branch mismatch warning - shown to all viewers when the configured
+          default_branch differs from the actual base ref of related PRs.
+          Auto-detection corrects monitored_applications.default_branch within 24h. */}
+      {(() => {
+        const branchMismatch = (
+          verificationRun?.result as
+            | {
+                branchMismatch?: { expectedBranch: string; detectedBranches: string[]; prNumbers: number[] }
+              }
+            | undefined
+        )?.branchMismatch
+        if (!branchMismatch) return null
+        return (
+          <Alert variant="warning">
+            <Heading size="small" level="3" spacing>
+              Mulig feil-konfigurert default-branch
+            </Heading>
+            <BodyShort>
+              Appen er konfigurert med <code>{branchMismatch.expectedBranch}</code> som default-branch, men PR
+              {branchMismatch.prNumbers.length > 1 ? '-er' : ''}{' '}
+              {branchMismatch.prNumbers.map((n, idx) => (
+                <span key={n}>
+                  {idx > 0 ? ', ' : ''}
+                  {deployment.detected_github_owner && deployment.detected_github_repo_name ? (
+                    <ExternalLink
+                      href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/pull/${n}`}
+                    >
+                      #{n}
+                    </ExternalLink>
+                  ) : (
+                    `#${n}`
+                  )}
+                </span>
+              ))}{' '}
+              er merget mot <code>{branchMismatch.detectedBranches.join(', ')}</code>. Dette gjør at PR-data ignoreres
+              ved verifisering. Konfigurasjonen rettes automatisk innen 24 timer, og deretter må deploymentet
+              re-verifiseres.
+            </BodyShort>
+          </Alert>
+        )
+      })()}
       {/* Four-eyes Alert - only shown for non-OK states */}
       {!isApprovedStatus((deployment.four_eyes_status ?? '') as FourEyesStatus) && (
         <Alert variant={status.variant}>
