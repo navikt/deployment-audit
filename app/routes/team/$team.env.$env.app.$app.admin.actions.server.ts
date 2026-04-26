@@ -12,10 +12,12 @@ import {
   acquireSyncLock,
   cancelSyncJob,
   forceReleaseSyncJob,
+  getLatestSyncJob,
   getSyncJobById,
   getSyncJobOptions,
   heartbeatSyncJob,
   releaseSyncLock,
+  SYNC_INTERVAL_MS,
   updateSyncJobProgress,
 } from '~/db/sync-jobs.server'
 import { getUserMappings } from '~/db/user-mappings.server'
@@ -327,7 +329,19 @@ export async function action({ request }: { request: Request; params: Record<str
     }
     const jobId = await acquireSyncLock('reverify_app', appId, 10)
     if (!jobId) {
-      return { error: 'En avviksberegning kjører allerede for denne appen' }
+      const latest = await getLatestSyncJob(appId, 'reverify_app')
+      if (latest?.status === 'running') {
+        return { error: 'En avviksberegning kjører allerede for denne appen' }
+      }
+      if (latest?.started_at) {
+        const elapsedMs = Date.now() - new Date(latest.started_at).getTime()
+        const remainingSec = Math.max(1, Math.ceil((SYNC_INTERVAL_MS - elapsedMs) / 1000))
+        const unit = remainingSec === 1 ? 'sekund' : 'sekunder'
+        return {
+          error: `Avviksberegningen ble nettopp kjørt. Vent ${remainingSec} ${unit} før du prøver igjen.`,
+        }
+      }
+      return { error: 'Kunne ikke starte avviksberegning. Prøv igjen om litt.' }
     }
     processComputeDiffsJobAsync(jobId, appId).catch((err) => {
       logger.error(`Compute diffs job ${jobId} failed`, err instanceof Error ? err : new Error(String(err)))
