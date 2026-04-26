@@ -26,7 +26,6 @@ import { type BoardObjectiveProgress, getBoardObjectiveProgress } from '~/db/das
 import { getDevTeamCoverageStats } from '~/db/deployment-goal-links.server'
 import { getAppDeploymentStatsBatch } from '~/db/deployments.server'
 import {
-  addAppToDevTeam,
   getAvailableAppsForDevTeam,
   getDevTeamApplications,
   getDevTeamBySlug,
@@ -41,9 +40,8 @@ import { getSectionBySlug } from '~/db/sections.server'
 import { type DevTeamMember, getDevTeamMembers } from '~/db/user-dev-team-preference.server'
 import { requireUser } from '~/lib/auth.server'
 import { type BoardPeriodType, formatBoardLabel, getPeriodsForYear } from '~/lib/board-periods'
-import { getFormString } from '~/lib/form-validators'
 import { groupAppCards } from '~/lib/group-app-cards'
-import { getApplicationInfo } from '~/lib/nais.server'
+import { fetchAllTeamsAndApplications, getApplicationInfo } from '~/lib/nais.server'
 import type { Route } from './+types/sections.$sectionSlug.teams.$devTeamSlug'
 import type { loader as layoutLoader } from './layout'
 
@@ -57,15 +55,48 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (!devTeam) {
     throw new Response('Utviklingsteam ikke funnet', { status: 404 })
   }
-  const [boards, members, directApps, allApps, alertCounts, activeRepos, availableApps] = await Promise.all([
-    getBoardsByDevTeam(devTeam.id),
-    getDevTeamMembers(devTeam.id).catch(() => [] as DevTeamMember[]),
-    getDevTeamApplications(devTeam.id),
-    getAllMonitoredApplications(),
-    getAllAlertCounts(),
-    getAllActiveRepositories(),
-    getAvailableAppsForDevTeam(devTeam.id),
-  ])
+  const [boards, members, directApps, allApps, alertCounts, activeRepos, availableApps, naisCatalog] =
+    await Promise.all([
+      getBoardsByDevTeam(devTeam.id),
+      getDevTeamMembers(devTeam.id).catch(() => [] as DevTeamMember[]),
+      getDevTeamApplications(devTeam.id),
+      getAllMonitoredApplications(),
+      getAllAlertCounts(),
+      getAllActiveRepositories(),
+      getAvailableAppsForDevTeam(devTeam.id),
+      fetchAllTeamsAndApplications().catch((err) => {
+        // Fall back to "no Nais data" so the team page still loads. The dialog
+        // surfaces the empty state with an explanation.
+        console.error('Kunne ikke hente Nais-katalog:', err)
+        return [] as Array<{ teamSlug: string; appName: string; environmentName: string }>
+      }),
+    ])
+
+  // Merge Nais catalog with monitored state for the add/link dialog.
+  const allowedEnvs =
+    process.env.ALLOWED_ENVIRONMENTS?.split(',')
+      .map((e) => e.trim())
+      .filter(Boolean) ?? []
+  const linkableMap = new Map(availableApps.map((a) => [`${a.team_slug}|${a.environment_name}|${a.app_name}`, a]))
+  const filteredCatalog =
+    allowedEnvs.length > 0 ? naisCatalog.filter((a) => allowedEnvs.includes(a.environmentName)) : naisCatalog
+  const naisApps: NaisAppRow[] = filteredCatalog
+    .map((entry) => {
+      const monitored = linkableMap.get(`${entry.teamSlug}|${entry.environmentName}|${entry.appName}`)
+      return {
+        team_slug: entry.teamSlug,
+        environment_name: entry.environmentName,
+        app_name: entry.appName,
+        monitored_id: monitored?.id ?? null,
+        is_linked: monitored?.is_linked ?? false,
+      }
+    })
+    .sort(
+      (a, b) =>
+        a.team_slug.localeCompare(b.team_slug, 'nb') ||
+        a.app_name.localeCompare(b.app_name, 'nb') ||
+        a.environment_name.localeCompare(b.environment_name, 'nb'),
+    )
 
   const activeBoard = boards.find((b) => b.is_active) ?? null
   const activeBoardProgress = activeBoard ? await getBoardObjectiveProgress(activeBoard.id) : []
@@ -127,13 +158,21 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     activeBoardProgress,
     members,
     appCards,
-    availableApps,
+    naisApps,
     sectionSlug: params.sectionSlug,
     sectionName: section?.name ?? params.sectionSlug,
     teamCoverage,
     hasMappedMembers,
     unmappedMemberCount: members.length - deployerUsernames.length,
   }
+}
+
+type NaisAppRow = {
+  team_slug: string
+  environment_name: string
+  app_name: string
+  monitored_id: number | null
+  is_linked: boolean
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
@@ -147,8 +186,7 @@ export async function action({ request, params }: Route.ActionArgs) {
   const intent = formData.get('intent') as string
 
   // App management requires admin or team membership
-  const appIntents = ['update_apps', 'add_app']
-  if (appIntents.includes(intent) && user.role !== 'admin') {
+  if (intent === 'update_apps' && user.role !== 'admin') {
     const teamMembers = await getDevTeamMembers(devTeam.id)
     const isMember = teamMembers.some((m) => m.nav_ident.toUpperCase() === user.navIdent.toUpperCase())
     if (!isMember) {
@@ -157,69 +195,53 @@ export async function action({ request, params }: Route.ActionArgs) {
   }
 
   if (intent === 'update_apps') {
-    const appIds = formData
-      .getAll('app_ids')
-      .map(Number)
-      .filter((n) => !Number.isNaN(n) && n > 0)
-    try {
-      await setDevTeamApplications(devTeam.id, appIds, user.navIdent)
-      return { success: 'Applikasjoner oppdatert.' }
-    } catch (error) {
-      return { error: `Kunne ikke oppdatere applikasjoner: ${error}` }
-    }
-  }
-
-  if (intent === 'add_app') {
-    const teamSlug = getFormString(formData, 'team_slug')
-    const environmentName = getFormString(formData, 'environment_name')
-    const appName = getFormString(formData, 'app_name')
-    const auditStartYearRaw = getFormString(formData, 'audit_start_year')
-
-    if (!teamSlug || !environmentName || !appName) {
-      return { error: 'Alle felt er påkrevd for å legge til ny applikasjon.' }
-    }
-
-    let auditStartYear: number | null | undefined
-    if (auditStartYearRaw) {
-      const currentYear = new Date().getFullYear()
-      const parsed = /^\d+$/.test(auditStartYearRaw) ? Number(auditStartYearRaw) : Number.NaN
-      if (!Number.isInteger(parsed) || parsed < 2000 || parsed > currentYear + 1) {
-        return { error: `Startår må være et helt tall mellom 2000 og ${currentYear + 1}.` }
+    /**
+     * Each `app_ref` entry is either:
+     *   - "id:<n>"             → existing monitored_application id, link as-is
+     *   - "new:<team>|<env>|<app>"  → not yet monitored; create then link
+     *
+     * The new-entry path validates against Nais (defense-in-depth on top of
+     * the UI-only filter) so we never insert a row that can't sync.
+     */
+    const refs = formData.getAll('app_ref').map(String)
+    const existingIds: number[] = []
+    const newIdentities: Array<{ team_slug: string; environment_name: string; app_name: string }> = []
+    for (const ref of refs) {
+      if (ref.startsWith('id:')) {
+        const n = Number(ref.slice(3))
+        if (Number.isInteger(n) && n > 0) existingIds.push(n)
+      } else if (ref.startsWith('new:')) {
+        const [team, env, app] = ref.slice(4).split('|')
+        if (team && env && app) {
+          newIdentities.push({ team_slug: team, environment_name: env, app_name: app })
+        }
       }
-      auditStartYear = parsed
     }
 
     try {
-      // Validate against Nais before persisting. Without this, a typo (or
-      // typing the app name into the team field, etc.) silently creates a
-      // monitored_application row that can never sync — the resulting Nais
-      // GraphQL error ("A team slug must be at most 30 characters long.")
-      // only surfaces hours later in the periodic sync logs.
-      const found = await getApplicationInfo(teamSlug, environmentName, appName)
-      if (!found) {
-        // Try the swapped order to detect the common "fields swapped" mistake
-        // and give a precise hint instead of a generic "not found" error.
-        const swapped = await getApplicationInfo(appName, environmentName, teamSlug)
-        if (swapped) {
+      const createdIds: number[] = []
+      for (const id of newIdentities) {
+        const found = await getApplicationInfo(id.team_slug, id.environment_name, id.app_name)
+        if (!found) {
           return {
-            error: `Fant ikke ${appName} i ${teamSlug}/${environmentName}, men fant ${teamSlug} i ${appName}/${environmentName}. Har du forvekslet «Nais-team» og «Applikasjonsnavn»?`,
+            error: `Fant ikke ${id.app_name} i Nais-team ${id.team_slug} (miljø ${id.environment_name}). Last siden på nytt og prøv igjen.`,
           }
         }
-        return {
-          error: `Fant ikke ${appName} i Nais-team ${teamSlug} (miljø ${environmentName}). Sjekk at navnene er riktige.`,
-        }
+        const monitoredApp = await createMonitoredApplication({
+          team_slug: id.team_slug,
+          environment_name: id.environment_name,
+          app_name: id.app_name,
+        })
+        createdIds.push(monitoredApp.id)
       }
-
-      const monitoredApp = await createMonitoredApplication({
-        team_slug: teamSlug,
-        environment_name: environmentName,
-        app_name: appName,
-        ...(auditStartYear !== undefined ? { audit_start_year: auditStartYear } : {}),
-      })
-      await addAppToDevTeam(devTeam.id, monitoredApp.id)
-      return { success: `La til ${appName} (${environmentName}) og koblet den til teamet.` }
+      await setDevTeamApplications(devTeam.id, [...existingIds, ...createdIds], user.navIdent)
+      const createdMsg =
+        createdIds.length > 0
+          ? ` (${createdIds.length} ny${createdIds.length === 1 ? '' : 'e'} app${createdIds.length === 1 ? '' : 'er'} lagt til overvåking)`
+          : ''
+      return { success: `Applikasjoner oppdatert${createdMsg}.` }
     } catch (error) {
-      return { error: `Kunne ikke legge til applikasjon: ${error}` }
+      return { error: `Kunne ikke oppdatere applikasjoner: ${error}` }
     }
   }
 
@@ -260,7 +282,7 @@ export default function DevTeamPage() {
     activeBoardProgress,
     members,
     appCards,
-    availableApps,
+    naisApps,
     sectionSlug,
     teamCoverage,
     hasMappedMembers,
@@ -393,7 +415,7 @@ export default function DevTeamPage() {
       <AddAppsDialog
         ref={addAppsRef}
         devTeamId={devTeam.id}
-        availableApps={availableApps}
+        naisApps={naisApps}
         isSubmitting={navigation.state === 'submitting'}
       />
     </VStack>
@@ -545,31 +567,28 @@ function ActiveBoardSection({
 
 import { forwardRef } from 'react'
 
-type AvailableApp = { id: number; team_slug: string; environment_name: string; app_name: string; is_linked: boolean }
-
 const AddAppsDialog = forwardRef<
   HTMLDialogElement,
-  { devTeamId: number; availableApps: AvailableApp[]; isSubmitting: boolean }
->(function AddAppsDialog({ devTeamId, availableApps, isSubmitting }, ref) {
+  { devTeamId: number; naisApps: NaisAppRow[]; isSubmitting: boolean }
+>(function AddAppsDialog({ devTeamId, naisApps, isSubmitting }, ref) {
   const [search, setSearch] = useState('')
-  const [showAddNew, setShowAddNew] = useState(false)
 
   const searchLower = search.toLowerCase()
   const filteredApps = useMemo(
     () =>
       search
-        ? availableApps.filter(
+        ? naisApps.filter(
             (app) =>
               app.app_name.toLowerCase().includes(searchLower) ||
               app.team_slug.toLowerCase().includes(searchLower) ||
               app.environment_name.toLowerCase().includes(searchLower),
           )
-        : availableApps,
-    [availableApps, search, searchLower],
+        : naisApps,
+    [naisApps, search, searchLower],
   )
 
   const appsByNaisTeam = useMemo(() => {
-    const grouped = new Map<string, AvailableApp[]>()
+    const grouped = new Map<string, NaisAppRow[]>()
     for (const app of filteredApps) {
       const group = grouped.get(app.team_slug) ?? []
       group.push(app)
@@ -578,133 +597,85 @@ const AddAppsDialog = forwardRef<
     return grouped
   }, [filteredApps])
 
-  const environments = useMemo(() => [...new Set(availableApps.map((a) => a.environment_name))].sort(), [availableApps])
-  const currentYear = new Date().getFullYear()
-
   const closeModal = () => {
     if (typeof ref === 'object' && ref?.current) ref.current.close()
   }
 
+  // Encode each row as either id:<n> (already monitored) or new:<t>|<e>|<a>.
+  // The action handler materializes new rows and then replaces the team's
+  // links in one call, so this single submit covers both link and add+link.
+  const refValue = (app: NaisAppRow) =>
+    app.monitored_id !== null
+      ? `id:${app.monitored_id}`
+      : `new:${app.team_slug}|${app.environment_name}|${app.app_name}`
+
   return (
-    <Modal ref={ref} header={{ heading: 'Legg til applikasjoner' }} closeOnBackdropClick width="600px">
+    <Modal ref={ref} header={{ heading: 'Legg til / koble applikasjoner' }} closeOnBackdropClick width="640px">
       <Modal.Body>
-        <VStack gap="space-16">
-          {/* Link existing apps */}
-          <Form
-            method="post"
-            id="update-apps-form"
-            onSubmit={() => {
-              closeModal()
-            }}
-          >
-            <input type="hidden" name="intent" value="update_apps" />
-            <input type="hidden" name="id" value={devTeamId} />
-            <VStack gap="space-12">
-              <TextField
-                label="Søk etter applikasjon"
-                hideLabel
-                placeholder="Søk etter applikasjon..."
-                size="small"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                autoComplete="off"
-              />
-              <Box style={{ maxHeight: '400px', overflowY: 'auto' }} paddingInline="space-4" paddingBlock="space-4">
-                {filteredApps.length === 0 ? (
-                  <BodyShort size="small" textColor="subtle">
-                    {search ? 'Ingen applikasjoner matcher søket.' : 'Ingen overvåkede applikasjoner funnet.'}
-                  </BodyShort>
-                ) : (
-                  <VStack gap="space-16">
-                    {[...appsByNaisTeam.entries()].map(([naisTeam, apps]) => (
-                      <CheckboxGroup key={naisTeam} legend={naisTeam} size="small">
-                        {apps.map((app) => (
-                          <Checkbox key={app.id} name="app_ids" value={String(app.id)} defaultChecked={app.is_linked}>
-                            {app.app_name}{' '}
+        <Form
+          method="post"
+          id="update-apps-form"
+          onSubmit={() => {
+            closeModal()
+          }}
+        >
+          <input type="hidden" name="intent" value="update_apps" />
+          <input type="hidden" name="id" value={devTeamId} />
+          <VStack gap="space-12">
+            <BodyShort size="small" textColor="subtle">
+              Lista viser alle applikasjoner i Nais. Apper som allerede er overvåket har grå merkelapp; nye apper
+              opprettes automatisk når du krysser dem av og lagrer.
+            </BodyShort>
+            <TextField
+              label="Søk etter applikasjon"
+              hideLabel
+              placeholder="Søk etter applikasjon, team eller miljø..."
+              size="small"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              autoComplete="off"
+            />
+            <Box style={{ maxHeight: '400px', overflowY: 'auto' }} paddingInline="space-4" paddingBlock="space-4">
+              {filteredApps.length === 0 ? (
+                <BodyShort size="small" textColor="subtle">
+                  {search ? 'Ingen applikasjoner matcher søket.' : 'Ingen applikasjoner funnet i Nais.'}
+                </BodyShort>
+              ) : (
+                <VStack gap="space-16">
+                  {[...appsByNaisTeam.entries()].map(([naisTeam, apps]) => (
+                    <CheckboxGroup key={naisTeam} legend={naisTeam} size="small">
+                      {apps.map((app) => (
+                        <Checkbox
+                          key={`${app.team_slug}|${app.environment_name}|${app.app_name}`}
+                          name="app_ref"
+                          value={refValue(app)}
+                          defaultChecked={app.is_linked}
+                        >
+                          <HStack gap="space-8" align="center" wrap>
+                            <span>{app.app_name}</span>
                             <BodyShort as="span" size="small" textColor="subtle">
                               ({app.environment_name})
                             </BodyShort>
-                          </Checkbox>
-                        ))}
-                      </CheckboxGroup>
-                    ))}
-                  </VStack>
-                )}
-              </Box>
-            </VStack>
-          </Form>
-
-          {/* Add new unmonitored app */}
-          {!showAddNew ? (
-            <Button variant="tertiary" size="small" icon={<PlusIcon aria-hidden />} onClick={() => setShowAddNew(true)}>
-              Legg til ny applikasjon som ikke er overvåket
-            </Button>
-          ) : (
-            <Box background="neutral-soft" padding="space-16" borderRadius="4">
-              <Form
-                method="post"
-                onSubmit={() => {
-                  setShowAddNew(false)
-                }}
-              >
-                <input type="hidden" name="intent" value="add_app" />
-                <VStack gap="space-12">
-                  <Heading level="3" size="xsmall">
-                    Legg til ny applikasjon
-                  </Heading>
-                  <HStack gap="space-8" wrap>
-                    <TextField
-                      label="Nais-team"
-                      name="team_slug"
-                      size="small"
-                      autoComplete="off"
-                      description="Slug fra Nais (typisk teamnavnet)"
-                    />
-                    <Select label="Miljø" name="environment_name" size="small">
-                      {environments.length > 0 ? (
-                        environments.map((env) => (
-                          <option key={env} value={env}>
-                            {env}
-                          </option>
-                        ))
-                      ) : (
-                        <>
-                          <option value="prod-gcp">prod-gcp</option>
-                          <option value="prod-fss">prod-fss</option>
-                        </>
-                      )}
-                    </Select>
-                    <TextField
-                      label="Applikasjonsnavn"
-                      name="app_name"
-                      size="small"
-                      autoComplete="off"
-                      description="Navnet på applikasjonen i Nais"
-                    />
-                    <TextField
-                      label="Startår for revisjon"
-                      name="audit_start_year"
-                      size="small"
-                      type="number"
-                      defaultValue={String(currentYear)}
-                      htmlSize={6}
-                      min={2000}
-                      max={currentYear + 1}
-                    />
-                  </HStack>
-                  <HStack gap="space-8">
-                    <Button type="submit" size="small" loading={isSubmitting}>
-                      Legg til og koble
-                    </Button>
-                    <Button variant="tertiary" size="small" type="button" onClick={() => setShowAddNew(false)}>
-                      Avbryt
-                    </Button>
-                  </HStack>
+                            {app.monitored_id === null && (
+                              <Tag size="xsmall" variant="info">
+                                Ny i overvåking
+                              </Tag>
+                            )}
+                            {app.is_linked && (
+                              <Tag size="xsmall" variant="neutral">
+                                Allerede koblet
+                              </Tag>
+                            )}
+                          </HStack>
+                        </Checkbox>
+                      ))}
+                    </CheckboxGroup>
+                  ))}
                 </VStack>
-              </Form>
+              )}
             </Box>
-          )}
-        </VStack>
+          </VStack>
+        </Form>
       </Modal.Body>
       <Modal.Footer>
         <Button type="submit" form="update-apps-form" size="small" loading={isSubmitting}>

@@ -29,10 +29,17 @@ import { Pool } from 'pg'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import { seedApp } from './helpers'
 
-const ORPHAN_MIGRATION_FILE = '1772700000000_populate-missing-github-pr-urls.sql'
 const ORPHAN_MIGRATION_NAME = '1772700000000_populate-missing-github-pr-urls'
-const NEW_MIGRATION_FILE = '1772800000000_backfill-github-pr-url-from-pr-number.sql'
 const NEW_MIGRATION_NAME = '1772800000000_backfill-github-pr-url-from-pr-number'
+
+/**
+ * Anything from the orphan onwards is excluded from the "old prod state"
+ * step so that re-running with the orphan file present doesn't trip
+ * node-pg-migrate's checkOrder. Without this, any migration added AFTER
+ * 1772800 (with a higher timestamp) would be registered in step 3 and then
+ * cause checkOrder to refuse the not-yet-run 1772800 in step 5.
+ */
+const EXCLUDE_FROM_BASELINE_PREFIX = 1772700000000n
 
 const realMigrationsDir = join(process.cwd(), 'app/db/migrations')
 
@@ -48,13 +55,16 @@ describe('Migration runs cleanly against orphan pgmigrations row (prod scenario)
     databaseUrl = container.getConnectionUri()
     pool = new Pool({ connectionString: databaseUrl })
 
-    // 2. Set up a tmp migrations dir that omits BOTH the placeholder and the
-    //    new backfill so we can reproduce the prod state where the orphan was
-    //    registered without having a local file to align with.
+    // 2. Set up a tmp migrations dir that omits the orphan AND every
+    //    migration with a timestamp at or after the orphan's. This recreates
+    //    the prod baseline as it existed when the orphan was first run, so
+    //    later additions don't pollute pgmigrations during the baseline step.
     tmpMigrationsDir = join(tmpdir(), `nda-migrations-${Date.now()}`)
     mkdirSync(tmpMigrationsDir, { recursive: true })
     for (const file of readdirSync(realMigrationsDir)) {
-      if (file === NEW_MIGRATION_FILE || file === ORPHAN_MIGRATION_FILE) continue
+      const tsMatch = file.match(/^(\d+)_/)
+      const ts = tsMatch ? BigInt(tsMatch[1]) : null
+      if (ts !== null && ts >= EXCLUDE_FROM_BASELINE_PREFIX) continue
       copyFileSync(join(realMigrationsDir, file), join(tmpMigrationsDir, file))
     }
 
@@ -115,9 +125,14 @@ describe('Migration runs cleanly against orphan pgmigrations row (prod scenario)
     )
 
     // Add BOTH the placeholder (to align with the orphan in pgmigrations) AND
-    // the new migration to the tmp dir, then run again — simulates deploy.
-    copyFileSync(join(realMigrationsDir, ORPHAN_MIGRATION_FILE), join(tmpMigrationsDir, ORPHAN_MIGRATION_FILE))
-    copyFileSync(join(realMigrationsDir, NEW_MIGRATION_FILE), join(tmpMigrationsDir, NEW_MIGRATION_FILE))
+    // every later migration (orphan + new + anything added since) to the tmp
+    // dir, then run again — simulates deploy of the latest schema.
+    for (const file of readdirSync(realMigrationsDir)) {
+      const tsMatch = file.match(/^(\d+)_/)
+      const ts = tsMatch ? BigInt(tsMatch[1]) : null
+      if (ts === null || ts < EXCLUDE_FROM_BASELINE_PREFIX) continue
+      copyFileSync(join(realMigrationsDir, file), join(tmpMigrationsDir, file))
+    }
 
     await expect(
       runner({
