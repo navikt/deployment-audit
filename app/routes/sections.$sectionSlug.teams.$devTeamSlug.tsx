@@ -360,7 +360,7 @@ export default function DevTeamPage() {
         {appCards.length > 0 ? (
           <VStack gap="space-4">
             {appCards.map((app) => (
-              <AppCard key={app.id} app={app} />
+              <AppCard key={app.id} app={app} appendSearchParams={`team=${encodeURIComponent(devTeam.slug)}`} />
             ))}
           </VStack>
         ) : (
