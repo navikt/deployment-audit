@@ -8,6 +8,7 @@
 
 import {
   Link as AkselLink,
+  Alert,
   BodyShort,
   Box,
   Button,
@@ -223,12 +224,14 @@ export default function VerificationDiffPage() {
 
   // Handle compute_diffs trigger response from admin page
   const triggerFetcher = useFetcher()
+  const triggerData = triggerFetcher.data as { computeDiffsJobStarted?: number; error?: string } | undefined
   useEffect(() => {
-    const data = triggerFetcher.data as { computeDiffsJobStarted?: number; error?: string } | undefined
-    if (data?.computeDiffsJobStarted) {
-      setActiveJobId(data.computeDiffsJobStarted)
+    if (triggerData?.computeDiffsJobStarted) {
+      setActiveJobId(triggerData.computeDiffsJobStarted)
     }
-  }, [triggerFetcher.data])
+  }, [triggerData])
+
+  const triggerError = triggerFetcher.state === 'idle' ? (triggerData?.error ?? null) : null
 
   const isComputing = !!activeJobId || triggerFetcher.state !== 'idle'
 
@@ -295,6 +298,13 @@ export default function VerificationDiffPage() {
                     : 'Beregner avvik i bakgrunnen…'}
                 </Detail>
               </HStack>
+            </Box>
+          )}
+          {triggerError && !isComputing && (
+            <Box marginBlock="space-2 space-0">
+              <Alert variant="warning" size="small">
+                {triggerError}
+              </Alert>
             </Box>
           )}
         </Box>
