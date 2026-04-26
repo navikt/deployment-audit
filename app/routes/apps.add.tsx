@@ -73,8 +73,24 @@ export async function action({ request }: Route.ActionArgs) {
     }
 
     try {
-      // Get app info to find repository
+      // Get app info to find repository — also use it as a validation guard.
+      // The form populates team/app from Nais data, but a swap or stale UI
+      // could still feed mismatched values. Reject up front rather than
+      // creating a row that can never sync.
       const appInfo = await getApplicationInfo(teamSlug, environmentName, appName)
+      if (!appInfo) {
+        const swapped = await getApplicationInfo(appName, environmentName, teamSlug)
+        if (swapped) {
+          return {
+            error: `Fant ikke ${appName} i ${teamSlug}/${environmentName}, men fant ${teamSlug} i ${appName}/${environmentName}. Har Nais-team og applikasjonsnavn blitt forvekslet?`,
+            success: null,
+          }
+        }
+        return {
+          error: `Fant ikke ${appName} i Nais-team ${teamSlug} (miljø ${environmentName}).`,
+          success: null,
+        }
+      }
 
       // Create monitored application
       const monitoredApp = await createMonitoredApplication({
