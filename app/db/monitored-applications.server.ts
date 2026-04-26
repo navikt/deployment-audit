@@ -107,6 +107,7 @@ export async function createMonitoredApplication(data: {
         VALUES ($1, $2, $3, $4)
         ON CONFLICT (team_slug, environment_name, app_name)
         DO UPDATE SET
+          is_active = true,
           updated_at = CURRENT_TIMESTAMP
         RETURNING *`
       : `INSERT INTO monitored_applications
@@ -114,6 +115,7 @@ export async function createMonitoredApplication(data: {
         VALUES ($1, $2, $3)
         ON CONFLICT (team_slug, environment_name, app_name)
         DO UPDATE SET
+          is_active = true,
           updated_at = CURRENT_TIMESTAMP
         RETURNING *`,
     hasAuditYear
