@@ -177,8 +177,8 @@ describe('application-groups CRUD', () => {
     expect(siblings).toEqual([])
   })
 
-  it('deleteGroup should remove the group and unlink all apps', async () => {
-    const { createApplicationGroup, addAppToGroup, deleteGroup, getGroupByAppId } = await import(
+  it('deleteGroup should soft-delete the group and unlink all apps', async () => {
+    const { createApplicationGroup, addAppToGroup, deleteGroup, getGroupByAppId, getAllGroups } = await import(
       '~/db/application-groups.server'
     )
     const group = await createApplicationGroup('my-service')
@@ -187,15 +187,29 @@ describe('application-groups CRUD', () => {
     await addAppToGroup(group.id, app1)
     await addAppToGroup(group.id, app2)
 
-    await deleteGroup(group.id)
+    await deleteGroup(group.id, 'A123456')
 
     const group1 = await getGroupByAppId(app1)
     const group2 = await getGroupByAppId(app2)
     expect(group1).toBeNull()
     expect(group2).toBeNull()
 
-    const { rows } = await pool.query('SELECT * FROM application_groups WHERE id = $1', [group.id])
-    expect(rows).toHaveLength(0)
+    // getGroupWithApps also filters soft-deleted groups.
+    const { getGroupWithApps } = await import('~/db/application-groups.server')
+    expect(await getGroupWithApps(group.id)).toBeNull()
+
+    // Group row is preserved (soft delete) with audit fields populated.
+    const { rows } = await pool.query<{ deleted_at: Date | null; deleted_by: string | null }>(
+      'SELECT deleted_at, deleted_by FROM application_groups WHERE id = $1',
+      [group.id],
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0].deleted_at).not.toBeNull()
+    expect(rows[0].deleted_by).toBe('A123456')
+
+    // Soft-deleted group is filtered out of current-state listings.
+    const all = await getAllGroups()
+    expect(all.find((g) => g.id === group.id)).toBeUndefined()
   })
 
   it('getAllGroups should return all groups with app counts', async () => {

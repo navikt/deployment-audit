@@ -43,7 +43,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  await requireAdmin(request)
+  const user = await requireAdmin(request)
   const formData = await request.formData()
   const intent = formData.get('intent') as string
 
@@ -59,7 +59,7 @@ export async function action({ request }: Route.ActionArgs) {
     const groupId = parseInt(formData.get('group_id') as string, 10)
     if (!groupId) return { error: 'Ugyldig gruppe-ID' }
 
-    await deleteGroup(groupId)
+    await deleteGroup(groupId, user.navIdent)
     return { success: 'Gruppe slettet' }
   }
 
