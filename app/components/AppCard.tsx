@@ -8,6 +8,7 @@ import {
 import { BodyShort, Box, Detail, Hide, HStack, Show, Tag, VStack } from '@navikt/ds-react'
 import { Link } from 'react-router'
 import styles from '../styles/common.module.css'
+import { ExternalLink } from './ExternalLink'
 
 interface AppStats {
   total: number
@@ -134,9 +135,7 @@ export function AppCard({ app, showEnvironment = true }: AppCardProps) {
         {/* Repository row */}
         <Detail textColor="subtle">
           {app.active_repo ? (
-            <a href={`https://github.com/${app.active_repo}`} target="_blank" rel="noopener noreferrer">
-              {app.active_repo}
-            </a>
+            <ExternalLink href={`https://github.com/${app.active_repo}`}>{app.active_repo}</ExternalLink>
           ) : (
             '(ingen aktivt repo)'
           )}

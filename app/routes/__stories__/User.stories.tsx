@@ -1,18 +1,8 @@
-import { ExternalLinkIcon, PlusIcon } from '@navikt/aksel-icons'
-import {
-  Link as AkselLink,
-  Alert,
-  BodyShort,
-  Box,
-  Button,
-  Detail,
-  Heading,
-  HGrid,
-  HStack,
-  VStack,
-} from '@navikt/ds-react'
+import { PlusIcon } from '@navikt/aksel-icons'
+import { Alert, BodyShort, Box, Button, Detail, Heading, HGrid, HStack, VStack } from '@navikt/ds-react'
 import type { Meta, StoryObj } from '@storybook/react'
 import { Link } from 'react-router'
+import { ExternalLink } from '~/components/ExternalLink'
 import { mockDeployments, mockUserMapping } from './mock-data'
 
 type UserMapping = {
@@ -65,9 +55,7 @@ function UserPage({
         <Box padding="space-16" borderRadius="8" background="sunken">
           <VStack gap="space-4">
             <Detail textColor="subtle">GitHub</Detail>
-            <AkselLink href={`https://github.com/${username}`} target="_blank">
-              {username} <ExternalLinkIcon aria-hidden />
-            </AkselLink>
+            <ExternalLink href={`https://github.com/${username}`}>{username}</ExternalLink>
           </VStack>
         </Box>
 
@@ -84,9 +72,9 @@ function UserPage({
           <Box padding="space-16" borderRadius="8" background="sunken">
             <VStack gap="space-4">
               <Detail textColor="subtle">Teamkatalogen</Detail>
-              <AkselLink href={`https://teamkatalogen.nav.no/resource/${mapping.nav_ident}`} target="_blank">
-                {mapping.nav_ident} <ExternalLinkIcon aria-hidden />
-              </AkselLink>
+              <ExternalLink href={`https://teamkatalogen.nav.no/resource/${mapping.nav_ident}`}>
+                {mapping.nav_ident}
+              </ExternalLink>
             </VStack>
           </Box>
         )}
@@ -95,9 +83,9 @@ function UserPage({
           <Box padding="space-16" borderRadius="8" background="sunken">
             <VStack gap="space-4">
               <Detail textColor="subtle">Slack</Detail>
-              <AkselLink href={`https://nav-it.slack.com/team/${mapping.slack_member_id}`} target="_blank">
-                Åpne i Slack <ExternalLinkIcon aria-hidden />
-              </AkselLink>
+              <ExternalLink href={`https://nav-it.slack.com/team/${mapping.slack_member_id}`}>
+                Åpne i Slack
+              </ExternalLink>
             </VStack>
           </Box>
         )}

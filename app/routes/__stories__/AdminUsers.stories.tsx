@@ -1,8 +1,9 @@
-import { ExternalLinkIcon, PencilIcon, PlusIcon, TrashIcon } from '@navikt/aksel-icons'
+import { PencilIcon, PlusIcon, TrashIcon } from '@navikt/aksel-icons'
 import { Alert, BodyShort, Box, Button, Detail, Heading, HStack, Modal, Show, VStack } from '@navikt/ds-react'
 import type { Meta, StoryObj } from '@storybook/react'
 import { useRef, useState } from 'react'
 import { Link } from 'react-router'
+import { ExternalLink } from '~/components/ExternalLink'
 import styles from '~/styles/common.module.css'
 
 type UserMapping = {
@@ -122,33 +123,19 @@ function AdminUsersPage({ mappings, unmappedUsers }: { mappings: UserMapping[]; 
                   </HStack>
 
                   <HStack gap="space-16" wrap>
-                    <a href={`https://github.com/${mapping.github_username}`} target="_blank" rel="noopener noreferrer">
-                      <Detail textColor="subtle">
-                        GitHub: {mapping.github_username} <ExternalLinkIcon aria-hidden fontSize="0.75rem" />
-                      </Detail>
-                    </a>
+                    <ExternalLink href={`https://github.com/${mapping.github_username}`}>
+                      <Detail textColor="subtle">GitHub: {mapping.github_username}</Detail>
+                    </ExternalLink>
                     {mapping.nav_email && <Detail textColor="subtle">{mapping.nav_email}</Detail>}
                     {mapping.nav_ident && (
-                      <a
-                        href={`https://teamkatalogen.nav.no/resource/${mapping.nav_ident}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <Detail textColor="subtle">
-                          Teamkatalogen: {mapping.nav_ident} <ExternalLinkIcon aria-hidden fontSize="0.75rem" />
-                        </Detail>
-                      </a>
+                      <ExternalLink href={`https://teamkatalogen.nav.no/resource/${mapping.nav_ident}`}>
+                        <Detail textColor="subtle">Teamkatalogen: {mapping.nav_ident}</Detail>
+                      </ExternalLink>
                     )}
                     {mapping.slack_member_id && (
-                      <a
-                        href={`https://nav-it.slack.com/team/${mapping.slack_member_id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <Detail textColor="subtle">
-                          Slack: {mapping.slack_member_id} <ExternalLinkIcon aria-hidden fontSize="0.75rem" />
-                        </Detail>
-                      </a>
+                      <ExternalLink href={`https://nav-it.slack.com/team/${mapping.slack_member_id}`}>
+                        <Detail textColor="subtle">Slack: {mapping.slack_member_id}</Detail>
+                      </ExternalLink>
                     )}
                     {!mapping.nav_email && !mapping.nav_ident && !mapping.slack_member_id && (
                       <Detail textColor="subtle">Ingen tilleggsinformasjon</Detail>

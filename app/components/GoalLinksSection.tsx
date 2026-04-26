@@ -1,21 +1,10 @@
 import { LinkIcon, PlusIcon, TrashIcon } from '@navikt/aksel-icons'
-import {
-  Link as AkselLink,
-  BodyShort,
-  Box,
-  Button,
-  Heading,
-  HStack,
-  Select,
-  Tabs,
-  Tag,
-  TextField,
-  VStack,
-} from '@navikt/ds-react'
+import { BodyShort, Box, Button, Heading, HStack, Select, Tabs, Tag, TextField, VStack } from '@navikt/ds-react'
 import { useState } from 'react'
 import { Form } from 'react-router'
 import type { DeploymentGoalLinkWithDetails } from '~/db/deployment-goal-links.server'
 import { formatBoardLabel } from '~/lib/board-periods'
+import { ExternalLink } from './ExternalLink'
 
 const LINK_METHOD_LABELS: Record<string, string> = {
   manual: 'Manuell',
@@ -103,9 +92,7 @@ function GoalLinkItem({ link }: { link: DeploymentGoalLinkWithDetails }) {
           <LinkIcon aria-hidden />
           <div>
             {link.external_url ? (
-              <AkselLink href={link.external_url} target="_blank" rel="noopener noreferrer">
-                {label}
-              </AkselLink>
+              <ExternalLink href={link.external_url}>{label}</ExternalLink>
             ) : (
               <BodyShort weight="semibold">{label}</BodyShort>
             )}

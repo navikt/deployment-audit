@@ -21,6 +21,7 @@ import {
 } from '@navikt/ds-react'
 import type { Meta, StoryObj } from '@storybook/react'
 import { Form, Link } from 'react-router'
+import { ExternalLink } from '~/components/ExternalLink'
 import { StatCard } from '~/components/StatCard'
 import {
   mockAlert,
@@ -279,13 +280,9 @@ function AppDetailPage({
             <VStack gap="space-8">
               <Label>Aktivt repository</Label>
               <HStack gap="space-8" align="center">
-                <a
-                  href={`https://github.com/${activeRepo.github_owner}/${activeRepo.github_repo_name}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
+                <ExternalLink href={`https://github.com/${activeRepo.github_owner}/${activeRepo.github_repo_name}`}>
                   {activeRepo.github_owner}/{activeRepo.github_repo_name}
-                </a>
+                </ExternalLink>
                 <Tag data-color="success" size="xsmall" variant="outline">
                   AKTIV
                 </Tag>

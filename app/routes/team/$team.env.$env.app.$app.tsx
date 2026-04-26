@@ -32,6 +32,7 @@ import {
 import { useState } from 'react'
 import { Form, Link, useActionData, useLoaderData, useRouteLoaderData, useSearchParams } from 'react-router'
 import { ActionAlert } from '~/components/ActionAlert'
+import { ExternalLink } from '~/components/ExternalLink'
 import { StatCard } from '~/components/StatCard'
 import { getUnresolvedAlertsByApp, resolveRepositoryAlert } from '~/db/alerts.server'
 import { updateImplicitApprovalSettings } from '~/db/app-settings.server'
@@ -549,12 +550,9 @@ export default function AppDetail() {
             <VStack gap="space-8">
               <Label>Aktivt repository</Label>
               <HStack gap="space-8" align="center">
-                <Link
-                  to={`https://github.com/${activeRepo.github_owner}/${activeRepo.github_repo_name}`}
-                  target="_blank"
-                >
+                <ExternalLink href={`https://github.com/${activeRepo.github_owner}/${activeRepo.github_repo_name}`}>
                   {activeRepo.github_owner}/{activeRepo.github_repo_name}
-                </Link>
+                </ExternalLink>
                 <Tag data-color="success" size="xsmall" variant="outline">
                   AKTIV
                 </Tag>
@@ -578,11 +576,11 @@ export default function AppDetail() {
                     <VStack gap="space-12">
                       <HStack gap="space-8" align="center" justify="space-between" wrap>
                         <HStack gap="space-8" align="center">
-                          <Link to={`https://github.com/${repo.github_owner}/${repo.github_repo_name}`} target="_blank">
+                          <ExternalLink href={`https://github.com/${repo.github_owner}/${repo.github_repo_name}`}>
                             <BodyShort weight="semibold">
                               {repo.github_owner}/{repo.github_repo_name}
                             </BodyShort>
-                          </Link>
+                          </ExternalLink>
                           <Tag data-color="warning" size="xsmall" variant="outline">
                             Venter
                           </Tag>
@@ -632,11 +630,11 @@ export default function AppDetail() {
                   <Box key={repo.id} padding="space-16" borderRadius="8" background="sunken">
                     <HStack gap="space-8" align="center" justify="space-between" wrap>
                       <HStack gap="space-8" align="center" wrap>
-                        <Link to={`https://github.com/${repo.github_owner}/${repo.github_repo_name}`} target="_blank">
+                        <ExternalLink href={`https://github.com/${repo.github_owner}/${repo.github_repo_name}`}>
                           <BodyShort>
                             {repo.github_owner}/{repo.github_repo_name}
                           </BodyShort>
-                        </Link>
+                        </ExternalLink>
                         {repo.redirects_to_owner && (
                           <Tag data-color="info" size="xsmall" variant="outline">
                             → {repo.redirects_to_owner}/{repo.redirects_to_repo}

@@ -6,6 +6,7 @@
 
 import { Alert, BodyShort, Box, Button, Heading, HStack, TextField, VStack } from '@navikt/ds-react'
 import { Form, useActionData, useLoaderData } from 'react-router'
+import { ExternalLink } from '~/components/ExternalLink'
 import { requireAdmin } from '~/lib/auth.server'
 import type { DeploymentNotification } from '~/lib/slack'
 import { isSlackConfigured, sendDeploymentNotification } from '~/lib/slack/client.server'
@@ -147,10 +148,7 @@ export default function SlackAdminPage() {
             </Heading>
             <ol style={{ paddingLeft: 'var(--ax-space-24)', margin: 0 }}>
               <li>
-                Gå til{' '}
-                <a href="https://api.slack.com/apps" target="_blank" rel="noopener noreferrer">
-                  api.slack.com/apps
-                </a>
+                Gå til <ExternalLink href="https://api.slack.com/apps">api.slack.com/apps</ExternalLink>
               </li>
               <li>Klikk "Create New App" → "From scratch"</li>
               <li>Gi appen et navn og velg workspace</li>

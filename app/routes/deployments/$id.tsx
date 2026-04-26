@@ -7,7 +7,6 @@ import {
   ClockIcon,
   DownloadIcon,
   ExclamationmarkTriangleIcon,
-  ExternalLinkIcon,
   MinusCircleIcon,
   TrashIcon,
   XMarkIcon,
@@ -41,6 +40,7 @@ import { Form, Link, useSearchParams } from 'react-router'
 import { ActionAlert } from '~/components/ActionAlert'
 import { CheckAnnotations } from '~/components/CheckAnnotations'
 import { CheckLogViewer } from '~/components/CheckLogViewer'
+import { ExternalLink } from '~/components/ExternalLink'
 import { GoalLinksSection } from '~/components/GoalLinksSection'
 import { UserName } from '~/components/UserName'
 import { getBoardsWithGoalsForDevTeam } from '~/db/boards.server'
@@ -540,10 +540,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           {deployment.github_pr_number && deployment.github_pr_url && (
             <>
               {' '}
-              via{' '}
-              <Link to={deployment.github_pr_url} target="_blank">
-                #{deployment.github_pr_number}
-              </Link>
+              via <ExternalLink href={deployment.github_pr_url}>#{deployment.github_pr_number}</ExternalLink>
             </>
           )}
         </BodyShort>
@@ -563,13 +560,11 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
               deployment.commit_sha && (
                 <>
                   {' '}
-                  <a
+                  <ExternalLink
                     href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/compare/${previousDeploymentForDiff.commit_sha}...${deployment.commit_sha}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
                   >
-                    Se endringer på GitHub <ExternalLinkIcon title="Åpnes i ny fane" fontSize="1em" />
-                  </a>
+                    Se endringer på GitHub
+                  </ExternalLink>
                 </>
               )}
           </BodyShort>
@@ -593,9 +588,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                       {compareUrl && (
                         <>
                           {' '}
-                          <a href={compareUrl} target="_blank" rel="noopener noreferrer">
-                            Se compare på GitHub <ExternalLinkIcon title="Åpnes i ny fane" fontSize="1em" />
-                          </a>
+                          <ExternalLink href={compareUrl}>Se compare på GitHub</ExternalLink>
                         </>
                       )}
                     </BodyShort>
@@ -617,13 +610,11 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                   <ol style={{ margin: 0, paddingLeft: '1.5rem' }}>
                     <li>
                       Gå til{' '}
-                      <a
+                      <ExternalLink
                         href={`https://github.com/organizations/${deployment.detected_github_owner}/settings/apps`}
-                        target="_blank"
-                        rel="noopener noreferrer"
                       >
                         GitHub → Organization settings → GitHub Apps
-                      </a>
+                      </ExternalLink>
                     </li>
                     <li>Finn appen «Pensjon Deployment Audit» og klikk «Configure»</li>
                     <li>Under «Repository access», legg til repoet i listen over godkjente repos</li>
@@ -738,27 +729,20 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                 {previousDeploymentForDiff?.commit_sha && deployment.commit_sha && (
                   <>
                     {' '}
-                    <a
+                    <ExternalLink
                       href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/compare/${previousDeploymentForDiff.commit_sha}...${deployment.commit_sha}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
                     >
-                      Se endringer på GitHub <ExternalLinkIcon title="Åpnes i ny fane" fontSize="1em" />
-                    </a>
+                      Se endringer på GitHub
+                    </ExternalLink>
                   </>
                 )}
               </BodyShort>
               <ul style={{ margin: 0, paddingLeft: 'var(--ax-space-24)' }}>
                 {filteredUnverifiedCommits.map((commit: any) => (
                   <li key={commit.sha} style={{ marginBottom: 'var(--ax-space-8)' }}>
-                    <a
-                      href={commit.html_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}
-                    >
+                    <ExternalLink href={commit.html_url} style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}>
                       {commit.sha.substring(0, 7)}
-                    </a>{' '}
+                    </ExternalLink>{' '}
                     - {commit.message}
                     <br />
                     <Detail>
@@ -789,14 +773,12 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           <HStack gap="space-8" align="center">
             <BodyShort>
               {deployment.commit_sha ? (
-                <a
+                <ExternalLink
                   href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/commit/${deployment.commit_sha}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}
                 >
                   {deployment.commit_sha.substring(0, 7)}
-                </a>
+                </ExternalLink>
               ) : (
                 <span style={{ color: 'var(--ax-text-neutral-subtle)' }}>(ukjent)</span>
               )}
@@ -809,14 +791,12 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           <VStack gap="space-4">
             <Detail>Branch</Detail>
             <BodyShort>
-              <a
+              <ExternalLink
                 href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/tree/${deployment.branch_name}`}
-                target="_blank"
-                rel="noopener noreferrer"
                 style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}
               >
                 {deployment.branch_name}
-              </a>
+              </ExternalLink>
             </BodyShort>
           </VStack>
         )}
@@ -827,14 +807,12 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
             <BodyShort>
               {deployment.parent_commits.map((parent, index) => (
                 <span key={parent.sha}>
-                  <a
+                  <ExternalLink
                     href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/commit/${parent.sha}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
                     style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}
                   >
                     {parent.sha.substring(0, 7)}
-                  </a>
+                  </ExternalLink>
                   {index < (deployment.parent_commits?.length ?? 0) - 1 && ', '}
                 </span>
               ))}
@@ -846,9 +824,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           <VStack gap="space-4">
             <Detail>GitHub Actions</Detail>
             <BodyShort>
-              <a href={deployment.trigger_url} target="_blank" rel="noopener noreferrer">
-                Se workflow run
-              </a>
+              <ExternalLink href={deployment.trigger_url}>Se workflow run</ExternalLink>
             </BodyShort>
           </VStack>
         )}
@@ -929,13 +905,11 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
               <VStack gap="space-4">
                 <Detail>Merge commit</Detail>
                 <BodyShort>
-                  <a
+                  <ExternalLink
                     href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/commit/${deployment.github_pr_data.merge_commit_sha}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
                   >
                     {deployment.github_pr_data.merge_commit_sha.substring(0, 7)}
-                  </a>
+                  </ExternalLink>
                 </BodyShort>
               </VStack>
             )}
@@ -1010,9 +984,9 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                   size="small"
                   icon={<CheckmarkIcon aria-hidden />}
                 >
-                  <a href={`https://github.com/${reviewer.username}`} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink href={`https://github.com/${reviewer.username}`}>
                     {getUserDisplay(reviewer.username)}
-                  </a>
+                  </ExternalLink>
                 </Tag>
               ))}
           </HStack>
@@ -1048,9 +1022,9 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                       {reviewer.state === 'COMMENTED' && (
                         <ChatIcon aria-hidden style={{ color: 'var(--ax-text-neutral-subtle)' }} />
                       )}
-                      <a href={`https://github.com/${reviewer.username}`} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink href={`https://github.com/${reviewer.username}`}>
                         {getUserDisplay(reviewer.username)}
-                      </a>
+                      </ExternalLink>
                       <span style={{ color: 'var(--ax-text-neutral-subtle)' }}>
                         {new Date(reviewer.submitted_at).toLocaleString('no-NO', {
                           dateStyle: 'short',
@@ -1064,9 +1038,9 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                   {deployment.github_pr_data.requested_reviewers?.map((r) => (
                     <HStack key={`pending:${r.username}`} gap="space-8" align="center">
                       <CircleIcon aria-hidden style={{ color: 'var(--ax-text-warning)' }} />
-                      <a href={`https://github.com/${r.username}`} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink href={`https://github.com/${r.username}`}>
                         {getUserDisplay(r.username)}
-                      </a>
+                      </ExternalLink>
                     </HStack>
                   ))}
 
@@ -1122,9 +1096,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                           {isInProgress && <ClockIcon style={{ color: 'var(--ax-text-warning)' }} />}
 
                           {check.html_url ? (
-                            <a href={check.html_url} target="_blank" rel="noopener noreferrer">
-                              {check.name}
-                            </a>
+                            <ExternalLink href={check.html_url}>{check.name}</ExternalLink>
                           ) : (
                             <span>{check.name}</span>
                           )}
@@ -1148,9 +1120,9 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                           )}
 
                           {check.details_url && check.details_url !== check.html_url && (
-                            <a href={check.details_url} target="_blank" rel="noopener noreferrer">
+                            <ExternalLink href={check.details_url}>
                               <Detail textColor="subtle">detaljer</Detail>
-                            </a>
+                            </ExternalLink>
                           )}
 
                           {check.log_cached && (
@@ -1226,14 +1198,12 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                       )}
                       <VStack gap="space-4">
                         <HStack gap="space-8" align="baseline" wrap>
-                          <a
+                          <ExternalLink
                             href={commit.html_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
                             style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}
                           >
                             {commit.sha.substring(0, 7)}
-                          </a>
+                          </ExternalLink>
                           <span style={{ color: 'var(--ax-text-neutral-subtle)' }}>
                             {getUserDisplay(commit.author?.username)}
                           </span>
@@ -1275,27 +1245,18 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                       )}
                       <VStack gap="space-4" style={{ flex: 1 }}>
                         <HStack gap="space-8" align="baseline" wrap>
-                          <a
-                            href={`https://github.com/${comment.user?.username ?? ''}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
+                          <ExternalLink href={`https://github.com/${comment.user?.username ?? ''}`}>
                             {getUserDisplay(comment.user?.username) ?? 'ukjent'}
-                          </a>
+                          </ExternalLink>
                           <span style={{ color: 'var(--ax-text-neutral-subtle)' }}>
                             {new Date(comment.created_at).toLocaleString('no-NO', {
                               dateStyle: 'short',
                               timeStyle: 'short',
                             })}
                           </span>
-                          <a
-                            href={comment.html_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{ color: 'var(--ax-text-neutral-subtle)' }}
-                          >
+                          <ExternalLink href={comment.html_url} style={{ color: 'var(--ax-text-neutral-subtle)' }}>
                             vis på GitHub
-                          </a>
+                          </ExternalLink>
                         </HStack>
                         <BodyShort style={{ whiteSpace: 'pre-wrap' }}>{comment.body}</BodyShort>
                       </VStack>
@@ -1435,14 +1396,9 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                 <HStack gap="space-12">
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <HStack gap="space-8" align="baseline" wrap>
-                      <a
-                        href={commit.html_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}
-                      >
+                      <ExternalLink href={commit.html_url} style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}>
                         {commit.sha.substring(0, 7)}
-                      </a>
+                      </ExternalLink>
                       <span style={{ color: 'var(--ax-text-neutral-subtle)' }}>{commit.author}</span>
                       <span style={{ color: 'var(--ax-text-neutral-subtle)' }}>
                         {new Date(commit.date).toLocaleDateString('no-NO', {
@@ -1501,13 +1457,11 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
               {previousDeploymentForDiff?.commit_sha && deployment.commit_sha && (
                 <>
                   {' '}
-                  <a
+                  <ExternalLink
                     href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/compare/${previousDeploymentForDiff.commit_sha}...${deployment.commit_sha}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
                   >
-                    Se endringer på GitHub <ExternalLinkIcon title="Åpnes i ny fane" fontSize="1em" />
-                  </a>
+                    Se endringer på GitHub
+                  </ExternalLink>
                 </>
               )}
             </BodyShort>
@@ -1751,9 +1705,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
             )}
             {legacyInfo?.slack_link && (
               <BodyShort size="small">
-                <a href={legacyInfo.slack_link} target="_blank" rel="noopener noreferrer">
-                  Se Slack-melding
-                </a>
+                <ExternalLink href={legacyInfo.slack_link}>Se Slack-melding</ExternalLink>
               </BodyShort>
             )}
             <Alert variant="info" size="small">
@@ -1806,9 +1758,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
           )}
           {manualApproval.slack_link && (
             <BodyShort size="small" style={{ marginTop: 'var(--ax-space-8)' }}>
-              <a href={manualApproval.slack_link} target="_blank" rel="noopener noreferrer">
-                Se Slack-dokumentasjon
-              </a>
+              <ExternalLink href={manualApproval.slack_link}>Se Slack-dokumentasjon</ExternalLink>
             </BodyShort>
           )}
         </Alert>
@@ -2091,9 +2041,7 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
                     <BodyShort>{comment.comment_text}</BodyShort>
                     {comment.slack_link && (
                       <BodyShort size="small">
-                        <Link to={comment.slack_link} target="_blank">
-                          🔗 Slack-lenke
-                        </Link>
+                        <ExternalLink href={comment.slack_link}>🔗 Slack-lenke</ExternalLink>
                       </BodyShort>
                     )}
                   </VStack>

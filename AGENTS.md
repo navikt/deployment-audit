@@ -234,3 +234,33 @@ import { UserName } from '~/components/UserName'
 - Use `getUserDisplayName()` for complex cases: alt text, `.map().join()`, string concatenation, or anywhere a React component cannot be used
 
 **Do NOT** display raw GitHub usernames (`deployer_username`) directly in deployment/commit UI. Always resolve through `UserName` or `getUserDisplayName()`. Raw usernames are appropriate only on user mapping/admin pages where the GitHub identity itself is the relevant information.
+
+### ExternalLink Component (`app/components/ExternalLink.tsx`)
+
+**ALL links that point to a different site (external domain) MUST use `<ExternalLink>`.**
+The component automatically applies `target="_blank"`, `rel="noopener noreferrer"` and
+appends Aksel's `ExternalLinkIcon` so the user can see that the link opens elsewhere.
+
+```tsx
+import { ExternalLink } from '~/components/ExternalLink'
+
+<ExternalLink href={`https://github.com/${owner}/${repo}`}>
+  {owner}/{repo}
+</ExternalLink>
+```
+
+**Do NOT** use raw `<a target="_blank">` or `<Link target="_blank">` from
+`@navikt/ds-react` for external URLs — they will be missing the icon and/or
+the `rel` attributes.
+
+**Examples of external destinations** that require `<ExternalLink>`:
+- `https://github.com/...` (PRs, commits, branches, profiles, repos)
+- `https://console.nav.cloud.nais.io/...` (NAIS Console)
+- `https://nav-it.slack.com/...` and other Slack URLs
+- `https://teamkatalogen.nav.no/...`
+- Any third-party `external_url` (board reference URLs, audit log URLs, etc.)
+
+**Internal links** that open in a new tab (same origin, e.g.
+`/admin/audit-reports/123/pdf`) do NOT need the icon — keep using
+`<Link to=... target="_blank">` from React Router for those.
+

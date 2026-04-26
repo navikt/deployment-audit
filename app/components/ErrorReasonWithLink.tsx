@@ -1,4 +1,5 @@
-import { Link as AkselLink, Detail } from '@navikt/ds-react'
+import { Detail } from '@navikt/ds-react'
+import { ExternalLink } from './ExternalLink'
 
 const SHA_DIFF_PATTERN = /Commit SHAs differ \(([a-f0-9]+)→([a-f0-9]+)\)/
 
@@ -17,10 +18,7 @@ export function ErrorReasonWithLink({ errorReason, githubOwner, githubRepoName }
 
     return (
       <Detail textColor="subtle" className="mt-1">
-        {errorReason}{' '}
-        <AkselLink href={compareUrl} target="_blank" rel="noopener noreferrer">
-          Se compare på GitHub
-        </AkselLink>
+        {errorReason} <ExternalLink href={compareUrl}>Se compare på GitHub</ExternalLink>
       </Detail>
     )
   }
