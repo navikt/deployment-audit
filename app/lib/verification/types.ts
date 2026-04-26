@@ -16,7 +16,7 @@
  * Current schema version for GitHub data snapshots.
  * Increment this when the data structure changes and re-fetching is needed.
  */
-export const CURRENT_SCHEMA_VERSION = 2
+export const CURRENT_SCHEMA_VERSION = 3
 
 // =============================================================================
 // Exhaustive Check Helper
@@ -440,6 +440,12 @@ export interface VerificationInput {
       baseBranch: string
       rebaseMatched?: boolean
     } | null
+    // Base branches of PRs associated with this commit but NOT matching the
+    // configured base branch. Populated when the commit has PRs that were
+    // filtered out because their `base.ref` differs from the app's
+    // `default_branch`. Used to surface a branch-mismatch warning.
+    mismatchedBaseBranches?: string[]
+    mismatchedPrNumbers?: number[]
   }>
 
   // Metadata about data freshness
@@ -466,6 +472,16 @@ export interface VerificationInput {
     deploymentId: number
     commitSha: string
     status: string
+  }
+
+  // Branch mismatch warning: aggregated across the deployed PR and all
+  // commitsBetween. Set when one or more PRs targeting `default_branch` were
+  // not found, but PRs targeting a DIFFERENT base branch exist for the same
+  // commit(s). Indicates a misconfigured `monitored_applications.default_branch`.
+  branchMismatch?: {
+    expectedBranch: string
+    detectedBranches: string[]
+    prNumbers: number[]
   }
 }
 
@@ -509,6 +525,15 @@ export interface VerificationResult {
   // Metadata
   verifiedAt: Date
   schemaVersion: number
+
+  // Branch mismatch warning (passthrough from VerificationInput).
+  // Populated by the orchestrator (`runVerification`), not by `verifyDeployment`,
+  // since mismatch detection is a data-fetch concern, not a verification decision.
+  branchMismatch?: {
+    expectedBranch: string
+    detectedBranches: string[]
+    prNumbers: number[]
+  }
 }
 
 /**

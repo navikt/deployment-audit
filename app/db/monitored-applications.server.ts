@@ -7,6 +7,7 @@ interface MonitoredApplication {
   app_name: string
   is_active: boolean
   default_branch: string
+  default_branch_synced_at: Date | null
   audit_start_year: number | null
   test_requirement: 'none' | 'unit_tests' | 'integration_tests'
   slack_channel_id: string | null
@@ -127,6 +128,7 @@ export async function updateMonitoredApplication(
   data: {
     is_active?: boolean
     default_branch?: string
+    default_branch_synced_at?: Date | null
     audit_start_year?: number | null
     test_requirement?: 'none' | 'unit_tests' | 'integration_tests'
     slack_channel_id?: string | null
@@ -150,6 +152,11 @@ export async function updateMonitoredApplication(
   if (data.default_branch !== undefined) {
     updates.push(`default_branch = $${paramCount++}`)
     values.push(data.default_branch)
+  }
+
+  if (data.default_branch_synced_at !== undefined) {
+    updates.push(`default_branch_synced_at = $${paramCount++}`)
+    values.push(data.default_branch_synced_at)
   }
 
   if (data.audit_start_year !== undefined) {

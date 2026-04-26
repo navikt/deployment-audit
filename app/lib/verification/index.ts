@@ -104,6 +104,13 @@ export async function runVerification(
   logger.info(`   🧪 Running verification logic...`)
   const result = verifyDeployment(input)
 
+  // Passthrough: branchMismatch is a data-fetch artifact, not a verify decision.
+  // Surface it on the result so it gets persisted in verification_runs.result
+  // and is available to UI consumers.
+  if (input.branchMismatch) {
+    result.branchMismatch = input.branchMismatch
+  }
+
   logger.info(`   ✅ Verification complete:`)
   logger.info(`      - Status: ${result.status}`)
   logger.info(`      - Unverified commits: ${result.unverifiedCommits.length}`)

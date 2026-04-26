@@ -60,7 +60,7 @@ export async function lookupLegacyByCommit(
     logger.info(`   ⏱️  Time difference: ${timeDifferenceMinutes} minutes (threshold: 30)`)
 
     // Try to find associated PR
-    const prInfo = await getPullRequestForCommit(owner, repo, sha, true)
+    const { pr: prInfo } = await getPullRequestForCommit(owner, repo, sha, true)
 
     let reviewers: Array<{ username: string; state: string }> | undefined
     let prMergedAt: Date | undefined

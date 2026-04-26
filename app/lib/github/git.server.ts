@@ -105,3 +105,22 @@ export async function isCommitOnBranch(
     return null
   }
 }
+
+/**
+ * Fetch the GitHub repository's default branch (e.g., "main" or "master").
+ * Returns null on API error (e.g., repo gone, permissions, rate limit).
+ *
+ * Used by sync to keep `monitored_applications.default_branch` in sync with
+ * the actual GitHub state, so PR base-branch filtering during verification
+ * uses the correct value.
+ */
+export async function getRepositoryDefaultBranch(owner: string, repo: string): Promise<string | null> {
+  try {
+    const client = getGitHubClient()
+    const response = await client.repos.get({ owner, repo })
+    return response.data.default_branch || null
+  } catch (error) {
+    logger.warn(`⚠️ Failed to fetch default_branch for ${owner}/${repo}:`, error as Record<string, unknown>)
+    return null
+  }
+}

@@ -278,6 +278,14 @@ function DebugResultView({
             <DataRow label="Repository" value={fetchedData.repository} />
             <DataRow label="Environment" value={fetchedData.environmentName} />
             <DataRow label="Base branch" value={fetchedData.baseBranch} />
+            {fetchedData.branchMismatch && (
+              <DataRow
+                label="⚠️ Branch mismatch"
+                value={`Forventet '${fetchedData.branchMismatch.expectedBranch}', fant PR-er på '${fetchedData.branchMismatch.detectedBranches.join(
+                  ', ',
+                )}' (PR ${fetchedData.branchMismatch.prNumbers.map((n) => `#${n}`).join(', ')})`}
+              />
+            )}
           </VStack>
 
           <VStack gap="space-2">
