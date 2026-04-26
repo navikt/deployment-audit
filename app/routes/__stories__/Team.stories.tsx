@@ -1,8 +1,8 @@
-import { ExternalLinkIcon } from '@navikt/aksel-icons'
-import { Link as AkselLink, Box, Heading, HStack, Tag, VStack } from '@navikt/ds-react'
+import { Box, Heading, HStack, Tag, VStack } from '@navikt/ds-react'
 import type { Meta, StoryObj } from '@storybook/react'
 import { Link } from 'react-router'
 import { AppCard, type AppCardData } from '~/components/AppCard'
+import { ExternalLink } from '~/components/ExternalLink'
 import { mockApps } from './mock-data'
 
 function TeamPage({ team, appsByEnv }: { team: string; appsByEnv: Record<string, AppCardData[]> }) {
@@ -16,11 +16,9 @@ function TeamPage({ team, appsByEnv }: { team: string; appsByEnv: Record<string,
             {team}
           </Heading>
           <HStack gap="space-8" align="center">
-            <AkselLink href={`https://console.nav.cloud.nais.io/team/${team}/applications`} target="_blank">
-              <HStack gap="space-4" align="center">
-                NAIS Console <ExternalLinkIcon aria-hidden />
-              </HStack>
-            </AkselLink>
+            <ExternalLink href={`https://console.nav.cloud.nais.io/team/${team}/applications`}>
+              NAIS Console
+            </ExternalLink>
           </HStack>
         </VStack>
 

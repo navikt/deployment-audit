@@ -3,6 +3,7 @@ import { BodyShort, Box, Button, Detail, Hide, HStack, Select, Show, Tag, TextFi
 import { Form, Link, redirect, useLoaderData, useSearchParams } from 'react-router'
 import { MethodTag, StatusTag } from '~/components/deployment-tags'
 import { ErrorReasonWithLink } from '~/components/ErrorReasonWithLink'
+import { ExternalLink } from '~/components/ExternalLink'
 import { UserName } from '~/components/UserName'
 import { getSiblingApps } from '~/db/application-groups.server'
 import { pool } from '~/db/connection.server'
@@ -342,23 +343,21 @@ export default function AppDeployments() {
                     </Detail>
                     <Detail textColor="subtle">
                       {deployment.commit_sha ? (
-                        <a
+                        <ExternalLink
                           href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/commit/${deployment.commit_sha}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
                           style={{ fontFamily: 'monospace' }}
                         >
                           {deployment.commit_sha.substring(0, 7)}
-                        </a>
+                        </ExternalLink>
                       ) : (
                         '(ukjent)'
                       )}
                     </Detail>
                     {deployment.github_pr_number && (
                       <Detail textColor="subtle">
-                        <a href={deployment.github_pr_url || '#'} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink href={deployment.github_pr_url || '#'}>
                           #{deployment.github_pr_number}
-                        </a>
+                        </ExternalLink>
                       </Detail>
                     )}
                   </HStack>

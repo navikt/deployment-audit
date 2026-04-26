@@ -1,5 +1,6 @@
 import { Link } from 'react-router'
 import { getUserDisplayName, type UserMappings } from '~/lib/user-display'
+import { ExternalLink } from './ExternalLink'
 
 interface UserNameProps {
   /** GitHub username to resolve */
@@ -24,11 +25,7 @@ export function UserName({ username, userMappings, link = 'internal' }: UserName
   }
 
   if (link === 'github') {
-    return (
-      <a href={`https://github.com/${username}`} target="_blank" rel="noopener noreferrer">
-        {displayName}
-      </a>
-    )
+    return <ExternalLink href={`https://github.com/${username}`}>{displayName}</ExternalLink>
   }
 
   return <>{displayName}</>

@@ -2,6 +2,7 @@ import { ArrowUndoIcon } from '@navikt/aksel-icons'
 import { Alert, BodyShort, Box, Button, Detail, Heading, HStack, Table, Tag, VStack } from '@navikt/ds-react'
 import { Form, useActionData, useLoaderData } from 'react-router'
 import { ActionAlert } from '~/components/ActionAlert'
+import { ExternalLink } from '~/components/ExternalLink'
 import { UserName } from '~/components/UserName'
 import {
   getAllSoftDeleted,
@@ -445,9 +446,7 @@ export default function AdminSoftDeleted() {
                   </Table.DataCell>
                   <Table.DataCell>
                     {isSafeHttpUrl(row.url) ? (
-                      <a href={row.url} target="_blank" rel="noopener noreferrer">
-                        {row.title || row.url}
-                      </a>
+                      <ExternalLink href={row.url}>{row.title || row.url}</ExternalLink>
                     ) : (
                       <span>{row.title || row.url}</span>
                     )}

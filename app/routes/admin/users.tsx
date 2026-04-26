@@ -1,4 +1,4 @@
-import { DownloadIcon, ExternalLinkIcon, PencilIcon, PlusIcon, TrashIcon, UploadIcon } from '@navikt/aksel-icons'
+import { DownloadIcon, PencilIcon, PlusIcon, TrashIcon, UploadIcon } from '@navikt/aksel-icons'
 import {
   Alert,
   BodyShort,
@@ -18,6 +18,7 @@ import {
 import { useEffect, useRef, useState } from 'react'
 import { Form, Link, useActionData, useLoaderData, useNavigation } from 'react-router'
 import { ActionAlert } from '~/components/ActionAlert'
+import { ExternalLink } from '~/components/ExternalLink'
 import { getAllDevTeams } from '~/db/dev-teams.server'
 import { getAllUserDevTeamMappings, setUserDevTeams } from '~/db/user-dev-team-preference.server'
 import {
@@ -312,33 +313,19 @@ export default function AdminUsers() {
 
                   {/* Details row */}
                   <HStack gap="space-16" wrap>
-                    <a href={`https://github.com/${mapping.github_username}`} target="_blank" rel="noopener noreferrer">
-                      <Detail textColor="subtle">
-                        GitHub: {mapping.github_username} <ExternalLinkIcon aria-hidden fontSize="0.75rem" />
-                      </Detail>
-                    </a>
+                    <ExternalLink href={`https://github.com/${mapping.github_username}`}>
+                      <Detail textColor="subtle">GitHub: {mapping.github_username}</Detail>
+                    </ExternalLink>
                     {mapping.nav_email && <Detail textColor="subtle">{mapping.nav_email}</Detail>}
                     {mapping.nav_ident && (
-                      <a
-                        href={`https://teamkatalogen.nav.no/resource/${mapping.nav_ident}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <Detail textColor="subtle">
-                          Teamkatalogen: {mapping.nav_ident} <ExternalLinkIcon aria-hidden fontSize="0.75rem" />
-                        </Detail>
-                      </a>
+                      <ExternalLink href={`https://teamkatalogen.nav.no/resource/${mapping.nav_ident}`}>
+                        <Detail textColor="subtle">Teamkatalogen: {mapping.nav_ident}</Detail>
+                      </ExternalLink>
                     )}
                     {mapping.slack_member_id && (
-                      <a
-                        href={`https://nav-it.slack.com/team/${mapping.slack_member_id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <Detail textColor="subtle">
-                          Slack: {mapping.slack_member_id} <ExternalLinkIcon aria-hidden fontSize="0.75rem" />
-                        </Detail>
-                      </a>
+                      <ExternalLink href={`https://nav-it.slack.com/team/${mapping.slack_member_id}`}>
+                        <Detail textColor="subtle">Slack: {mapping.slack_member_id}</Detail>
+                      </ExternalLink>
                     )}
                     {!mapping.nav_email && !mapping.nav_ident && !mapping.slack_member_id && (
                       <Detail textColor="subtle">Ingen tilleggsinformasjon</Detail>

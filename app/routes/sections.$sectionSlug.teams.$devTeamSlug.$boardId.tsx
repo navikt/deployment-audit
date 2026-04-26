@@ -1,6 +1,5 @@
 import { MinusCircleIcon, PlusCircleIcon, PlusIcon, TrashIcon } from '@navikt/aksel-icons'
 import {
-  Link as AkselLink,
   Alert,
   BodyShort,
   Box,
@@ -16,6 +15,7 @@ import {
 } from '@navikt/ds-react'
 import { useEffect, useState } from 'react'
 import { Form, useLoaderData, useSubmit } from 'react-router'
+import { ExternalLink } from '~/components/ExternalLink'
 import {
   addExternalReference,
   type BoardKeyResultWithRefs,
@@ -453,9 +453,7 @@ function ReferenceList({ refs, readOnly }: { refs: ExternalReference[]; readOnly
           <Tag variant="info" size="xsmall">
             {REF_TYPE_LABELS[ref.ref_type] ?? ref.ref_type}
           </Tag>
-          <AkselLink href={ref.url} target="_blank" rel="noopener noreferrer">
-            {ref.title ?? ref.url}
-          </AkselLink>
+          <ExternalLink href={ref.url}>{ref.title ?? ref.url}</ExternalLink>
           {!readOnly && (
             <Form method="post" style={{ display: 'inline' }}>
               <input type="hidden" name="intent" value="delete-reference" />

@@ -1,6 +1,5 @@
-import { ChevronLeftIcon, ChevronRightIcon, ExternalLinkIcon, LinkIcon, PlusIcon } from '@navikt/aksel-icons'
+import { ChevronLeftIcon, ChevronRightIcon, LinkIcon, PlusIcon } from '@navikt/aksel-icons'
 import {
-  Link as AkselLink,
   Alert,
   BodyShort,
   Box,
@@ -25,6 +24,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Form, Link, redirect, useActionData, useLoaderData, useNavigation, useSearchParams } from 'react-router'
 import { DeploymentActivityChart } from '~/components/DeploymentActivityChart'
 import { MethodTag, StatusTag } from '~/components/deployment-tags'
+import { ExternalLink } from '~/components/ExternalLink'
 import { getBoardsWithGoalsForDevTeam } from '~/db/boards.server'
 import { bulkAddDeploymentGoalLinks, getUnlinkedDependabotDeploymentIds } from '~/db/deployment-goal-links.server'
 import {
@@ -449,9 +449,7 @@ export default function UserPage() {
         <Box padding="space-16" borderRadius="8" background="sunken">
           <VStack gap="space-4">
             <Detail textColor="subtle">GitHub</Detail>
-            <AkselLink href={`https://github.com/${username}`} target="_blank">
-              {username} <ExternalLinkIcon aria-hidden />
-            </AkselLink>
+            <ExternalLink href={`https://github.com/${username}`}>{username}</ExternalLink>
           </VStack>
         </Box>
 
@@ -468,9 +466,9 @@ export default function UserPage() {
           <Box padding="space-16" borderRadius="8" background="sunken">
             <VStack gap="space-4">
               <Detail textColor="subtle">Teamkatalogen</Detail>
-              <AkselLink href={`https://teamkatalogen.nav.no/resource/${mapping.nav_ident}`} target="_blank">
-                {mapping.nav_ident} <ExternalLinkIcon aria-hidden />
-              </AkselLink>
+              <ExternalLink href={`https://teamkatalogen.nav.no/resource/${mapping.nav_ident}`}>
+                {mapping.nav_ident}
+              </ExternalLink>
             </VStack>
           </Box>
         )}
@@ -479,9 +477,9 @@ export default function UserPage() {
           <Box padding="space-16" borderRadius="8" background="sunken">
             <VStack gap="space-4">
               <Detail textColor="subtle">Slack</Detail>
-              <AkselLink href={`https://nav-it.slack.com/team/${mapping.slack_member_id}`} target="_blank">
-                Åpne i Slack <ExternalLinkIcon aria-hidden />
-              </AkselLink>
+              <ExternalLink href={`https://nav-it.slack.com/team/${mapping.slack_member_id}`}>
+                Åpne i Slack
+              </ExternalLink>
             </VStack>
           </Box>
         )}
