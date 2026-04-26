@@ -230,3 +230,38 @@ export async function updateMonitoredApplication(
 
   return result.rows[0]
 }
+
+/**
+ * Repair the (team_slug, environment_name, app_name) identity of a monitored
+ * application. Used by the admin validator when a row was created with values
+ * that don't match Nais (e.g. team and app fields swapped at insert time).
+ *
+ * Throws if the target identity is already occupied by another row — the
+ * caller must deactivate or delete that conflicting row first.
+ */
+export async function updateMonitoredApplicationIdentity(
+  id: number,
+  identity: { team_slug: string; environment_name: string; app_name: string },
+): Promise<MonitoredApplication> {
+  const conflict = await pool.query(
+    'SELECT id FROM monitored_applications WHERE team_slug = $1 AND environment_name = $2 AND app_name = $3 AND id <> $4',
+    [identity.team_slug, identity.environment_name, identity.app_name, id],
+  )
+  if (conflict.rows.length > 0) {
+    throw new Error(
+      `En annen rad (id ${conflict.rows[0].id}) bruker allerede ${identity.team_slug}/${identity.environment_name}/${identity.app_name}. Deaktiver den først.`,
+    )
+  }
+
+  const result = await pool.query(
+    `UPDATE monitored_applications
+     SET team_slug = $1, environment_name = $2, app_name = $3, updated_at = CURRENT_TIMESTAMP
+     WHERE id = $4
+     RETURNING *`,
+    [identity.team_slug, identity.environment_name, identity.app_name, id],
+  )
+  if (result.rows.length === 0) {
+    throw new Error('Application not found')
+  }
+  return result.rows[0]
+}

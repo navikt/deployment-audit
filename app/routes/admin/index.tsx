@@ -328,6 +328,30 @@ export default function AdminIndex() {
           </Box>
         </Link>
 
+        <Link to="/admin/validate-monitored-apps" style={{ textDecoration: 'none', height: '100%' }}>
+          <Box
+            padding="space-24"
+            borderRadius="8"
+            background="raised"
+            borderColor="neutral-subtle"
+            borderWidth="1"
+            className="admin-card"
+            style={{ height: '100%' }}
+          >
+            <VStack gap="space-12">
+              <ExclamationmarkTriangleIcon fontSize="2rem" aria-hidden />
+              <div>
+                <Heading level="2" size="small" spacing>
+                  Valider apper mot Nais
+                </Heading>
+                <BodyShort textColor="subtle">
+                  Finn rader der team/app er byttet om eller miljøet er feil, og rett dem opp.
+                </BodyShort>
+              </div>
+            </VStack>
+          </Box>
+        </Link>
+
         <Link to="/apps/add" style={{ textDecoration: 'none', height: '100%' }}>
           <Box
             padding="space-24"
