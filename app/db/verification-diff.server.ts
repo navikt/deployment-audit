@@ -1,3 +1,4 @@
+import { AUDIT_START_YEAR_FILTER } from '~/db/audit-start-year'
 import { pool } from '~/db/connection.server'
 
 interface VerificationDiffDeployment {
@@ -41,7 +42,7 @@ export async function getDeploymentsForDiffComputation(
         AND d.detected_github_repo_name IS NOT NULL
         AND d.commit_sha !~ '^refs/'
         AND LENGTH(d.commit_sha) >= 7
-        AND (ma.audit_start_year IS NULL OR d.created_at >= (ma.audit_start_year || '-01-01')::date)
+        AND ${AUDIT_START_YEAR_FILTER}
       ORDER BY created_at DESC
       LIMIT $2`,
     [monitoredAppId, limit],
@@ -50,19 +51,31 @@ export async function getDeploymentsForDiffComputation(
 }
 
 /**
- * Get the previous deployment for a given deployment in the same app/env
+ * Get the previous deployment for a given deployment in the same app/env.
+ *
+ * Mirrors the filters in getPreviousDeployment (fetch-data.server.ts) so the
+ * cache-path used by compute-diffs and reverifyDeployment produces the same
+ * `previousDeployment` value as a fresh fetch:
+ *   - audit_start_year (when set on the monitored app)
+ *   - excludes legacy / legacy_pending deployments
+ *   - excludes refs/* sha values
  */
 export async function getPreviousDeploymentForDiff(
   deploymentId: number,
   environmentName: string,
 ): Promise<{ id: number; commit_sha: string; created_at: Date } | null> {
   const result = await pool.query(
-    `SELECT id, commit_sha, created_at
-     FROM deployments 
-     WHERE monitored_app_id = (SELECT monitored_app_id FROM deployments WHERE id = $1)
-       AND environment_name = $2
-       AND created_at < (SELECT created_at FROM deployments WHERE id = $1)
-     ORDER BY created_at DESC
+    `SELECT d.id, d.commit_sha, d.created_at
+     FROM deployments d
+     JOIN monitored_applications ma ON d.monitored_app_id = ma.id
+     WHERE d.monitored_app_id = (SELECT monitored_app_id FROM deployments WHERE id = $1)
+       AND d.environment_name = $2
+       AND d.created_at < (SELECT created_at FROM deployments WHERE id = $1)
+       AND d.commit_sha IS NOT NULL
+       AND d.four_eyes_status NOT IN ('legacy', 'legacy_pending')
+       AND d.commit_sha !~ '^refs/'
+       AND ${AUDIT_START_YEAR_FILTER}
+     ORDER BY d.created_at DESC
      LIMIT 1`,
     [deploymentId, environmentName],
   )

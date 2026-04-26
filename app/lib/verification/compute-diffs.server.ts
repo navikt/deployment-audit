@@ -71,8 +71,9 @@ export async function computeVerificationDiffs(
 
   for (const row of deployments) {
     try {
-      // Skip manually approved — they were approved by a human
-      if (row.four_eyes_status === 'manually_approved') {
+      // Skip manually approved or baseline-approved — both are explicit admin
+      // actions that V2 cannot reproduce automatically.
+      if (row.four_eyes_status === 'manually_approved' || row.four_eyes_status === 'baseline') {
         result.skipped++
         result.deploymentsChecked++
         continue

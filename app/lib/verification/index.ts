@@ -294,8 +294,11 @@ async function getExistingVerificationStatus(deploymentId: number): Promise<Exis
  * Re-run verification for a single deployment using cached GitHub data,
  * and apply the new result to the database.
  *
- * Returns the comparison, or null if the deployment was skipped (no data,
- * manually_approved, or legacy).
+ * Returns the comparison, or null if the deployment was skipped:
+ *   - missing GitHub compare snapshot
+ *   - `manually_approved` (admin action — V2 cannot reproduce)
+ *   - `baseline` (admin action — V2 cannot reproduce)
+ *   - `legacy` (pre-audit historic data)
  */
 export async function reverifyDeployment(deploymentId: number): Promise<{
   changed: boolean
@@ -321,8 +324,12 @@ export async function reverifyDeployment(deploymentId: number): Promise<{
 
   const dep = row.rows[0]
 
-  // Skip manually approved or legacy
-  if (dep.four_eyes_status === 'manually_approved' || dep.four_eyes_status === 'legacy') {
+  // Skip manually approved, baseline-approved, or legacy
+  if (
+    dep.four_eyes_status === 'manually_approved' ||
+    dep.four_eyes_status === 'baseline' ||
+    dep.four_eyes_status === 'legacy'
+  ) {
     return null
   }
 
