@@ -104,3 +104,32 @@ export async function getDevTeamMembers(devTeamId: number): Promise<DevTeamMembe
   )
   return result.rows
 }
+
+/**
+ * Get the unique GitHub usernames of all members across the given dev teams.
+ * Used to filter deployments to "delivered by team members" in the deployments
+ * list view.
+ *
+ * GitHub usernames are returned exactly as stored in `user_mappings`. The
+ * deployer-side comparison (`deployer_username`) is also case-preserved, so
+ * an exact `=` match works the way the existing "Meg" filter on the same
+ * page does.
+ *
+ * Returns an empty array if no dev teams are given, or if none of the members
+ * have a github_username mapping. Callers must distinguish the two cases —
+ * an empty result with non-empty input means "team has no GitHub-mapped
+ * members; show 0 deployments".
+ */
+export async function getMembersGithubUsernamesForDevTeams(devTeamIds: number[]): Promise<string[]> {
+  if (devTeamIds.length === 0) return []
+  const result = await pool.query(
+    `SELECT DISTINCT um.github_username
+     FROM user_dev_team_preference p
+     JOIN user_mappings um
+       ON UPPER(um.nav_ident) = UPPER(p.nav_ident) AND um.deleted_at IS NULL
+     WHERE p.dev_team_id = ANY($1)
+       AND um.github_username IS NOT NULL`,
+    [devTeamIds],
+  )
+  return result.rows.map((r) => r.github_username as string)
+}

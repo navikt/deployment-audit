@@ -201,6 +201,12 @@ export interface DeploymentFilters {
   only_missing_four_eyes?: boolean
   only_repository_mismatch?: boolean
   deployer_username?: string
+  /**
+   * Filter to deployments whose deployer_username is in this list. Used by
+   * the dev-team filter on the deployments page. An empty array forces zero
+   * results (selected team has no GitHub-mapped members).
+   */
+  deployer_usernames?: string[]
   commit_sha?: string
   method?: 'pr' | 'direct_push' | 'legacy'
   goal_filter?: 'missing' | 'linked'
@@ -294,6 +300,18 @@ export async function getDeploymentsPaginated(filters?: DeploymentFilters): Prom
     whereSql += ` AND d.deployer_username = $${paramIndex}`
     params.push(filters.deployer_username)
     paramIndex++
+  }
+
+  if (filters?.deployer_usernames !== undefined) {
+    if (filters.deployer_usernames.length === 0) {
+      // Empty list means "no members matched" — force zero rows so the UI
+      // can show an explanatory empty state without producing false positives.
+      whereSql += ' AND FALSE'
+    } else {
+      whereSql += ` AND d.deployer_username = ANY($${paramIndex})`
+      params.push(filters.deployer_usernames)
+      paramIndex++
+    }
   }
 
   if (filters?.commit_sha) {

@@ -303,7 +303,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               </Heading>
               <div>
                 {issueApps.map((app) => (
-                  <AppCard key={app.id} app={app} />
+                  <AppCard key={app.id} app={app} appendSearchParams="team=mine" />
                 ))}
               </div>
             </VStack>

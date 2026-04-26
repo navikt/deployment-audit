@@ -65,13 +65,21 @@ function getAppUrl(app: { team_slug: string; environment_name: string; app_name:
 interface AppCardProps {
   app: AppCardData
   showEnvironment?: boolean
+  /**
+   * Extra query string fragment appended to the deployment-list links rendered
+   * inside the card (the "uten opphav" and "mangler" tags). Used to preset
+   * the team filter — e.g. `team=mine` from /my-teams or `team=<slug>` from
+   * a dev-team page. Must NOT include a leading `?` or `&`.
+   */
+  appendSearchParams?: string
 }
 
-export function AppCard({ app, showEnvironment = true }: AppCardProps) {
+export function AppCard({ app, showEnvironment = true, appendSearchParams }: AppCardProps) {
   const appUrl = getAppUrl(app)
   const environments = app.siblingEnvironments
     ? [app.environment_name, ...app.siblingEnvironments]
     : [app.environment_name]
+  const extraParams = appendSearchParams ? `&${appendSearchParams}` : ''
 
   return (
     <Box padding="space-16" background="raised" className={styles.stackedListItem}>
@@ -103,14 +111,20 @@ export function AppCard({ app, showEnvironment = true }: AppCardProps) {
               </Link>
             )}
             {(app.stats.missing_goal_links ?? 0) > 0 && (
-              <Link to={`${appUrl}/deployments?goal=missing&period=all`} style={{ textDecoration: 'none' }}>
+              <Link
+                to={`${appUrl}/deployments?goal=missing&period=all${extraParams}`}
+                style={{ textDecoration: 'none' }}
+              >
                 <Tag data-color="warning" variant="outline" size="xsmall" icon={<LinkBrokenIcon aria-hidden />}>
                   {app.stats.missing_goal_links} uten opphav
                 </Tag>
               </Link>
             )}
             {app.stats.without_four_eyes > 0 ? (
-              <Link to={`${appUrl}/deployments?status=not_approved&period=all`} style={{ textDecoration: 'none' }}>
+              <Link
+                to={`${appUrl}/deployments?status=not_approved&period=all${extraParams}`}
+                style={{ textDecoration: 'none' }}
+              >
                 {getStatusTag(app.stats)}
               </Link>
             ) : (

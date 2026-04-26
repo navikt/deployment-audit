@@ -8,7 +8,9 @@ import { UserName } from '~/components/UserName'
 import { getSiblingApps } from '~/db/application-groups.server'
 import { pool } from '~/db/connection.server'
 import { type DeploymentFilters, getDeploymentsPaginated } from '~/db/deployments.server'
+import { getDevTeamsForApp } from '~/db/dev-teams.server'
 import { getMonitoredApplicationByIdentity } from '~/db/monitored-applications.server'
+import { getMembersGithubUsernamesForDevTeams, getUserDevTeams } from '~/db/user-dev-team-preference.server'
 import { getUserMappingByNavIdent, getUserMappings } from '~/db/user-mappings.server'
 import { getUserIdentity } from '~/lib/auth.server'
 import type { FourEyesStatus } from '~/lib/four-eyes-status'
@@ -39,12 +41,71 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const sha = url.searchParams.get('sha') || undefined
   const period = (url.searchParams.get('period') || 'last-week') as TimePeriod
   const showGroup = url.searchParams.get('group') === 'true'
+  const teamFilter = url.searchParams.get('team') || ''
 
   const range = getDateRangeForPeriod(period)
 
   // If group mode, fetch siblings and include all app IDs
   const siblings = showGroup ? await getSiblingApps(app.id) : []
   const hasGroup = siblings.length > 0
+
+  // Resolve current user (used for "Meg" deployer shortcut and "Mine team" filter)
+  const currentUser = await getUserIdentity(request)
+
+  // Dev teams owning this app — used to populate the team-filter dropdown.
+  // The list combines explicit ownership (dev_team_applications) and implicit
+  // ownership via Nais-team mapping (dev_team_nais_teams).
+  const owningDevTeams = await getDevTeamsForApp(app.id, app.team_slug)
+
+  // User's chosen dev teams — needed both to render the "Mine team" option
+  // (only shown when the user has selected at least one team) and to resolve
+  // it to a list of GitHub usernames when applied.
+  let userDevTeams: Awaited<ReturnType<typeof getUserDevTeams>> = []
+  if (currentUser?.navIdent) {
+    try {
+      userDevTeams = await getUserDevTeams(currentUser.navIdent)
+    } catch {
+      // user_dev_team_preference table may not exist yet
+    }
+  }
+
+  // Resolve the team filter to a list of GitHub usernames.
+  // - "" / "all"  → no filter (undefined)
+  // - "mine"      → union of all members across the user's dev teams
+  // - "<slug>"    → members of that single dev team (must own the app)
+  //
+  // We track *why* the resolved set is empty so the UI can give a useful
+  // empty-state hint instead of generic "no deployments". `teamFilterEmpty`
+  // is true only when the filter was applied but yields no candidate users.
+  let deployerUsernamesFilter: string[] | undefined
+  let teamFilterEmptyReason: 'no-user-teams' | 'no-team-members' | null = null
+  // Wrap helper calls in try/catch so the page still works if the
+  // user_dev_team_preference table hasn't been deployed yet (matches the
+  // graceful degradation for getUserDevTeams above) — fall back to no filter.
+  if (teamFilter === 'mine') {
+    if (userDevTeams.length === 0) {
+      deployerUsernamesFilter = []
+      teamFilterEmptyReason = 'no-user-teams'
+    } else {
+      try {
+        deployerUsernamesFilter = await getMembersGithubUsernamesForDevTeams(userDevTeams.map((t) => t.id))
+        if (deployerUsernamesFilter.length === 0) teamFilterEmptyReason = 'no-team-members'
+      } catch {
+        deployerUsernamesFilter = undefined
+      }
+    }
+  } else if (teamFilter) {
+    const matched = owningDevTeams.find((t) => t.slug === teamFilter)
+    if (matched) {
+      try {
+        deployerUsernamesFilter = await getMembersGithubUsernamesForDevTeams([matched.id])
+        if (deployerUsernamesFilter.length === 0) teamFilterEmptyReason = 'no-team-members'
+      } catch {
+        deployerUsernamesFilter = undefined
+      }
+    }
+    // If the slug doesn't match an owning team, silently ignore (treat as "Alle")
+  }
 
   const filters: DeploymentFilters = {
     ...(showGroup && hasGroup
@@ -56,6 +117,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     method: method && ['pr', 'direct_push', 'legacy'].includes(method) ? method : undefined,
     goal_filter: goal && ['missing', 'linked'].includes(goal) ? goal : undefined,
     deployer_username: deployer,
+    deployer_usernames: deployerUsernamesFilter,
     commit_sha: sha,
     start_date: range?.startDate,
     end_date: range?.endDate,
@@ -111,13 +173,22 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   deployerOptions.sort((a, b) => a.label.localeCompare(b.label, 'no'))
 
   // Find current user's GitHub username for "Meg" shortcut
-  const currentUser = await getUserIdentity(request)
   let currentUserGithub: string | null = null
   if (currentUser?.navIdent) {
     const mapping = await getUserMappingByNavIdent(currentUser.navIdent)
     if (mapping?.github_username && allDeployers.includes(mapping.github_username)) {
       currentUserGithub = mapping.github_username
     }
+  }
+
+  // Build dropdown options for the team filter. "Mine team" is only offered
+  // when the user actually has dev-team preferences set.
+  const teamOptions: { value: string; label: string }[] = []
+  if (userDevTeams.length > 0) {
+    teamOptions.push({ value: 'mine', label: 'Mine team' })
+  }
+  for (const t of owningDevTeams) {
+    teamOptions.push({ value: t.slug, label: t.name })
   }
 
   return {
@@ -128,6 +199,8 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     hasGroup,
     showGroup: showGroup && hasGroup,
     errorReasons,
+    teamOptions,
+    teamFilterEmptyReason,
     ...result,
   }
 }
@@ -145,6 +218,8 @@ export default function AppDeployments() {
     hasGroup,
     showGroup,
     errorReasons,
+    teamOptions,
+    teamFilterEmptyReason,
   } = useLoaderData<typeof loader>()
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -154,6 +229,7 @@ export default function AppDeployments() {
   const currentDeployer = searchParams.get('deployer') || ''
   const currentSha = searchParams.get('sha') || ''
   const currentPeriod = searchParams.get('period') || 'last-week'
+  const currentTeam = searchParams.get('team') || ''
 
   const updateFilter = (key: string, value: string) => {
     const newParams = new URLSearchParams(searchParams)
@@ -251,6 +327,22 @@ export default function AppDeployments() {
                   ))}
               </Select>
 
+              {teamOptions.length > 0 && (
+                <Select
+                  label="Team"
+                  size="small"
+                  value={currentTeam}
+                  onChange={(e) => updateFilter('team', e.target.value)}
+                >
+                  <option value="">Alle</option>
+                  {teamOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </Select>
+              )}
+
               <TextField
                 label="Commit SHA"
                 size="small"
@@ -283,7 +375,13 @@ export default function AppDeployments() {
       <div>
         {deployments.length === 0 ? (
           <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
-            <BodyShort>Ingen deployments funnet med valgte filtre.</BodyShort>
+            <BodyShort>
+              {teamFilterEmptyReason === 'no-user-teams'
+                ? 'Du har ikke valgt noen utviklingsteam under dine preferanser, så «Mine team» gir ingen treff.'
+                : teamFilterEmptyReason === 'no-team-members'
+                  ? 'Det valgte teamet har ingen medlemmer med GitHub-brukernavn registrert, så filteret gir ingen treff.'
+                  : 'Ingen deployments funnet med valgte filtre.'}
+            </BodyShort>
           </Box>
         ) : (
           deployments.map((deployment) => (
