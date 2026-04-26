@@ -93,6 +93,7 @@ async function updateDeploymentVerification(
      SET 
        four_eyes_status = $1,
        github_pr_number = COALESCE($2, github_pr_number),
+       github_pr_url = COALESCE($7, github_pr_url),
        unverified_commits = $4::jsonb,
        github_pr_data = COALESCE($5::jsonb, github_pr_data),
        title = COALESCE($6, title)
@@ -117,6 +118,7 @@ async function updateDeploymentVerification(
         : null,
       githubPrDataJson,
       result.deployedPr?.title || result.unverifiedCommits[0]?.message || null,
+      result.deployedPr?.url || null,
     ],
   )
 
