@@ -355,9 +355,11 @@ export default function AppDeployments() {
                     </Detail>
                     {deployment.github_pr_number && (
                       <Detail textColor="subtle">
-                        <ExternalLink href={deployment.github_pr_url || '#'}>
-                          #{deployment.github_pr_number}
-                        </ExternalLink>
+                        {deployment.github_pr_url ? (
+                          <ExternalLink href={deployment.github_pr_url}>#{deployment.github_pr_number}</ExternalLink>
+                        ) : (
+                          <>#{deployment.github_pr_number}</>
+                        )}
                       </Detail>
                     )}
                   </HStack>
