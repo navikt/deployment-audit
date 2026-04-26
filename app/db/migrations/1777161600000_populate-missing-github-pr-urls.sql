@@ -11,9 +11,11 @@
 -- 1. Update store-data.server.ts to also set github_pr_url during verification
 -- 2. Backfill existing records where github_pr_url is NULL but github_pr_data has the URL
 
--- Backfill missing github_pr_url from github_pr_data->>'url'
+-- Backfill missing github_pr_url by constructing it from repo info and PR number
+-- Note: github_pr_data doesn't contain the 'url' field, so we construct it
 UPDATE deployments
-SET github_pr_url = github_pr_data->>'url'
+SET github_pr_url = 'https://github.com/' || detected_github_owner || '/' || detected_github_repo_name || '/pull/' || github_pr_number::text
 WHERE github_pr_url IS NULL
-  AND github_pr_data IS NOT NULL
-  AND github_pr_data->>'url' IS NOT NULL;
+  AND github_pr_number IS NOT NULL
+  AND detected_github_owner IS NOT NULL
+  AND detected_github_repo_name IS NOT NULL;
