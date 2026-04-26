@@ -43,6 +43,7 @@ import { requireUser } from '~/lib/auth.server'
 import { type BoardPeriodType, formatBoardLabel, getPeriodsForYear } from '~/lib/board-periods'
 import { getFormString } from '~/lib/form-validators'
 import { groupAppCards } from '~/lib/group-app-cards'
+import { getApplicationInfo } from '~/lib/nais.server'
 import type { Route } from './+types/sections.$sectionSlug.teams.$devTeamSlug'
 import type { loader as layoutLoader } from './layout'
 
@@ -189,6 +190,26 @@ export async function action({ request, params }: Route.ActionArgs) {
     }
 
     try {
+      // Validate against Nais before persisting. Without this, a typo (or
+      // typing the app name into the team field, etc.) silently creates a
+      // monitored_application row that can never sync — the resulting Nais
+      // GraphQL error ("A team slug must be at most 30 characters long.")
+      // only surfaces hours later in the periodic sync logs.
+      const found = await getApplicationInfo(teamSlug, environmentName, appName)
+      if (!found) {
+        // Try the swapped order to detect the common "fields swapped" mistake
+        // and give a precise hint instead of a generic "not found" error.
+        const swapped = await getApplicationInfo(appName, environmentName, teamSlug)
+        if (swapped) {
+          return {
+            error: `Fant ikke ${appName} i ${teamSlug}/${environmentName}, men fant ${teamSlug} i ${appName}/${environmentName}. Har du forvekslet «Nais-team» og «Applikasjonsnavn»?`,
+          }
+        }
+        return {
+          error: `Fant ikke ${appName} i Nais-team ${teamSlug} (miljø ${environmentName}). Sjekk at navnene er riktige.`,
+        }
+      }
+
       const monitoredApp = await createMonitoredApplication({
         team_slug: teamSlug,
         environment_name: environmentName,
@@ -632,7 +653,13 @@ const AddAppsDialog = forwardRef<
                     Legg til ny applikasjon
                   </Heading>
                   <HStack gap="space-8" wrap>
-                    <TextField label="Nais-team" name="team_slug" size="small" autoComplete="off" />
+                    <TextField
+                      label="Nais-team"
+                      name="team_slug"
+                      size="small"
+                      autoComplete="off"
+                      description="Slug fra Nais (typisk teamnavnet)"
+                    />
                     <Select label="Miljø" name="environment_name" size="small">
                       {environments.length > 0 ? (
                         environments.map((env) => (
@@ -647,7 +674,13 @@ const AddAppsDialog = forwardRef<
                         </>
                       )}
                     </Select>
-                    <TextField label="Applikasjonsnavn" name="app_name" size="small" autoComplete="off" />
+                    <TextField
+                      label="Applikasjonsnavn"
+                      name="app_name"
+                      size="small"
+                      autoComplete="off"
+                      description="Navnet på applikasjonen i Nais"
+                    />
                     <TextField
                       label="Startår for revisjon"
                       name="audit_start_year"
