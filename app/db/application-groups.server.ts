@@ -63,9 +63,10 @@ export async function removeAppFromGroup(monitoredAppId: number): Promise<void> 
 }
 
 export async function getGroupWithApps(groupId: number): Promise<ApplicationGroupWithApps | null> {
-  const { rows: groupRows } = await pool.query<ApplicationGroup>('SELECT * FROM application_groups WHERE id = $1', [
-    groupId,
-  ])
+  const { rows: groupRows } = await pool.query<ApplicationGroup>(
+    'SELECT * FROM application_groups WHERE id = $1 AND deleted_at IS NULL',
+    [groupId],
+  )
   if (groupRows.length === 0) return null
 
   const { rows: appRows } = await pool.query<{
@@ -89,7 +90,7 @@ export async function getGroupByAppId(monitoredAppId: number): Promise<Applicati
     `SELECT ag.*
      FROM application_groups ag
      JOIN monitored_applications ma ON ma.application_group_id = ag.id
-     WHERE ma.id = $1`,
+     WHERE ma.id = $1 AND ag.deleted_at IS NULL`,
     [monitoredAppId],
   )
   return rows[0] ?? null
@@ -117,8 +118,35 @@ export async function getSiblingApps(
   return rows
 }
 
-export async function deleteGroup(groupId: number): Promise<void> {
-  await pool.query('DELETE FROM application_groups WHERE id = $1', [groupId])
+/**
+ * Soft-delete an application group.
+ *
+ * Sets deleted_at/deleted_by on the group row (preserving it for audit
+ * reports) and clears application_group_id on all linked monitored
+ * applications so they appear "ungrouped" in current-state UI listings.
+ * Both updates run in a single transaction.
+ */
+export async function deleteGroup(groupId: number, deletedBy: string): Promise<void> {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    await client.query(
+      `UPDATE application_groups
+       SET deleted_at = NOW(), deleted_by = $2
+       WHERE id = $1 AND deleted_at IS NULL`,
+      [groupId, deletedBy],
+    )
+    await client.query(
+      'UPDATE monitored_applications SET application_group_id = NULL WHERE application_group_id = $1',
+      [groupId],
+    )
+    await client.query('COMMIT')
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {})
+    throw err
+  } finally {
+    client.release()
+  }
 }
 
 export async function getAllGroups(): Promise<ApplicationGroupSummary[]> {
@@ -126,6 +154,7 @@ export async function getAllGroups(): Promise<ApplicationGroupSummary[]> {
     `SELECT ag.*, COUNT(ma.id)::int AS app_count
      FROM application_groups ag
      LEFT JOIN monitored_applications ma ON ma.application_group_id = ag.id
+     WHERE ag.deleted_at IS NULL
      GROUP BY ag.id
      ORDER BY ag.name`,
   )
