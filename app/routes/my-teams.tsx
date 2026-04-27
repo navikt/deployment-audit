@@ -7,9 +7,10 @@ import { type BoardSummary, BoardSummaryCard } from '~/components/BoardSummaryCa
 import { getAllActiveRepositories } from '~/db/application-repositories.server'
 import { getBoardsByDevTeam } from '~/db/boards.server'
 import { getBoardObjectiveProgress, getDevTeamSummaryStats } from '~/db/dashboard-stats.server'
-import { getDevTeamAppsWithIssues } from '~/db/deployments/home.server'
+import { getDevTeamAppsWithIssues, getPersonalDeploymentsMissingGoalLinks } from '~/db/deployments/home.server'
 import { getDevTeamApplications } from '~/db/dev-teams.server'
 import { getMembersGithubUsernamesForDevTeams, getUserDevTeams } from '~/db/user-dev-team-preference.server'
+import { getUserMappingByNavIdent } from '~/db/user-mappings.server'
 import { groupAppCards } from '~/lib/group-app-cards'
 import { getAppDeploymentStatsBatch } from '../db/deployments.server'
 import { getAllAlertCounts, getAllMonitoredApplications } from '../db/monitored-applications.server'
@@ -23,6 +24,14 @@ export function meta(_args: Route.MetaArgs) {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const identity = await requireUser(request)
+
+  // Resolve the user's GitHub username for the personal goal-link query.
+  const userMapping = await getUserMappingByNavIdent(identity.navIdent)
+  const githubUsername = userMapping?.github_username ?? null
+
+  // Personal "missing goal links" count — mirrors the Slack home tab section.
+  // null means the user hasn't mapped a GitHub username yet.
+  const personalMissingGoalLinks = githubUsername ? await getPersonalDeploymentsMissingGoalLinks(githubUsername) : null
 
   // getUserDevTeams may fail if migration hasn't run yet
   let selectedDevTeams: Awaited<ReturnType<typeof getUserDevTeams>> = []
@@ -40,6 +49,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       issueApps: [] as AppCardData[],
       boardSummaries: [] as BoardSummary[],
       noTeamMembersMapped: false,
+      personalMissingGoalLinks,
+      navIdent: identity.navIdent,
     }
   }
 
@@ -156,6 +167,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     issueApps: issueAppCards,
     boardSummaries,
     noTeamMembersMapped,
+    personalMissingGoalLinks,
+    navIdent: identity.navIdent,
   }
 }
 
@@ -220,11 +233,72 @@ function getHealthIcon(fourEyes: number, goalCoverage: number): ReactNode {
   return <ExclamationmarkTriangleIcon aria-hidden />
 }
 
+function PersonalGoalStatus({
+  personalMissingGoalLinks,
+  profileId,
+}: {
+  personalMissingGoalLinks: number | null
+  profileId: string | null | undefined
+}) {
+  if (personalMissingGoalLinks === null) {
+    return (
+      <Alert variant="info">
+        <VStack gap="space-8">
+          <BodyShort>
+            For å se dine egne deployments som mangler kobling til mål, må du legge til GitHub-brukernavnet ditt i
+            NDA-profilen.
+          </BodyShort>
+          {profileId && (
+            <div>
+              <Button as={Link} to={`/users/${profileId}`} size="small" variant="secondary">
+                Åpne min profil
+              </Button>
+            </div>
+          )}
+        </VStack>
+      </Alert>
+    )
+  }
+
+  if (personalMissingGoalLinks > 0) {
+    return (
+      <Alert variant="warning">
+        <VStack gap="space-8">
+          <BodyShort>
+            <strong>{personalMissingGoalLinks} av dine deployments mangler endringsopphav.</strong> Koble dem til mål
+            eller nøkkelresultater i NDA.
+          </BodyShort>
+          {profileId && (
+            <div>
+              <Button as={Link} to={`/users/${profileId}?goal=without_goal`} size="small" variant="secondary">
+                Koble mine deployments
+              </Button>
+            </div>
+          )}
+        </VStack>
+      </Alert>
+    )
+  }
+
+  return (
+    <Alert variant="success">
+      <BodyShort>Alle dine deployments har endringsopphav.</BodyShort>
+    </Alert>
+  )
+}
+
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { selectedDevTeams, teamStats, issueApps, boardSummaries, noTeamMembersMapped } = loaderData
+  const {
+    selectedDevTeams,
+    teamStats,
+    issueApps,
+    boardSummaries,
+    noTeamMembersMapped,
+    personalMissingGoalLinks,
+    navIdent,
+  } = loaderData
   const layoutData = useRouteLoaderData<typeof layoutLoader>('routes/layout')
   const githubUsername = layoutData?.user?.githubUsername
-  const navIdent = layoutData?.user?.navIdent
   const profileId = githubUsername || navIdent
 
   return (
@@ -319,6 +393,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               </HGrid>
             </VStack>
           )}
+          {/* Personal goal-link status — mirrors the Slack home tab */}
+          <PersonalGoalStatus personalMissingGoalLinks={personalMissingGoalLinks} profileId={profileId} />
           {/* Issue apps */}
           {issueApps.length > 0 ? (
             <VStack gap="space-16">
