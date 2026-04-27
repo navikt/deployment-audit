@@ -1,7 +1,7 @@
 import { NOT_APPROVED_STATUSES, PENDING_STATUSES } from '~/lib/four-eyes-status'
 import { pool } from '../connection.server'
 import type { AppWithIssues, DeploymentWithApp } from '../deployments.server'
-import { userDeploymentMatchSql } from '../user-deployment-match'
+import { lowerUsernames, userDeploymentMatchAnySql, userDeploymentMatchSql } from '../user-deployment-match'
 
 /**
  * Get apps with issues filtered to a dev team's scope.
@@ -10,12 +10,28 @@ import { userDeploymentMatchSql } from '../user-deployment-match'
  * their nais team slug) and `directAppIds` (apps explicitly attached to the
  * dev team in NDA). An app is included if it matches either side — this
  * matches user expectations on /my-teams where teams may have both.
+ *
+ * `deployerUsernames` (optional) restricts the deployment-derived counts
+ * (`without_four_eyes`, `pending_verification`, `missing_goal_links`) to
+ * deployments where the deployer or PR creator matches one of the given
+ * GitHub usernames. Repository-level alert counts are NOT filtered (they
+ * track Dependabot/CodeQL events which aren't tied to a deployer). When the
+ * filter is provided as an empty array the deployment counts are 0 — callers
+ * should surface a hint to the user that no team members are GitHub-mapped.
+ * When the parameter is `undefined` no deployer filter is applied (callers
+ * that want app-scope semantics, e.g. the Slack home tab, omit it).
  */
 export async function getDevTeamAppsWithIssues(
   naisTeamSlugs: string[],
   directAppIds?: number[],
+  deployerUsernames?: string[],
 ): Promise<AppWithIssues[]> {
   const ids = directAppIds ?? []
+
+  const hasDeployerFilter = deployerUsernames !== undefined
+  const deployerFilterClause = hasDeployerFilter ? ` AND ${userDeploymentMatchAnySql(5, 'd')}` : ''
+  const params: unknown[] = [NOT_APPROVED_STATUSES, PENDING_STATUSES, naisTeamSlugs, ids]
+  if (hasDeployerFilter) params.push(lowerUsernames(deployerUsernames))
 
   const result = await pool.query(
     `
@@ -30,9 +46,9 @@ export async function getDevTeamAppsWithIssues(
     FROM monitored_applications ma
     LEFT JOIN LATERAL (
       SELECT 
-        SUM(CASE WHEN d.four_eyes_status = ANY($1) THEN 1 ELSE 0 END) as without_four_eyes,
-        SUM(CASE WHEN d.four_eyes_status = ANY($2) THEN 1 ELSE 0 END) as pending_verification,
-        SUM(CASE WHEN NOT EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = d.id AND dgl.is_active = true) THEN 1 ELSE 0 END) as missing_goal_links
+        SUM(CASE WHEN d.four_eyes_status = ANY($1)${deployerFilterClause} THEN 1 ELSE 0 END) as without_four_eyes,
+        SUM(CASE WHEN d.four_eyes_status = ANY($2)${deployerFilterClause} THEN 1 ELSE 0 END) as pending_verification,
+        SUM(CASE WHEN NOT EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = d.id AND dgl.is_active = true)${deployerFilterClause} THEN 1 ELSE 0 END) as missing_goal_links
       FROM deployments d
       WHERE d.monitored_app_id = ma.id
         AND (ma.audit_start_year IS NULL OR d.created_at >= make_date(ma.audit_start_year, 1, 1))
@@ -50,7 +66,7 @@ export async function getDevTeamAppsWithIssues(
         OR COALESCE(dep.missing_goal_links, 0) > 0)
     ORDER BY COALESCE(dep.without_four_eyes, 0) DESC, COALESCE(dep.missing_goal_links, 0) DESC, COALESCE(alerts.count, 0) DESC
   `,
-    [NOT_APPROVED_STATUSES, PENDING_STATUSES, naisTeamSlugs, ids],
+    params,
   )
   return result.rows
 }

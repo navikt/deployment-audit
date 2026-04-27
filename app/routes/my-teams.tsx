@@ -9,7 +9,7 @@ import { getBoardsByDevTeam } from '~/db/boards.server'
 import { getBoardObjectiveProgress, getDevTeamSummaryStats } from '~/db/dashboard-stats.server'
 import { getDevTeamAppsWithIssues } from '~/db/deployments/home.server'
 import { getDevTeamApplications } from '~/db/dev-teams.server'
-import { getUserDevTeams } from '~/db/user-dev-team-preference.server'
+import { getMembersGithubUsernamesForDevTeams, getUserDevTeams } from '~/db/user-dev-team-preference.server'
 import { groupAppCards } from '~/lib/group-app-cards'
 import { getAppDeploymentStatsBatch } from '../db/deployments.server'
 import { getAllAlertCounts, getAllMonitoredApplications } from '../db/monitored-applications.server'
@@ -39,6 +39,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       teamStats: null,
       issueApps: [] as AppCardData[],
       boardSummaries: [] as BoardSummary[],
+      noTeamMembersMapped: false,
     }
   }
 
@@ -49,10 +50,26 @@ export async function loader({ request }: Route.LoaderArgs) {
   const directAppIds = allDirectAppIds.length > 0 ? allDirectAppIds : undefined
   const ytdStart = new Date(new Date().getFullYear(), 0, 1)
 
+  // Resolve the GitHub-username filter for "person-scope" semantics: every
+  // count on this page (summary cards, issue-app inclusion, AppCard badges)
+  // is restricted to deployments where the deployer or PR creator is a
+  // member of one of the user's selected dev teams. This matches what the
+  // deployment-list links from this page show (they preset team=mine), so
+  // badges/counts here agree with the list the user lands on.
+  let deployerUsernamesFilter: string[] | undefined
+  try {
+    deployerUsernamesFilter = await getMembersGithubUsernamesForDevTeams(selectedDevTeams.map((t) => t.id))
+  } catch {
+    // user_dev_team_preference / user_mappings may not be reachable; fall
+    // back to no filter rather than blanking out the page.
+    deployerUsernamesFilter = undefined
+  }
+  const noTeamMembersMapped = deployerUsernamesFilter !== undefined && deployerUsernamesFilter.length === 0
+
   // Fetch stats, issue apps, and boards in parallel
   const [teamStats, issueApps, alertCounts, activeReposByApp, ...boardsByTeam] = await Promise.all([
-    getDevTeamSummaryStats(allNaisTeamSlugs, directAppIds, ytdStart),
-    getDevTeamAppsWithIssues(allNaisTeamSlugs, directAppIds),
+    getDevTeamSummaryStats(allNaisTeamSlugs, directAppIds, ytdStart, deployerUsernamesFilter),
+    getDevTeamAppsWithIssues(allNaisTeamSlugs, directAppIds, deployerUsernamesFilter),
     getAllAlertCounts(),
     getAllActiveRepositories(),
     ...selectedDevTeams.map((t) => getBoardsByDevTeam(t.id)),
@@ -68,7 +85,10 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const statsByApp =
     matchingApps.length > 0
-      ? await getAppDeploymentStatsBatch(matchingApps.map((a) => ({ id: a.id, audit_start_year: a.audit_start_year })))
+      ? await getAppDeploymentStatsBatch(
+          matchingApps.map((a) => ({ id: a.id, audit_start_year: a.audit_start_year })),
+          deployerUsernamesFilter,
+        )
       : new Map()
 
   // Build a map of missing_goal_links from the issue query
@@ -135,6 +155,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     teamStats,
     issueApps: issueAppCards,
     boardSummaries,
+    noTeamMembersMapped,
   }
 }
 
@@ -200,7 +221,7 @@ function getHealthIcon(fourEyes: number, goalCoverage: number): ReactNode {
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { selectedDevTeams, teamStats, issueApps, boardSummaries } = loaderData
+  const { selectedDevTeams, teamStats, issueApps, boardSummaries, noTeamMembersMapped } = loaderData
   const layoutData = useRouteLoaderData<typeof layoutLoader>('routes/layout')
   const githubUsername = layoutData?.user?.githubUsername
   const navIdent = layoutData?.user?.navIdent
@@ -236,6 +257,12 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       {/* Teams selected — show combined overview */}
       {selectedDevTeams.length > 0 && teamStats && (
         <VStack gap="space-24">
+          {noTeamMembersMapped && (
+            <Alert variant="info">
+              Ingen av medlemmene i dine team er koblet til en GitHub-bruker, så tallene under er 0. Be teammedlemmene
+              registrere GitHub-brukernavn under <Link to="/users">Brukermapping</Link> så blir tallene riktige.
+            </Alert>
+          )}{' '}
           {/* Summary cards */}
           <HGrid gap="space-16" columns={{ xs: 1, sm: 2, lg: 4 }}>
             <SummaryCard
@@ -262,7 +289,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               variant={getHealthVariant(Math.min(teamStats.four_eyes_coverage, teamStats.goal_coverage))}
             />
           </HGrid>
-
           {/* Navigation links per team */}
           <HStack gap="space-8" wrap>
             <Button as={Link} to="/my-apps" size="small" variant="primary">
@@ -280,7 +306,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               </Button>
             ))}
           </HStack>
-
           {/* Active boards summary */}
           {boardSummaries.length > 0 && (
             <VStack gap="space-16">
@@ -294,7 +319,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               </HGrid>
             </VStack>
           )}
-
           {/* Issue apps */}
           {issueApps.length > 0 ? (
             <VStack gap="space-16">
