@@ -53,27 +53,37 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (!devTeam) {
     throw new Response('Utviklingsteam ikke funnet', { status: 404 })
   }
-  const [boards, members, directApps, groupAppIds, allApps, alertCounts, activeRepos, naisCatalogResult] =
-    await Promise.all([
-      getBoardsByDevTeam(devTeam.id),
-      getDevTeamMembers(devTeam.id).catch(() => [] as DevTeamMember[]),
-      getDevTeamApplications(devTeam.id),
-      getGroupAppIdsForDevTeams([devTeam.id]),
-      getAllMonitoredApplications(),
-      getAllAlertCounts(),
-      getAllActiveRepositories(),
-      fetchAllTeamsAndApplications().then(
-        (catalog) => ({ ok: true as const, catalog }),
-        (err: unknown) => {
-          // Page still loads if Nais is down — UI surfaces a dedicated error state.
-          logger.error('Kunne ikke hente Nais-katalog:', err)
-          return {
-            ok: false as const,
-            catalog: [] as Array<{ teamSlug: string; appName: string; environmentName: string }>,
-          }
-        },
-      ),
-    ])
+  const [
+    boards,
+    members,
+    directApps,
+    groupAppIds,
+    allApps,
+    alertCounts,
+    activeRepos,
+    naisCatalogResult,
+    deployerUsernames,
+  ] = await Promise.all([
+    getBoardsByDevTeam(devTeam.id),
+    getDevTeamMembers(devTeam.id).catch(() => [] as DevTeamMember[]),
+    getDevTeamApplications(devTeam.id),
+    getGroupAppIdsForDevTeams([devTeam.id]),
+    getAllMonitoredApplications(),
+    getAllAlertCounts(),
+    getAllActiveRepositories(),
+    fetchAllTeamsAndApplications().then(
+      (catalog) => ({ ok: true as const, catalog }),
+      (err: unknown) => {
+        // Page still loads if Nais is down — UI surfaces a dedicated error state.
+        logger.error('Kunne ikke hente Nais-katalog:', err)
+        return {
+          ok: false as const,
+          catalog: [] as Array<{ teamSlug: string; appName: string; environmentName: string }>,
+        }
+      },
+    ),
+    getMembersGithubUsernamesForDevTeams([devTeam.id]).catch(() => [] as string[]),
+  ])
   const naisCatalog = naisCatalogResult.catalog
   const naisCatalogFailed = !naisCatalogResult.ok
 
@@ -88,10 +98,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   )
 
   // Filter stats to deploys made by team members (their GitHub usernames).
-  // Use the shared function that handles soft-deletes and deduplication,
-  // consistent with the deployment list page's team filter.
-  const deployerUsernames = await getMembersGithubUsernamesForDevTeams([devTeam.id])
-  const hasMappedMembers = deployerUsernames.length > 0
+  // deployerUsernames is fetched in Promise.all above via getMembersGithubUsernamesForDevTeams
+  // (handles soft-deletes, consistent with the deployment list page's team filter).
+  // hasMappedMembers and unmappedMemberCount are derived from the members list
+  // (not from deployerUsernames which is deduplicated and may not reflect 1:1 mapping).
+  const hasMappedMembers = members.some((m) => Boolean(m.github_username))
 
   // Top-of-page coverage stats: last 90 days, filtered to team members' deploys.
   const coverageEnd = new Date()
@@ -177,7 +188,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     sectionName: section?.name ?? params.sectionSlug,
     teamCoverage,
     hasMappedMembers,
-    unmappedMemberCount: members.length - deployerUsernames.length,
+    unmappedMemberCount: members.filter((m) => !m.github_username).length,
   }
 }
 
