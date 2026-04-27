@@ -8,7 +8,7 @@ import { UserName } from '~/components/UserName'
 import { getGroupByAppId, getSiblingApps } from '~/db/application-groups.server'
 import { pool } from '~/db/connection.server'
 import { type DeploymentFilters, getDeploymentsPaginated } from '~/db/deployments.server'
-import { getDevTeamsForApp } from '~/db/dev-teams.server'
+import { getDevTeamsForApp, getDevTeamsForApps } from '~/db/dev-teams.server'
 import { getMonitoredApplicationByIdentity } from '~/db/monitored-applications.server'
 import { getMembersGithubUsernamesForDevTeams, getUserDevTeams } from '~/db/user-dev-team-preference.server'
 import { getUserMappingByNavIdent, getUserMappings } from '~/db/user-mappings.server'
@@ -54,10 +54,16 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   // Resolve current user (used for "Meg" deployer shortcut and "Mine team" filter)
   const currentUser = await getUserIdentity(request)
 
-  // Dev teams owning this app — used to populate the team-filter dropdown.
-  // The list combines explicit ownership (dev_team_applications) and implicit
-  // ownership via Nais-team mapping (dev_team_nais_teams).
-  const owningDevTeams = await getDevTeamsForApp(app.id, app.team_slug)
+  // Dev teams owning this app (or group siblings) — used to populate the team-filter dropdown.
+  // When viewing a group, check ownership across ALL sibling apps so a dev team
+  // that only owns a secondary app in the group is still found.
+  const owningDevTeams =
+    showGroup && hasGroup
+      ? await getDevTeamsForApps([
+          { monitoredAppId: app.id, teamSlug: app.team_slug },
+          ...allSiblings.map((s) => ({ monitoredAppId: s.id, teamSlug: s.team_slug })),
+        ])
+      : await getDevTeamsForApp(app.id, app.team_slug)
 
   // User's chosen dev teams — needed both to render the "Mine team" option
   // (only shown when the user has selected at least one team) and to resolve

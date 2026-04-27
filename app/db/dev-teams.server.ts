@@ -107,15 +107,25 @@ export async function getDevTeamsForApp(
   monitoredAppId: number,
   teamSlug: string,
 ): Promise<(DevTeam & { section_slug: string })[]> {
+  return getDevTeamsForApps([{ monitoredAppId, teamSlug }])
+}
+
+/** Find all dev teams for multiple monitored apps (via direct app links and nais teams) */
+export async function getDevTeamsForApps(
+  apps: Array<{ monitoredAppId: number; teamSlug: string }>,
+): Promise<(DevTeam & { section_slug: string })[]> {
+  if (apps.length === 0) return []
+  const appIds = apps.map((a) => a.monitoredAppId)
+  const teamSlugs = [...new Set(apps.map((a) => a.teamSlug))]
   const result = await pool.query(
     `SELECT DISTINCT dt.*, s.slug AS section_slug FROM dev_teams dt
      JOIN sections s ON s.id = dt.section_id
      LEFT JOIN dev_team_applications dta
-       ON dta.dev_team_id = dt.id AND dta.monitored_app_id = $1 AND dta.deleted_at IS NULL
-     LEFT JOIN dev_team_nais_teams dnt ON dnt.dev_team_id = dt.id AND dnt.nais_team_slug = $2 AND dnt.deleted_at IS NULL
+       ON dta.dev_team_id = dt.id AND dta.monitored_app_id = ANY($1) AND dta.deleted_at IS NULL
+     LEFT JOIN dev_team_nais_teams dnt ON dnt.dev_team_id = dt.id AND dnt.nais_team_slug = ANY($2) AND dnt.deleted_at IS NULL
      WHERE dt.is_active = true AND (dta.monitored_app_id IS NOT NULL OR dnt.nais_team_slug IS NOT NULL)
      ORDER BY dt.name`,
-    [monitoredAppId, teamSlug],
+    [appIds, teamSlugs],
   )
   return result.rows
 }
