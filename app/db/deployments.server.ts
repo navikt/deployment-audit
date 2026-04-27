@@ -2,7 +2,7 @@ import { APPROVED_STATUSES_SQL, NOT_APPROVED_STATUSES, PENDING_STATUSES } from '
 import { AUDIT_START_YEAR_FILTER } from './audit-start-year'
 import { pool } from './connection.server'
 import { logStatusTransition } from './deployments/status-history.server'
-import { userDeploymentMatchSql } from './user-deployment-match'
+import { lowerUsernames, userDeploymentMatchAnySql, userDeploymentMatchSql } from './user-deployment-match'
 
 /**
  * Shared SQL fragment for resolving deployment title with fallbacks.
@@ -314,8 +314,10 @@ export async function getDeploymentsPaginated(filters?: DeploymentFilters): Prom
       // can show an explanatory empty state without producing false positives.
       whereSql += ' AND FALSE'
     } else {
-      whereSql += ` AND d.deployer_username = ANY($${paramIndex})`
-      params.push(filters.deployer_usernames)
+      // Match deployer_username OR PR creator — consistent with
+      // getAppDeploymentStatsBatch so stat counts agree with list results.
+      whereSql += ` AND ${userDeploymentMatchAnySql(paramIndex)}`
+      params.push(lowerUsernames(filters.deployer_usernames))
       paramIndex++
     }
   }
