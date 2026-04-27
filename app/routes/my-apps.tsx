@@ -1,9 +1,10 @@
 import { Alert, BodyShort, Box, Button, Heading, HStack, Tag, VStack } from '@navikt/ds-react'
 import { Link } from 'react-router'
 import { AppCard, type AppCardData } from '~/components/AppCard'
+import { getGroupNamesByIds } from '~/db/application-groups.server'
 import { getAllActiveRepositories } from '~/db/application-repositories.server'
 import { getAppDeploymentStatsBatch } from '~/db/deployments.server'
-import { getDevTeamApplications } from '~/db/dev-teams.server'
+import { getDevTeamApplications, getGroupAppIdsForDevTeams } from '~/db/dev-teams.server'
 import { getAllAlertCounts, getAllMonitoredApplications } from '~/db/monitored-applications.server'
 import { getUserDevTeams } from '~/db/user-dev-team-preference.server'
 import { requireUser } from '~/lib/auth.server'
@@ -29,8 +30,12 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   const allNaisTeamSlugs = [...new Set(selectedDevTeams.flatMap((t) => t.nais_team_slugs))]
-  const directAppsResults = await Promise.all(selectedDevTeams.map((t) => getDevTeamApplications(t.id)))
-  const allDirectAppIds = [...new Set(directAppsResults.flat().map((a) => a.monitored_app_id))]
+  const devTeamIds = selectedDevTeams.map((t) => t.id)
+  const [directAppsResults, groupAppIds] = await Promise.all([
+    Promise.all(selectedDevTeams.map((t) => getDevTeamApplications(t.id))),
+    getGroupAppIdsForDevTeams(devTeamIds),
+  ])
+  const allDirectAppIds = [...new Set([...directAppsResults.flat().map((a) => a.monitored_app_id), ...groupAppIds])]
 
   const allApps = await getAllMonitoredApplications()
   const [alertCounts, activeReposByApp] = await Promise.all([getAllAlertCounts(), getAllActiveRepositories()])
@@ -45,6 +50,10 @@ export async function loader({ request }: Route.LoaderArgs) {
     userApps.length > 0
       ? await getAppDeploymentStatsBatch(userApps.map((a) => ({ id: a.id, audit_start_year: a.audit_start_year })))
       : new Map()
+
+  // Resolve group names for grouped app cards
+  const groupIds = [...new Set(userApps.map((a) => a.application_group_id).filter((id): id is number => id != null))]
+  const groupNames = await getGroupNamesByIds(groupIds)
 
   const appCards = groupAppCards(
     userApps.map((app) => ({
@@ -61,6 +70,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       },
       alertCount: alertCounts.get(app.id) || 0,
     })),
+    groupNames,
   )
 
   // Group by team_slug, then by environment

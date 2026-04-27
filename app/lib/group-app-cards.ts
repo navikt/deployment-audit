@@ -9,8 +9,11 @@ interface AppWithGroup extends AppCardData {
  * Apps in the same group are merged into a single card with aggregated stats
  * and a list of sibling environments.
  * Apps without a group are returned as-is.
+ *
+ * @param groupNames Optional map from group ID → display name. When provided,
+ *   the merged card's `groupName` is set so the UI can show the group label.
  */
-export function groupAppCards(apps: AppWithGroup[]): AppCardData[] {
+export function groupAppCards(apps: AppWithGroup[], groupNames?: Map<number, string>): AppCardData[] {
   const grouped = new Map<number, AppWithGroup[]>()
   const ungrouped: AppCardData[] = []
 
@@ -29,9 +32,15 @@ export function groupAppCards(apps: AppWithGroup[]): AppCardData[] {
 
   const result: AppCardData[] = [...ungrouped]
 
-  for (const [, groupApps] of grouped) {
+  for (const [groupId, groupApps] of grouped) {
     if (groupApps.length === 1) {
-      result.push(groupApps[0])
+      const single = groupApps[0]
+      const name = groupNames?.get(groupId)
+      if (name) {
+        result.push({ ...single, groupName: name })
+      } else {
+        result.push(single)
+      }
       continue
     }
 
@@ -43,15 +52,26 @@ export function groupAppCards(apps: AppWithGroup[]): AppCardData[] {
       total: groupApps.reduce((sum, a) => sum + a.stats.total, 0),
       without_four_eyes: groupApps.reduce((sum, a) => sum + a.stats.without_four_eyes, 0),
       pending_verification: groupApps.reduce((sum, a) => sum + a.stats.pending_verification, 0),
+      missing_goal_links: groupApps.reduce((sum, a) => sum + (a.stats.missing_goal_links ?? 0), 0),
     }
 
     const totalAlerts = groupApps.reduce((sum, a) => sum + a.alertCount, 0)
+
+    // Collect all member apps for display when names differ
+    const allGroupApps = groupApps.map((a) => ({
+      app_name: a.app_name,
+      environment_name: a.environment_name,
+    }))
+
+    const name = groupNames?.get(groupId)
 
     result.push({
       ...primary,
       stats: mergedStats,
       alertCount: totalAlerts,
       siblingEnvironments: siblingEnvs,
+      groupName: name,
+      groupApps: allGroupApps,
     })
   }
 

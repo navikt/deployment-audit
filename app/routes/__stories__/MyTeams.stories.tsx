@@ -481,3 +481,42 @@ export const IngenGitHubMapping: Story = {
     profileId: 'ola.nordmann',
   },
 }
+
+const mockIssueAppsWithGroup: AppCardData[] = [
+  {
+    id: 100,
+    team_slug: 'pensjon-skjerm',
+    environment_name: 'prod-fss',
+    app_name: 'pensjon-psak',
+    active_repo: 'navikt/pensjon-psak',
+    stats: { total: 60, without_four_eyes: 3, pending_verification: 0, missing_goal_links: 5 },
+    alertCount: 1,
+    groupName: 'psak-og-penny',
+    siblingEnvironments: ['prod-gcp'],
+    groupApps: [
+      { app_name: 'pensjon-psak', environment_name: 'prod-fss' },
+      { app_name: 'pensjon-penny', environment_name: 'prod-gcp' },
+    ],
+  },
+  {
+    id: 101,
+    team_slug: 'pensjon-start',
+    environment_name: 'prod-gcp',
+    app_name: 'pensjon-soknad',
+    active_repo: 'navikt/pensjon-soknad',
+    stats: { total: 12, without_four_eyes: 2, pending_verification: 0 },
+    alertCount: 0,
+  },
+]
+
+export const MedGrupperteApps: Story = {
+  name: 'Med grupperte applikasjoner',
+  args: {
+    selectedDevTeams: mockTeams,
+    teamStats: mockTeamStatsLowCoverage,
+    issueApps: mockIssueAppsWithGroup,
+    boardSummaries: mockBoards,
+    personalMissingGoalLinks: 12,
+    profileId: 'pcmoen',
+  },
+}

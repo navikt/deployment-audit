@@ -20,13 +20,14 @@ import { useMemo, useRef, useState } from 'react'
 import { Form, Link, useActionData, useLoaderData, useNavigation, useRouteLoaderData } from 'react-router'
 import { ActionAlert } from '~/components/ActionAlert'
 import { AppCard, type AppCardData } from '~/components/AppCard'
+import { getGroupNamesByIds } from '~/db/application-groups.server'
 import { getAllActiveRepositories } from '~/db/application-repositories.server'
 import { type Board, createBoard, getBoardsByDevTeam } from '~/db/boards.server'
 import { pool } from '~/db/connection.server'
 import { type BoardObjectiveProgress, getBoardObjectiveProgress } from '~/db/dashboard-stats.server'
 import { getDevTeamCoverageStats } from '~/db/deployment-goal-links.server'
 import { getAppDeploymentStatsBatch } from '~/db/deployments.server'
-import { getDevTeamApplications, getDevTeamBySlug } from '~/db/dev-teams.server'
+import { getDevTeamApplications, getDevTeamBySlug, getGroupAppIdsForDevTeams } from '~/db/dev-teams.server'
 import { getAllAlertCounts, getAllMonitoredApplications } from '~/db/monitored-applications.server'
 import { getSectionBySlug } from '~/db/sections.server'
 import { type DevTeamMember, getDevTeamMembers } from '~/db/user-dev-team-preference.server'
@@ -48,33 +49,35 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (!devTeam) {
     throw new Response('Utviklingsteam ikke funnet', { status: 404 })
   }
-  const [boards, members, directApps, allApps, alertCounts, activeRepos, naisCatalogResult] = await Promise.all([
-    getBoardsByDevTeam(devTeam.id),
-    getDevTeamMembers(devTeam.id).catch(() => [] as DevTeamMember[]),
-    getDevTeamApplications(devTeam.id),
-    getAllMonitoredApplications(),
-    getAllAlertCounts(),
-    getAllActiveRepositories(),
-    fetchAllTeamsAndApplications().then(
-      (catalog) => ({ ok: true as const, catalog }),
-      (err: unknown) => {
-        // Page still loads if Nais is down — UI surfaces a dedicated error state.
-        logger.error('Kunne ikke hente Nais-katalog:', err)
-        return {
-          ok: false as const,
-          catalog: [] as Array<{ teamSlug: string; appName: string; environmentName: string }>,
-        }
-      },
-    ),
-  ])
+  const [boards, members, directApps, groupAppIds, allApps, alertCounts, activeRepos, naisCatalogResult] =
+    await Promise.all([
+      getBoardsByDevTeam(devTeam.id),
+      getDevTeamMembers(devTeam.id).catch(() => [] as DevTeamMember[]),
+      getDevTeamApplications(devTeam.id),
+      getGroupAppIdsForDevTeams([devTeam.id]),
+      getAllMonitoredApplications(),
+      getAllAlertCounts(),
+      getAllActiveRepositories(),
+      fetchAllTeamsAndApplications().then(
+        (catalog) => ({ ok: true as const, catalog }),
+        (err: unknown) => {
+          // Page still loads if Nais is down — UI surfaces a dedicated error state.
+          logger.error('Kunne ikke hente Nais-katalog:', err)
+          return {
+            ok: false as const,
+            catalog: [] as Array<{ teamSlug: string; appName: string; environmentName: string }>,
+          }
+        },
+      ),
+    ])
   const naisCatalog = naisCatalogResult.catalog
   const naisCatalogFailed = !naisCatalogResult.ok
 
   const activeBoard = boards.find((b) => b.is_active) ?? null
   const activeBoardProgress = activeBoard ? await getBoardObjectiveProgress(activeBoard.id) : []
 
-  // Build app cards: direct links + nais team matches
-  const directAppIds = new Set(directApps.map((a) => a.monitored_app_id))
+  // Build app cards: direct links + group-owned apps + nais team matches
+  const directAppIds = new Set([...directApps.map((a) => a.monitored_app_id), ...groupAppIds])
   const naisTeamSlugs = devTeam.nais_team_slugs ?? []
   const teamApps = allApps.filter(
     (app) => app.is_active && (directAppIds.has(app.id) || naisTeamSlugs.includes(app.team_slug)),
@@ -103,6 +106,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     ),
   ])
 
+  // Resolve group names for grouped app cards
+  const teamGroupIds = [
+    ...new Set(teamApps.map((a) => a.application_group_id).filter((id): id is number => id != null)),
+  ]
+  const groupNames = await getGroupNamesByIds(teamGroupIds)
+
   const appCards: AppCardData[] = groupAppCards(
     teamApps.map((app) => ({
       ...app,
@@ -119,7 +128,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       },
       alertCount: alertCounts.get(app.id) || 0,
     })),
-  ).sort((a, b) => a.app_name.localeCompare(b.app_name, 'nb'))
+    groupNames,
+  ).sort((a, b) => (a.groupName ?? a.app_name).localeCompare(b.groupName ?? b.app_name, 'nb'))
 
   const section = await getSectionBySlug(params.sectionSlug)
 

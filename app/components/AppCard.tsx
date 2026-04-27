@@ -2,6 +2,7 @@ import {
   BellIcon,
   CheckmarkCircleIcon,
   ExclamationmarkTriangleIcon,
+  LayersIcon,
   LinkBrokenIcon,
   XMarkOctagonIcon,
 } from '@navikt/aksel-icons'
@@ -26,6 +27,9 @@ export interface AppCardData {
   stats: AppStats
   alertCount: number
   siblingEnvironments?: string[]
+  groupName?: string
+  /** All apps in the group (including primary) — used to show all names when they differ */
+  groupApps?: { app_name: string; environment_name: string }[]
 }
 
 function getStatusTag(appStats: AppStats) {
@@ -81,15 +85,25 @@ export function AppCard({ app, showEnvironment = true, appendSearchParams }: App
     : [app.environment_name]
   const extraParams = appendSearchParams ? `&${appendSearchParams}` : ''
 
+  // Show all member app names when the group contains apps with different names
+  const uniqueAppNames = app.groupApps ? [...new Set(app.groupApps.map((a) => a.app_name))] : []
+  const hasDistinctNames = uniqueAppNames.length > 1
+  const displayName = app.groupName ?? app.app_name
+
   return (
     <Box padding="space-16" background="raised" className={styles.stackedListItem}>
       <VStack gap="space-12">
-        {/* First row: App name, environment (desktop), alert indicator, status tag */}
+        {/* First row: App/group name, environment (desktop), alert indicator, status tag */}
         <HStack gap="space-8" align="center" justify="space-between" wrap>
           <HStack gap="space-12" align="center" style={{ flex: 1 }}>
-            <Link to={appUrl}>
-              <BodyShort weight="semibold">{app.app_name}</BodyShort>
-            </Link>
+            <HStack gap="space-8" align="center">
+              {app.groupName && (
+                <LayersIcon aria-hidden fontSize="1.2em" style={{ color: 'var(--ax-text-neutral-subtle)' }} />
+              )}
+              <Link to={appUrl}>
+                <BodyShort weight="semibold">{displayName}</BodyShort>
+              </Link>
+            </HStack>
             {showEnvironment && (
               <Show above="md">
                 <HStack gap="space-4">
@@ -132,6 +146,9 @@ export function AppCard({ app, showEnvironment = true, appendSearchParams }: App
             )}
           </HStack>
         </HStack>
+
+        {/* Member app names when group has distinct names */}
+        {hasDistinctNames && <Detail textColor="subtle">{uniqueAppNames.join(' · ')}</Detail>}
 
         {/* Environment on mobile */}
         {showEnvironment && (

@@ -137,3 +137,83 @@ export const MultipleApps: Story = {
     </VStack>
   ),
 }
+
+export const GroupedSameNames: Story = {
+  name: 'Gruppe: Samme appnavn i flere miljøer',
+  args: {
+    app: {
+      ...baseApp,
+      app_name: 'pensjon-regler',
+      groupName: 'pensjon-regler',
+      siblingEnvironments: ['prod-gcp'],
+      groupApps: [
+        { app_name: 'pensjon-regler', environment_name: 'prod-fss' },
+        { app_name: 'pensjon-regler', environment_name: 'prod-gcp' },
+      ],
+      stats: { total: 84, without_four_eyes: 2, pending_verification: 0 },
+    },
+  },
+}
+
+export const GroupedDistinctNames: Story = {
+  name: 'Gruppe: Ulike appnavn',
+  args: {
+    app: {
+      ...baseApp,
+      app_name: 'pensjon-psak',
+      groupName: 'psak-og-penny',
+      siblingEnvironments: ['prod-gcp'],
+      groupApps: [
+        { app_name: 'pensjon-psak', environment_name: 'prod-fss' },
+        { app_name: 'pensjon-penny', environment_name: 'prod-gcp' },
+      ],
+      stats: { total: 120, without_four_eyes: 5, pending_verification: 1, missing_goal_links: 3 },
+      alertCount: 1,
+    },
+  },
+}
+
+export const GroupedList: Story = {
+  name: 'Liste med grupperte og ugrupperte apper',
+  render: () => (
+    <VStack gap="space-0">
+      <AppCard
+        app={{
+          ...baseApp,
+          id: 10,
+          app_name: 'pensjon-psak',
+          groupName: 'psak-og-penny',
+          siblingEnvironments: ['prod-gcp'],
+          groupApps: [
+            { app_name: 'pensjon-psak', environment_name: 'prod-fss' },
+            { app_name: 'pensjon-penny', environment_name: 'prod-gcp' },
+          ],
+          stats: { total: 120, without_four_eyes: 5, pending_verification: 0, missing_goal_links: 3 },
+          alertCount: 1,
+        }}
+      />
+      <AppCard
+        app={{
+          ...baseApp,
+          id: 11,
+          app_name: 'pensjon-pen',
+          stats: { total: 42, without_four_eyes: 0, pending_verification: 0 },
+        }}
+      />
+      <AppCard
+        app={{
+          ...baseApp,
+          id: 12,
+          app_name: 'pensjon-regler',
+          groupName: 'pensjon-regler',
+          siblingEnvironments: ['prod-gcp'],
+          groupApps: [
+            { app_name: 'pensjon-regler', environment_name: 'prod-fss' },
+            { app_name: 'pensjon-regler', environment_name: 'prod-gcp' },
+          ],
+          stats: { total: 84, without_four_eyes: 0, pending_verification: 0 },
+        }}
+      />
+    </VStack>
+  ),
+}

@@ -161,6 +161,16 @@ export async function getAllGroups(): Promise<ApplicationGroupSummary[]> {
   return rows
 }
 
+/** Get group names by IDs — lightweight lookup for UI labels */
+export async function getGroupNamesByIds(groupIds: number[]): Promise<Map<number, string>> {
+  if (groupIds.length === 0) return new Map()
+  const { rows } = await pool.query<{ id: number; name: string }>(
+    'SELECT id, name FROM application_groups WHERE id = ANY($1::int[]) AND deleted_at IS NULL',
+    [groupIds],
+  )
+  return new Map(rows.map((r) => [r.id, r.name]))
+}
+
 // ─── Verification propagation ────────────────────────────────────────────────
 
 /**

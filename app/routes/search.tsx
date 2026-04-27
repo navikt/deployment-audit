@@ -1,4 +1,4 @@
-import { MagnifyingGlassIcon } from '@navikt/aksel-icons'
+import { LayersIcon, MagnifyingGlassIcon } from '@navikt/aksel-icons'
 import { BodyShort, Box, Heading, Hide, HStack, Search, Show, Tag, VStack } from '@navikt/ds-react'
 import { Form, Link, useLoaderData } from 'react-router'
 import { type SearchResult, searchDeployments } from '~/db/deployments.server'
@@ -84,15 +84,32 @@ export default function SearchPage() {
                 className="search-result-item"
               >
                 <HStack gap="space-12" align="center">
-                  <MagnifyingGlassIcon
-                    style={{ fontSize: '1.25rem', color: 'var(--ax-text-neutral-subtle)' }}
-                    aria-hidden
-                  />
+                  {result.type === 'group' ? (
+                    <LayersIcon style={{ fontSize: '1.25rem', color: 'var(--ax-text-neutral-subtle)' }} aria-hidden />
+                  ) : (
+                    <MagnifyingGlassIcon
+                      style={{ fontSize: '1.25rem', color: 'var(--ax-text-neutral-subtle)' }}
+                      aria-hidden
+                    />
+                  )}
                   <VStack gap="space-4" style={{ flex: 1 }}>
                     <HStack gap="space-8" align="center">
                       <BodyShort weight="semibold">{result.title}</BodyShort>
-                      <Tag size="xsmall" variant={result.type === 'deployment' ? 'info' : 'neutral'}>
-                        {result.type === 'deployment' ? 'Deployment' : 'Bruker'}
+                      <Tag
+                        size="xsmall"
+                        variant={
+                          result.type === 'deployment' ? 'info' : result.type === 'group' ? 'moderate' : 'neutral'
+                        }
+                      >
+                        {result.type === 'deployment'
+                          ? 'Deployment'
+                          : result.type === 'group'
+                            ? 'Gruppe'
+                            : result.type === 'team'
+                              ? 'Team'
+                              : result.type === 'app'
+                                ? 'App'
+                                : 'Bruker'}
                       </Tag>
                     </HStack>
                     {result.subtitle && (
