@@ -1097,7 +1097,7 @@ export async function getDeployerApps(deployerUsername: string): Promise<string[
  * Search result types for global search
  */
 export interface SearchResult {
-  type: 'deployment' | 'user' | 'team' | 'app'
+  type: 'deployment' | 'user' | 'team' | 'app' | 'group'
   id?: number
   url: string
   title: string
@@ -1191,8 +1191,8 @@ export async function searchDeployments(query: string, limit = 10): Promise<Sear
   }
 
   // Otherwise, search by deployer username OR user mapping fields (nav_ident, nav_email, display_name, slack_member_id)
-  // Also search for teams and applications
-  const [userResult, teamResult, appResult] = await Promise.all([
+  // Also search for teams, applications, and application groups
+  const [userResult, teamResult, appResult, groupResult] = await Promise.all([
     pool.query(
       `SELECT DISTINCT d.deployer_username, 
               um.display_name, um.nav_email, um.nav_ident, um.slack_member_id,
@@ -1226,7 +1226,30 @@ export async function searchDeployments(query: string, limit = 10): Promise<Sear
        LIMIT $2`,
       [`%${trimmedQuery}%`, limit],
     ),
+    pool.query(
+      `SELECT ag.id, ag.name, COUNT(ma.id)::int AS app_count,
+              array_agg(DISTINCT ma.app_name ORDER BY ma.app_name) FILTER (WHERE ma.id IS NOT NULL) AS app_names
+       FROM application_groups ag
+       LEFT JOIN monitored_applications ma ON ma.application_group_id = ag.id AND ma.is_active = true
+       WHERE ag.deleted_at IS NULL AND ag.name ILIKE $1
+       GROUP BY ag.id, ag.name
+       ORDER BY ag.name
+       LIMIT $2`,
+      [`%${trimmedQuery}%`, limit],
+    ),
   ])
+
+  // Application groups first
+  for (const row of groupResult.rows) {
+    const appNames: string[] = row.app_names ?? []
+    results.push({
+      type: 'group',
+      id: row.id,
+      url: '/admin/application-groups',
+      title: row.name,
+      subtitle: appNames.length > 0 ? `Gruppe: ${appNames.join(', ')}` : 'Gruppe (tom)',
+    })
+  }
 
   for (const row of teamResult.rows) {
     results.push({

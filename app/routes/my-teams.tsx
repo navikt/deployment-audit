@@ -4,11 +4,12 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import { AppCard, type AppCardData } from '~/components/AppCard'
 import { type BoardSummary, BoardSummaryCard } from '~/components/BoardSummaryCard'
+import { getGroupNamesByIds } from '~/db/application-groups.server'
 import { getAllActiveRepositories } from '~/db/application-repositories.server'
 import { getBoardsByDevTeam } from '~/db/boards.server'
 import { getBoardObjectiveProgress, getDevTeamSummaryStats } from '~/db/dashboard-stats.server'
 import { getDevTeamAppsWithIssues, getPersonalDeploymentsMissingGoalLinks } from '~/db/deployments/home.server'
-import { getDevTeamApplications } from '~/db/dev-teams.server'
+import { getDevTeamApplications, getGroupAppIdsForDevTeams } from '~/db/dev-teams.server'
 import { getMembersGithubUsernamesForDevTeams, getUserDevTeams } from '~/db/user-dev-team-preference.server'
 import { getUserMappingByNavIdent } from '~/db/user-mappings.server'
 import { groupAppCards } from '~/lib/group-app-cards'
@@ -56,8 +57,12 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   // Combine nais_team_slugs and direct app IDs from all selected teams
   const allNaisTeamSlugs = [...new Set(selectedDevTeams.flatMap((t) => t.nais_team_slugs))]
-  const directAppsResults = await Promise.all(selectedDevTeams.map((t) => getDevTeamApplications(t.id)))
-  const allDirectAppIds = [...new Set(directAppsResults.flat().map((a) => a.monitored_app_id))]
+  const devTeamIds = selectedDevTeams.map((t) => t.id)
+  const [directAppsResults, groupAppIds] = await Promise.all([
+    Promise.all(selectedDevTeams.map((t) => getDevTeamApplications(t.id))),
+    getGroupAppIdsForDevTeams(devTeamIds),
+  ])
+  const allDirectAppIds = [...new Set([...directAppsResults.flat().map((a) => a.monitored_app_id), ...groupAppIds])]
   const directAppIds = allDirectAppIds.length > 0 ? allDirectAppIds : undefined
   const ytdStart = new Date(new Date().getFullYear(), 0, 1)
 
@@ -108,6 +113,12 @@ export async function loader({ request }: Route.LoaderArgs) {
     missingGoalsByKey.set(`${a.team_slug}/${a.environment_name}/${a.app_name}`, a.missing_goal_links)
   }
 
+  // Resolve group names for grouped app cards
+  const groupIds = [
+    ...new Set(matchingApps.map((a) => a.application_group_id).filter((id): id is number => id != null)),
+  ]
+  const groupNames = await getGroupNamesByIds(groupIds)
+
   const issueAppCards = groupAppCards(
     matchingApps.map((app) => {
       const baseStats = statsByApp.get(app.id) || {
@@ -129,6 +140,7 @@ export async function loader({ request }: Route.LoaderArgs) {
         alertCount: alertCounts.get(app.id) || 0,
       }
     }),
+    groupNames,
   )
 
   issueAppCards.sort((a, b) => {

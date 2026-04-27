@@ -5,7 +5,7 @@ import { MethodTag, StatusTag } from '~/components/deployment-tags'
 import { ErrorReasonWithLink } from '~/components/ErrorReasonWithLink'
 import { ExternalLink } from '~/components/ExternalLink'
 import { UserName } from '~/components/UserName'
-import { getSiblingApps } from '~/db/application-groups.server'
+import { getGroupByAppId, getSiblingApps } from '~/db/application-groups.server'
 import { pool } from '~/db/connection.server'
 import { type DeploymentFilters, getDeploymentsPaginated } from '~/db/deployments.server'
 import { getDevTeamsForApp } from '~/db/dev-teams.server'
@@ -45,9 +45,11 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 
   const range = getDateRangeForPeriod(period)
 
-  // If group mode, fetch siblings and include all app IDs
-  const siblings = showGroup ? await getSiblingApps(app.id) : []
-  const hasGroup = siblings.length > 0
+  // Check if this app belongs to an application group
+  const appGroup = await getGroupByAppId(app.id)
+  const allSiblings = appGroup ? await getSiblingApps(app.id) : []
+  const hasGroup = allSiblings.length > 0
+  const siblings = showGroup ? allSiblings : []
 
   // Resolve current user (used for "Meg" deployer shortcut and "Mine team" filter)
   const currentUser = await getUserIdentity(request)
@@ -198,6 +200,8 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     currentUserGithub,
     hasGroup,
     showGroup: showGroup && hasGroup,
+    appGroup,
+    groupSiblings: allSiblings,
     errorReasons,
     teamOptions,
     teamFilterEmptyReason,
@@ -217,6 +221,8 @@ export default function AppDeployments() {
     currentUserGithub,
     hasGroup,
     showGroup,
+    appGroup,
+    groupSiblings,
     errorReasons,
     teamOptions,
     teamFilterEmptyReason,
@@ -250,7 +256,24 @@ export default function AppDeployments() {
 
   return (
     <VStack gap="space-32">
-      {/* Filters */}
+      {/* Group info banner */}
+      {appGroup && !showGroup && (
+        <Box padding="space-16" borderRadius="8" background="neutral-soft">
+          <HStack gap="space-8" align="center" justify="space-between" wrap>
+            <BodyShort size="small">
+              Denne appen er del av gruppen <strong>{appGroup.name}</strong>
+              {groupSiblings.length > 0 && (
+                <> — {groupSiblings.map((s) => `${s.app_name} (${s.environment_name})`).join(', ')}</>
+              )}
+            </BodyShort>
+            {hasGroup && (
+              <Button variant="tertiary" size="xsmall" onClick={() => updateFilter('group', 'true')}>
+                Vis alle miljøer
+              </Button>
+            )}
+          </HStack>
+        </Box>
+      )}
       <Box padding="space-20" borderRadius="8" background="sunken">
         <Form method="get">
           <VStack gap="space-16">
