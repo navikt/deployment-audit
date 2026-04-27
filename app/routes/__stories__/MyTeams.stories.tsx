@@ -34,6 +34,7 @@ interface MyTeamsPageProps {
   issueApps: AppCardData[]
   boardSummaries: BoardSummary[]
   profileId?: string
+  personalMissingGoalLinks?: number | null
 }
 
 function SummaryCard({
@@ -97,12 +98,76 @@ function getHealthIcon(fourEyes: number, goalCoverage: number): ReactNode {
   return <ExclamationmarkTriangleIcon aria-hidden />
 }
 
+function PersonalGoalStatus({
+  personalMissingGoalLinks,
+  profileId,
+}: {
+  personalMissingGoalLinks: number | null
+  profileId: string | undefined
+}) {
+  if (personalMissingGoalLinks === null) {
+    return (
+      <Alert variant="info">
+        <VStack gap="space-8">
+          <BodyShort>
+            For å se dine egne deployments som mangler kobling til mål, må du legge til GitHub-brukernavnet ditt i
+            NDA-profilen.
+          </BodyShort>
+          {profileId && (
+            <div>
+              <Button as={Link} to={`/users/${profileId}`} size="small" variant="secondary">
+                Åpne min profil
+              </Button>
+            </div>
+          )}
+        </VStack>
+      </Alert>
+    )
+  }
+
+  if (personalMissingGoalLinks > 0) {
+    return (
+      <Alert variant="warning">
+        <VStack gap="space-8">
+          <BodyShort>
+            <strong>{personalMissingGoalLinks} av dine deployments mangler endringsopphav.</strong> Koble dem til mål
+            eller nøkkelresultater i NDA.
+          </BodyShort>
+          {profileId && (
+            <div>
+              <Button as={Link} to={`/users/${profileId}?goal=without_goal`} size="small" variant="secondary">
+                Koble mine deployments
+              </Button>
+            </div>
+          )}
+        </VStack>
+      </Alert>
+    )
+  }
+
+  return (
+    <HStack gap="space-8" align="center">
+      <CheckmarkCircleIcon aria-hidden style={{ color: 'var(--ax-text-success)' }} />
+      <BodyShort size="small" textColor="subtle">
+        Alle dine deployments har endringsopphav
+      </BodyShort>
+    </HStack>
+  )
+}
+
 /**
  * Presentational copy of the `/my-teams` page used for Storybook. Mirrors the
  * JSX in `app/routes/my-teams.tsx` but without the `loader`/`useLoaderData`
  * coupling so stories can drive it with mock data directly.
  */
-function MyTeamsPage({ selectedDevTeams, teamStats, issueApps, boardSummaries, profileId }: MyTeamsPageProps) {
+function MyTeamsPage({
+  selectedDevTeams,
+  teamStats,
+  issueApps,
+  boardSummaries,
+  profileId,
+  personalMissingGoalLinks = 0,
+}: MyTeamsPageProps) {
   return (
     <VStack gap="space-32">
       <div>
@@ -187,19 +252,29 @@ function MyTeamsPage({ selectedDevTeams, teamStats, issueApps, boardSummaries, p
             </VStack>
           )}
 
-          {issueApps.length > 0 ? (
-            <VStack gap="space-16">
-              <Heading level="3" size="small">
-                Applikasjoner som trenger oppfølging ({issueApps.length})
-              </Heading>
-              <div>
-                {issueApps.map((app) => (
-                  <AppCard key={app.id} app={app} />
-                ))}
-              </div>
-            </VStack>
+          {personalMissingGoalLinks === 0 && issueApps.length === 0 ? (
+            <HStack gap="space-8" align="center">
+              <CheckmarkCircleIcon aria-hidden style={{ color: 'var(--ax-text-success)' }} />
+              <BodyShort size="small" textColor="subtle">
+                Alle dine deployments har endringsopphav og alle applikasjoner er i orden
+              </BodyShort>
+            </HStack>
           ) : (
-            <Alert variant="success">Alle applikasjoner er i orden — ingen krever oppfølging.</Alert>
+            <>
+              <PersonalGoalStatus personalMissingGoalLinks={personalMissingGoalLinks} profileId={profileId} />
+              {issueApps.length > 0 && (
+                <VStack gap="space-16">
+                  <Heading level="3" size="small">
+                    Applikasjoner som trenger oppfølging ({issueApps.length})
+                  </Heading>
+                  <div>
+                    {issueApps.map((app) => (
+                      <AppCard key={app.id} app={app} />
+                    ))}
+                  </div>
+                </VStack>
+              )}
+            </>
           )}
         </VStack>
       )}
@@ -368,6 +443,41 @@ export const IngenTeamValgt: Story = {
     teamStats: null,
     issueApps: [],
     boardSummaries: [],
+    profileId: 'ola.nordmann',
+  },
+}
+
+export const AlleHarEndringsopphav: Story = {
+  name: 'Endringsopphav: alle OK',
+  args: {
+    selectedDevTeams: mockTeams,
+    teamStats: mockTeamStatsHealthy,
+    issueApps: [],
+    boardSummaries: mockBoards,
+    personalMissingGoalLinks: 0,
+  },
+}
+
+export const ManglerEndringsopphav: Story = {
+  name: 'Endringsopphav: mangler kobling',
+  args: {
+    selectedDevTeams: mockTeams,
+    teamStats: mockTeamStatsLowCoverage,
+    issueApps: mockIssueApps,
+    boardSummaries: mockBoards,
+    personalMissingGoalLinks: 47,
+    profileId: 'pcmoen',
+  },
+}
+
+export const IngenGitHubMapping: Story = {
+  name: 'Endringsopphav: ingen GitHub-mapping',
+  args: {
+    selectedDevTeams: mockTeams,
+    teamStats: mockTeamStatsHealthy,
+    issueApps: [],
+    boardSummaries: mockBoards,
+    personalMissingGoalLinks: null,
     profileId: 'ola.nordmann',
   },
 }

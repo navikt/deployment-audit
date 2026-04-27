@@ -282,9 +282,12 @@ function PersonalGoalStatus({
   }
 
   return (
-    <Alert variant="success">
-      <BodyShort>Alle dine deployments har endringsopphav.</BodyShort>
-    </Alert>
+    <HStack gap="space-8" align="center">
+      <CheckmarkCircleIcon aria-hidden style={{ color: 'var(--ax-text-success)' }} />
+      <BodyShort size="small" textColor="subtle">
+        Alle dine deployments har endringsopphav
+      </BodyShort>
+    </HStack>
   )
 }
 
@@ -309,7 +312,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         </Heading>
         <BodyShort textColor="subtle">Helsetilstand for dine utviklingsteam</BodyShort>
       </div>
-
       {/* No teams — prompt to set up profile */}
       {selectedDevTeams.length === 0 && (
         <Alert variant="info">
@@ -327,9 +329,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           </VStack>
         </Alert>
       )}
-
-      {/* Personal goal-link status — mirrors the Slack home tab */}
-      <PersonalGoalStatus personalMissingGoalLinks={personalMissingGoalLinks} profileId={profileId} />
 
       {/* Teams selected — show combined overview */}
       {selectedDevTeams.length > 0 && teamStats && (
@@ -396,20 +395,30 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               </HGrid>
             </VStack>
           )}
-          {/* Issue apps */}
-          {issueApps.length > 0 ? (
-            <VStack gap="space-16">
-              <Heading level="3" size="small">
-                Applikasjoner som trenger oppfølging ({issueApps.length})
-              </Heading>
-              <div>
-                {issueApps.map((app) => (
-                  <AppCard key={app.id} app={app} appendSearchParams="team=mine" />
-                ))}
-              </div>
-            </VStack>
+          {/* Combined personal goal + issue apps status */}
+          {personalMissingGoalLinks === 0 && issueApps.length === 0 ? (
+            <HStack gap="space-8" align="center">
+              <CheckmarkCircleIcon aria-hidden style={{ color: 'var(--ax-text-success)' }} />
+              <BodyShort size="small" textColor="subtle">
+                Alle dine deployments har endringsopphav og alle applikasjoner er i orden
+              </BodyShort>
+            </HStack>
           ) : (
-            <Alert variant="success">Alle applikasjoner er i orden — ingen krever oppfølging.</Alert>
+            <>
+              <PersonalGoalStatus personalMissingGoalLinks={personalMissingGoalLinks} profileId={profileId} />
+              {issueApps.length > 0 && (
+                <VStack gap="space-16">
+                  <Heading level="3" size="small">
+                    Applikasjoner som trenger oppfølging ({issueApps.length})
+                  </Heading>
+                  <div>
+                    {issueApps.map((app) => (
+                      <AppCard key={app.id} app={app} appendSearchParams="team=mine" />
+                    ))}
+                  </div>
+                </VStack>
+              )}
+            </>
           )}
         </VStack>
       )}
