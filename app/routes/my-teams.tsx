@@ -282,9 +282,12 @@ function PersonalGoalStatus({
   }
 
   return (
-    <Alert variant="success">
-      <BodyShort>Alle dine deployments har endringsopphav.</BodyShort>
-    </Alert>
+    <HStack gap="space-8" align="center">
+      <CheckmarkCircleIcon aria-hidden style={{ color: 'var(--ax-text-success)' }} />
+      <BodyShort size="small" textColor="subtle">
+        Alle dine deployments har endringsopphav
+      </BodyShort>
+    </HStack>
   )
 }
 
@@ -309,7 +312,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         </Heading>
         <BodyShort textColor="subtle">Helsetilstand for dine utviklingsteam</BodyShort>
       </div>
-
       {/* No teams — prompt to set up profile */}
       {selectedDevTeams.length === 0 && (
         <Alert variant="info">
@@ -327,9 +329,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           </VStack>
         </Alert>
       )}
-
-      {/* Personal goal-link status — mirrors the Slack home tab */}
-      <PersonalGoalStatus personalMissingGoalLinks={personalMissingGoalLinks} profileId={profileId} />
 
       {/* Teams selected — show combined overview */}
       {selectedDevTeams.length > 0 && teamStats && (
@@ -396,6 +395,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               </HGrid>
             </VStack>
           )}
+          {/* Personal goal-link status */}
+          <PersonalGoalStatus personalMissingGoalLinks={personalMissingGoalLinks} profileId={profileId} />
           {/* Issue apps */}
           {issueApps.length > 0 ? (
             <VStack gap="space-16">
