@@ -205,6 +205,73 @@ describe('stats and paginated list consistency', () => {
   })
 })
 
+describe('getAppDeploymentStats / batch parity', () => {
+  it('single-app result matches batch result for same app', async () => {
+    const { getAppDeploymentStats } = await import('../../deployments/stats.server')
+    const appId = await seedApp(pool, { teamSlug: 'tx', appName: 'a', environment: 'prod', auditStartYear: 2024 })
+    const now = new Date()
+
+    await seedDeploy(appId, 'tx', 'alice', 'approved_pr', now)
+    await seedDeploy(appId, 'tx', 'bob', 'direct_push', now)
+    await seedDeploy(appId, 'tx', 'carol', 'pending', now)
+
+    const single = await getAppDeploymentStats(appId, undefined, undefined, 2024)
+    const batchMap = await getAppDeploymentStatsBatch([{ id: appId, audit_start_year: 2024 }])
+    const batch = batchMap.get(appId)
+
+    expect(batch).toBeDefined()
+    expect(single.total).toBe(batch!.total)
+    expect(single.with_four_eyes).toBe(batch!.with_four_eyes)
+    expect(single.without_four_eyes).toBe(batch!.without_four_eyes)
+    expect(single.pending_verification).toBe(batch!.pending_verification)
+    expect(single.four_eyes_percentage).toBe(batch!.four_eyes_percentage)
+    expect(single.last_deployment_id).toBe(batch!.last_deployment_id)
+    expect(single.missing_goal_links).toBe(batch!.missing_goal_links)
+    // No goal links seeded, so missing_goal_links should equal total
+    expect(single.missing_goal_links).toBe(single.total)
+  })
+
+  it('date range filters apply identically in single and batch', async () => {
+    const { getAppDeploymentStats } = await import('../../deployments/stats.server')
+    const appId = await seedApp(pool, { teamSlug: 'tx', appName: 'a', environment: 'prod' })
+    const old = new Date('2023-06-15')
+    const recent = new Date('2025-03-10')
+
+    await seedDeploy(appId, 'tx', 'alice', 'approved_pr', old)
+    await seedDeploy(appId, 'tx', 'alice', 'direct_push', recent)
+
+    const startDate = new Date('2025-01-01')
+    const endDate = new Date('2025-12-31')
+
+    const single = await getAppDeploymentStats(appId, startDate, endDate)
+    const batchMap = await getAppDeploymentStatsBatch([{ id: appId }], undefined, { startDate, endDate })
+    const batch = batchMap.get(appId)
+
+    expect(single.total).toBe(1)
+    expect(batch!.total).toBe(1)
+    expect(single.without_four_eyes).toBe(batch!.without_four_eyes)
+  })
+
+  it('date range + deployer filter combined', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'tx', appName: 'a', environment: 'prod' })
+    const recent = new Date('2025-03-10')
+
+    await seedDeploy(appId, 'tx', 'alice', 'approved_pr', recent)
+    await seedDeploy(appId, 'tx', 'bob', 'direct_push', recent)
+    await seedDeploy(appId, 'tx', 'alice', 'approved_pr', new Date('2023-01-01')) // out of range
+
+    const startDate = new Date('2025-01-01')
+    const endDate = new Date('2025-12-31')
+
+    const stats = await getAppDeploymentStatsBatch([{ id: appId }], ['alice'], { startDate, endDate })
+    const s = stats.get(appId)
+
+    expect(s!.total).toBe(1)
+    expect(s!.with_four_eyes).toBe(1)
+    expect(s!.without_four_eyes).toBe(0)
+  })
+})
+
 describe('getDevTeamCoverageStats', () => {
   it('aggregates four-eyes and origin coverage filtered to team members', async () => {
     const appId = await seedApp(pool, { teamSlug: 'tx', appName: 'a', environment: 'prod' })

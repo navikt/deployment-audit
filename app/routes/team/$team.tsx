@@ -3,8 +3,8 @@ import { Link } from 'react-router'
 import { AppCard, type AppCardData } from '~/components/AppCard'
 import { ExternalLink } from '~/components/ExternalLink'
 import { getAlertCountsByApp } from '~/db/alerts.server'
-import { getRepositoriesByAppId } from '~/db/application-repositories.server'
-import { getAppDeploymentStats } from '~/db/deployments.server'
+import { getAllActiveRepositories } from '~/db/application-repositories.server'
+import { getAppDeploymentStatsBatch } from '~/db/deployments.server'
 import { getApplicationsByTeam } from '~/db/monitored-applications.server'
 import type { Route } from './+types/$team'
 
@@ -15,22 +15,19 @@ export async function loader({ params: { team } }: Route.LoaderArgs) {
     throw new Response('Team not found or has no monitored applications', { status: 404 })
   }
 
-  const alertCountsByApp = await getAlertCountsByApp()
+  const [alertCountsByApp, activeRepos, statsByApp] = await Promise.all([
+    getAlertCountsByApp(),
+    getAllActiveRepositories(),
+    getAppDeploymentStatsBatch(applications.map((a) => ({ id: a.id, audit_start_year: a.audit_start_year }))),
+  ])
 
-  // Fetch active repository and deployment stats for each app
-  const appsWithData = await Promise.all(
-    applications.map(async (app) => {
-      const repos = await getRepositoriesByAppId(app.id)
-      const activeRepo = repos.find((r) => r.status === 'active')
-      const appStats = await getAppDeploymentStats(app.id, undefined, undefined, app.audit_start_year)
-      return {
-        ...app,
-        active_repo: activeRepo ? `${activeRepo.github_owner}/${activeRepo.github_repo_name}` : null,
-        stats: appStats,
-        alertCount: alertCountsByApp.get(app.id) || 0,
-      } satisfies AppCardData
-    }),
-  )
+  const appsWithData: AppCardData[] = applications.map((app) => ({
+    ...app,
+    active_repo: activeRepos.get(app.id) || null,
+    // biome-ignore lint/style/noNonNullAssertion: guaranteed by getAppDeploymentStatsBatch
+    stats: statsByApp.get(app.id)!,
+    alertCount: alertCountsByApp.get(app.id) || 0,
+  }))
 
   // Group applications by environment
   const appsByEnv = appsWithData.reduce(

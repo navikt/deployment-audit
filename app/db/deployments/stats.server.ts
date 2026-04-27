@@ -3,14 +3,20 @@ import { pool } from '../connection.server'
 import type { AppDeploymentStats } from '../deployments.server'
 import { lowerUsernames, userDeploymentMatchAnySql } from '../user-deployment-match'
 
+interface StatsOptions {
+  startDate?: Date
+  endDate?: Date
+}
+
 /**
- * Get deployment stats for a single app (no deployer filtering).
+ * Get deployment stats for a single app.
  *
- * ⚠️ This function does **not** support filtering by deployer/team members.
+ * Delegates to {@link getAppDeploymentStatsBatch} so there is a single SQL
+ * implementation for all stats queries — deployer filtering, date ranges,
+ * audit year, and goal-link counting all behave identically everywhere.
+ *
  * If you need deployer-scoped stats (e.g. "stats for team X's deploys"),
- * use {@link getAppDeploymentStatsBatch} instead — it matches both deployer
- * and PR creator via `userDeploymentMatchAnySql`, consistent with the
- * deployment list page's team filter.
+ * call `getAppDeploymentStatsBatch` directly with `deployerUsernames`.
  */
 export async function getAppDeploymentStats(
   monitoredAppId: number,
@@ -18,53 +24,13 @@ export async function getAppDeploymentStats(
   endDate?: Date,
   auditStartYear?: number | null,
 ): Promise<AppDeploymentStats> {
-  let sql = `SELECT 
-      COUNT(*) as total,
-      SUM(CASE WHEN four_eyes_status = ANY($2::text[]) THEN 1 ELSE 0 END) as with_four_eyes,
-      SUM(CASE WHEN four_eyes_status = ANY($3) THEN 1 ELSE 0 END) as without_four_eyes,
-      SUM(CASE WHEN four_eyes_status = ANY($4) THEN 1 ELSE 0 END) as pending_verification,
-      MAX(created_at) as last_deployment,
-      (SELECT id FROM deployments WHERE monitored_app_id = $1 ORDER BY created_at DESC LIMIT 1) as last_deployment_id
-    FROM deployments
-    WHERE monitored_app_id = $1`
-
-  const params: any[] = [monitoredAppId, APPROVED_STATUSES, NOT_APPROVED_STATUSES, PENDING_STATUSES]
-  let paramIndex = 5
-
-  // Filter by audit start year if specified
-  if (auditStartYear) {
-    sql += ` AND EXTRACT(YEAR FROM created_at) >= $${paramIndex}`
-    params.push(auditStartYear)
-    paramIndex++
-  }
-
-  if (startDate) {
-    sql += ` AND created_at >= $${paramIndex}`
-    params.push(startDate)
-    paramIndex++
-  }
-
-  if (endDate) {
-    sql += ` AND created_at <= $${paramIndex}`
-    params.push(endDate)
-  }
-
-  const result = await pool.query(sql, params)
-
-  const row = result.rows[0]
-  const total = parseInt(row.total, 10) || 0
-  const withFourEyes = parseInt(row.with_four_eyes, 10) || 0
-  const percentage = total > 0 ? Math.round((withFourEyes / total) * 100) : 0
-
-  return {
-    total,
-    with_four_eyes: withFourEyes,
-    without_four_eyes: parseInt(row.without_four_eyes, 10) || 0,
-    pending_verification: parseInt(row.pending_verification, 10) || 0,
-    last_deployment: row.last_deployment ? new Date(row.last_deployment) : null,
-    last_deployment_id: row.last_deployment_id ? parseInt(row.last_deployment_id, 10) : null,
-    four_eyes_percentage: percentage,
-  }
+  const map = await getAppDeploymentStatsBatch([{ id: monitoredAppId, audit_start_year: auditStartYear }], undefined, {
+    startDate,
+    endDate,
+  })
+  // Batch always pre-initializes the Map for every requested app ID
+  // biome-ignore lint/style/noNonNullAssertion: guaranteed by getAppDeploymentStatsBatch
+  return map.get(monitoredAppId)!
 }
 
 /**
@@ -84,6 +50,7 @@ export async function getAppDeploymentStats(
 export async function getAppDeploymentStatsBatch(
   apps: Array<{ id: number; audit_start_year?: number | null }>,
   deployerUsernames?: string[],
+  options?: StatsOptions,
 ): Promise<Map<number, AppDeploymentStats>> {
   if (apps.length === 0) {
     return new Map()
@@ -99,6 +66,25 @@ export async function getAppDeploymentStatsBatch(
 
   const auditYearFilter = auditYearCases ? `AND (CASE ${auditYearCases} ELSE true END)` : ''
 
+  // Build base params and track param index dynamically so deployer/date
+  // placeholders bind to the correct $N regardless of which optional
+  // filters are active.
+  const baseParams: any[] = [appIds, APPROVED_STATUSES, NOT_APPROVED_STATUSES, PENDING_STATUSES]
+  let paramIndex = 5
+
+  // Date range filter — applied to the main WHERE clause (affects all aggregates).
+  let dateFilter = ''
+  if (options?.startDate) {
+    dateFilter += ` AND created_at >= $${paramIndex}`
+    baseParams.push(options.startDate)
+    paramIndex++
+  }
+  if (options?.endDate) {
+    dateFilter += ` AND created_at <= $${paramIndex}`
+    baseParams.push(options.endDate)
+    paramIndex++
+  }
+
   // Deployer filter is applied only to count/aggregate columns, not to last_deployment.
   // The "last deployment" timestamp/id should always reflect the most recent deploy
   // to the app (regardless of deployer), so AppCard's "last deployment" link/timestamp
@@ -107,9 +93,11 @@ export async function getAppDeploymentStatsBatch(
   // Matches both deployer_username and PR creator (case-insensitive) so a team
   // member's PR deployed by a bot still counts toward the team's stats.
   const hasDeployerFilter = deployerUsernames !== undefined
-  const deployerFilterClause = hasDeployerFilter ? ` AND ${userDeploymentMatchAnySql(5, 'deployments')}` : ''
-  const baseParams: any[] = [appIds, APPROVED_STATUSES, NOT_APPROVED_STATUSES, PENDING_STATUSES]
-  if (hasDeployerFilter) baseParams.push(lowerUsernames(deployerUsernames))
+  const deployerFilterClause = hasDeployerFilter ? ` AND ${userDeploymentMatchAnySql(paramIndex, 'deployments')}` : ''
+  if (hasDeployerFilter) {
+    baseParams.push(lowerUsernames(deployerUsernames))
+    paramIndex++
+  }
 
   const result = await pool.query(
     `SELECT 
@@ -121,7 +109,7 @@ export async function getAppDeploymentStatsBatch(
       COUNT(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = deployments.id AND dgl.is_active = true)${deployerFilterClause}) as missing_goal_links,
       MAX(created_at) as last_deployment
     FROM deployments
-    WHERE monitored_app_id = ANY($1) ${auditYearFilter}
+    WHERE monitored_app_id = ANY($1) ${auditYearFilter}${dateFilter}
     GROUP BY monitored_app_id`,
     baseParams,
   )
@@ -149,6 +137,7 @@ export async function getAppDeploymentStatsBatch(
       with_four_eyes: 0,
       without_four_eyes: 0,
       pending_verification: 0,
+      missing_goal_links: 0,
       last_deployment: null,
       last_deployment_id: lastDeploymentIds.get(app.id) || null,
       four_eyes_percentage: 0,
