@@ -10,6 +10,7 @@ import { Pool } from 'pg'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { getDevTeamCoverageStats } from '../../deployment-goal-links.server'
 import { getAppDeploymentStatsBatch } from '../../deployments/stats.server'
+import { type DeploymentFilters, getDeploymentsPaginated } from '../../deployments.server'
 import { seedApp, truncateAllTables } from './helpers'
 
 let pool: Pool
@@ -137,6 +138,70 @@ describe('getAppDeploymentStatsBatch with deployerUsernames filter', () => {
 
     const stats = await getAppDeploymentStatsBatch([{ id: appId }])
     expect(stats.get(appId)?.total).toBe(2)
+  })
+})
+
+describe('stats and paginated list consistency', () => {
+  it('without_four_eyes count matches paginated list with same deployer filter', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'tx', appName: 'a', environment: 'prod' })
+    const now = new Date()
+
+    await seedDeploy(appId, 'tx', 'alice', 'direct_push', now) // not approved, by member
+    await seedDeploy(appId, 'tx', 'bob', 'approved_pr', now) // approved, by member
+    await seedDeploy(appId, 'tx', 'mallory', 'direct_push', now) // not approved, NOT member
+
+    const teamMembers = ['alice', 'bob']
+
+    const stats = await getAppDeploymentStatsBatch([{ id: appId }], teamMembers)
+    const s = stats.get(appId)
+    if (!s) throw new Error('expected stats for appId')
+
+    const listFilters: DeploymentFilters = {
+      monitored_app_id: appId,
+      four_eyes_status: 'not_approved',
+      deployer_usernames: teamMembers,
+      page: 1,
+      per_page: 100,
+    }
+    const list = await getDeploymentsPaginated(listFilters)
+
+    expect(s.without_four_eyes).toBe(list.total)
+    expect(s.without_four_eyes).toBe(1)
+  })
+
+  it('PR creator matches count in both stats and paginated list', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'tx', appName: 'a', environment: 'prod' })
+    const now = new Date()
+
+    // Deployment by bot where team member is the PR creator
+    const naisId = `deploy-pr-creator-${Date.now()}`
+    await pool.query(
+      `INSERT INTO deployments (
+         monitored_app_id, nais_deployment_id, team_slug, app_name, environment_name,
+         commit_sha, created_at, four_eyes_status, deployer_username, github_pr_data
+       ) VALUES ($1, $2, 'tx', 'a', 'prod', $3, $4, 'direct_push', 'deploy-bot', $5)`,
+      [appId, naisId, `sha-${naisId}`, now, JSON.stringify({ creator: { username: 'alice' } })],
+    )
+    // Another deployment by a non-member
+    await seedDeploy(appId, 'tx', 'mallory', 'direct_push', now)
+
+    const teamMembers = ['alice']
+
+    const stats = await getAppDeploymentStatsBatch([{ id: appId }], teamMembers)
+    const s = stats.get(appId)
+    if (!s) throw new Error('expected stats for appId')
+
+    const list = await getDeploymentsPaginated({
+      monitored_app_id: appId,
+      deployer_usernames: teamMembers,
+      page: 1,
+      per_page: 100,
+    })
+
+    // Both should count 1 (the deploy-bot deployment where alice is PR creator)
+    expect(s.total).toBe(1)
+    expect(list.total).toBe(1)
+    expect(s.without_four_eyes).toBe(list.total)
   })
 })
 

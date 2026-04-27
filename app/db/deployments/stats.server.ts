@@ -3,6 +3,15 @@ import { pool } from '../connection.server'
 import type { AppDeploymentStats } from '../deployments.server'
 import { lowerUsernames, userDeploymentMatchAnySql } from '../user-deployment-match'
 
+/**
+ * Get deployment stats for a single app (no deployer filtering).
+ *
+ * ⚠️ This function does **not** support filtering by deployer/team members.
+ * If you need deployer-scoped stats (e.g. "stats for team X's deploys"),
+ * use {@link getAppDeploymentStatsBatch} instead — it matches both deployer
+ * and PR creator via `userDeploymentMatchAnySql`, consistent with the
+ * deployment list page's team filter.
+ */
 export async function getAppDeploymentStats(
   monitoredAppId: number,
   startDate?: Date,
@@ -59,8 +68,18 @@ export async function getAppDeploymentStats(
 }
 
 /**
- * Get deployment stats for multiple apps in a single query
- * Returns a Map of appId -> AppDeploymentStats
+ * Get deployment stats for multiple apps in a single query.
+ *
+ * When `deployerUsernames` is provided, count columns (total, with_four_eyes,
+ * without_four_eyes, etc.) are filtered to deployments where a given username
+ * is the deployer **or** PR creator — via `userDeploymentMatchAnySql`. This
+ * is the same matching logic used in `getDeploymentsPaginated`'s
+ * `deployer_usernames` filter, ensuring stat counts agree with list results.
+ *
+ * `last_deployment` is intentionally **not** filtered by deployer so AppCard
+ * always shows the chronologically latest deploy to the app.
+ *
+ * @returns Map of appId → AppDeploymentStats
  */
 export async function getAppDeploymentStatsBatch(
   apps: Array<{ id: number; audit_start_year?: number | null }>,

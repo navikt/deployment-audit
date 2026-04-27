@@ -30,7 +30,11 @@ import { getAppDeploymentStatsBatch } from '~/db/deployments.server'
 import { getDevTeamApplications, getDevTeamBySlug, getGroupAppIdsForDevTeams } from '~/db/dev-teams.server'
 import { getAllAlertCounts, getAllMonitoredApplications } from '~/db/monitored-applications.server'
 import { getSectionBySlug } from '~/db/sections.server'
-import { type DevTeamMember, getDevTeamMembers } from '~/db/user-dev-team-preference.server'
+import {
+  type DevTeamMember,
+  getDevTeamMembers,
+  getMembersGithubUsernamesForDevTeams,
+} from '~/db/user-dev-team-preference.server'
 import { requireUser } from '~/lib/auth.server'
 import { type BoardPeriodType, formatBoardLabel, getPeriodsForYear } from '~/lib/board-periods'
 import { groupAppCards } from '~/lib/group-app-cards'
@@ -84,7 +88,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   )
 
   // Filter stats to deploys made by team members (their GitHub usernames).
-  const deployerUsernames = members.map((m) => m.github_username).filter((u): u is string => !!u)
+  // Use the shared function that handles soft-deletes and deduplication,
+  // consistent with the deployment list page's team filter.
+  const deployerUsernames = await getMembersGithubUsernamesForDevTeams([devTeam.id])
   const hasMappedMembers = deployerUsernames.length > 0
 
   // Top-of-page coverage stats: last 90 days, filtered to team members' deploys.
