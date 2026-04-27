@@ -32,6 +32,7 @@ export async function loader({ params: { team } }: Route.LoaderArgs) {
       last_deployment: null,
       last_deployment_id: null,
       four_eyes_percentage: 0,
+      missing_goal_links: 0,
     },
     alertCount: alertCountsByApp.get(app.id) || 0,
   }))

@@ -212,9 +212,10 @@ export async function setRepositoryAsActive(repoId: number): Promise<Application
  */
 export async function getAllActiveRepositories(): Promise<Map<number, string>> {
   const result = await pool.query(
-    `SELECT monitored_app_id, github_owner, github_repo_name
+    `SELECT DISTINCT ON (monitored_app_id) monitored_app_id, github_owner, github_repo_name
      FROM application_repositories 
-     WHERE status = 'active'`,
+     WHERE status = 'active'
+     ORDER BY monitored_app_id, created_at DESC`,
   )
 
   const map = new Map<number, string>()
