@@ -356,6 +356,7 @@ async function fetchDeployedPrData(
     repo,
     commitSha,
     baseBranch,
+    { forceRefresh: options?.forceRefresh },
   )
   if (!prNumber) {
     return { deployedPr: null, mismatchedBaseBranches, mismatchedPrNumbers }
@@ -436,35 +437,43 @@ async function findPrForCommit(
   repo: string,
   commitSha: string,
   baseBranch?: string,
-  cacheOnly = false,
+  options?: { cacheOnly?: boolean; forceRefresh?: boolean },
 ): Promise<{
   prNumber: number | null
   mismatchedBaseBranches: string[]
   mismatchedPrNumbers: number[]
 }> {
-  // First check our cached PR associations
-  const cached = await getLatestCommitSnapshot(owner, repo, commitSha, 'prs')
-  if (cached && cached.schemaVersion >= CURRENT_SCHEMA_VERSION) {
-    const prs = (cached.data as { prs: Array<{ number: number; baseBranch: string }> }).prs
-    const matchingPrs = baseBranch ? prs.filter((pr) => pr.baseBranch === baseBranch) : prs
-    const mismatchedPrs = baseBranch ? prs.filter((pr) => pr.baseBranch !== baseBranch) : []
-    if (matchingPrs.length > 0) {
-      return {
-        prNumber: matchingPrs[0].number,
-        mismatchedBaseBranches: mismatchedPrs.map((p) => p.baseBranch),
-        mismatchedPrNumbers: mismatchedPrs.map((p) => p.number),
+  const cacheOnly = options?.cacheOnly ?? false
+  const forceRefresh = options?.forceRefresh ?? false
+
+  // When forceRefresh is true, skip cache entirely to handle stale empty
+  // PR associations (e.g. cached `{ prs: [] }` from a race condition where
+  // GitHub hadn't indexed the merge commit yet).
+  if (!forceRefresh) {
+    // First check our cached PR associations
+    const cached = await getLatestCommitSnapshot(owner, repo, commitSha, 'prs')
+    if (cached && cached.schemaVersion >= CURRENT_SCHEMA_VERSION) {
+      const prs = (cached.data as { prs: Array<{ number: number; baseBranch: string }> }).prs
+      const matchingPrs = baseBranch ? prs.filter((pr) => pr.baseBranch === baseBranch) : prs
+      const mismatchedPrs = baseBranch ? prs.filter((pr) => pr.baseBranch !== baseBranch) : []
+      if (matchingPrs.length > 0) {
+        return {
+          prNumber: matchingPrs[0].number,
+          mismatchedBaseBranches: mismatchedPrs.map((p) => p.baseBranch),
+          mismatchedPrNumbers: mismatchedPrs.map((p) => p.number),
+        }
       }
-    }
-    // Cache hit but no match for this baseBranch
-    if (cacheOnly || prs.length === 0) {
-      return {
-        prNumber: null,
-        mismatchedBaseBranches: mismatchedPrs.map((p) => p.baseBranch),
-        mismatchedPrNumbers: mismatchedPrs.map((p) => p.number),
+      // Cache hit but no match for this baseBranch
+      if (cacheOnly || prs.length === 0) {
+        return {
+          prNumber: null,
+          mismatchedBaseBranches: mismatchedPrs.map((p) => p.baseBranch),
+          mismatchedPrNumbers: mismatchedPrs.map((p) => p.number),
+        }
       }
+      // Fall through to GitHub when cache says "associated PRs exist but none on baseBranch"
+      // — we still want to refresh in case the PR was retargeted.
     }
-    // Fall through to GitHub when cache says "associated PRs exist but none on baseBranch"
-    // — we still want to refresh in case the PR was retargeted.
   }
 
   // In cache-only mode, don't fetch from GitHub
@@ -707,7 +716,7 @@ export async function buildCommitsBetweenFromCache(
       repo,
       commit.sha,
       baseBranch,
-      cacheOnly,
+      { cacheOnly, forceRefresh: options?.forceRefresh },
     )
 
     let prData: VerificationInput['commitsBetween'][0]['pr'] = null
