@@ -1228,7 +1228,11 @@ export async function searchDeployments(query: string, limit = 10): Promise<Sear
     ),
     pool.query(
       `SELECT ag.id, ag.name, COUNT(ma.id)::int AS app_count,
-              array_agg(DISTINCT ma.app_name ORDER BY ma.app_name) FILTER (WHERE ma.id IS NOT NULL) AS app_names
+              array_agg(DISTINCT ma.app_name ORDER BY ma.app_name) FILTER (WHERE ma.id IS NOT NULL) AS app_names,
+              (SELECT concat('/team/', m2.team_slug, '/env/', m2.environment_name, '/app/', m2.app_name, '/deployments')
+               FROM monitored_applications m2
+               WHERE m2.application_group_id = ag.id AND m2.is_active = true
+               ORDER BY m2.app_name LIMIT 1) AS first_app_url
        FROM application_groups ag
        LEFT JOIN monitored_applications ma ON ma.application_group_id = ag.id AND ma.is_active = true
        WHERE ag.deleted_at IS NULL AND ag.name ILIKE $1
@@ -1242,12 +1246,15 @@ export async function searchDeployments(query: string, limit = 10): Promise<Sear
   // Application groups first
   for (const row of groupResult.rows) {
     const appNames: string[] = row.app_names ?? []
+    const maxShown = 3
+    const displayNames =
+      appNames.length > maxShown ? [...appNames.slice(0, maxShown), `+${appNames.length - maxShown}`] : appNames
     results.push({
       type: 'group',
       id: row.id,
-      url: '/admin/application-groups',
+      url: row.first_app_url ?? '/search',
       title: row.name,
-      subtitle: appNames.length > 0 ? `Gruppe: ${appNames.join(', ')}` : 'Gruppe (tom)',
+      subtitle: displayNames.length > 0 ? `Gruppe: ${displayNames.join(', ')}` : 'Gruppe (tom)',
     })
   }
 

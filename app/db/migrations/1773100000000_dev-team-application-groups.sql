@@ -3,7 +3,7 @@
 -- When a dev team owns a group, all member applications are included in the
 -- team's scope for dashboards, stats, and issue lists.
 
-CREATE TABLE dev_team_application_groups (
+CREATE TABLE IF NOT EXISTS dev_team_application_groups (
   dev_team_id   INTEGER NOT NULL REFERENCES dev_teams(id) ON DELETE RESTRICT,
   application_group_id INTEGER NOT NULL REFERENCES application_groups(id) ON DELETE RESTRICT,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
