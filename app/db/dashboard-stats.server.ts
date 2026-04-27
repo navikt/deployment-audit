@@ -1,6 +1,7 @@
 import { APPROVED_STATUSES_SQL } from '~/lib/four-eyes-status'
 import { AUDIT_START_YEAR_FILTER } from './audit-start-year'
 import { pool } from './connection.server'
+import { lowerUsernames, userDeploymentMatchAnySql } from './user-deployment-match'
 
 export interface SectionOverallStats {
   total_deployments: number
@@ -169,13 +170,28 @@ export async function getSectionDashboardStats(
  * `getDevTeamAppsWithIssues` so that summary stats and issue lists agree.
  *
  * Optional `startDate` filters deployments to a date range (e.g. YTD).
+ *
+ * Optional `deployerUsernames` switches deployment-derived counts
+ * (`total_deployments`, `with_four_eyes`, `without_four_eyes`,
+ * `pending_verification`, `linked_to_goal`, and the `apps_with_issues`
+ * derived from these) to person-scope: only deployments whose deployer or
+ * PR creator matches one of the given GitHub usernames are counted.
+ * `total_apps` and the alert-driven part of `apps_with_issues` remain
+ * app-scope (apps and repository alerts aren't tied to a deployer).
+ * Empty array ⇒ deployment counts are 0; `undefined` ⇒ no filter.
  */
 export async function getDevTeamSummaryStats(
   naisTeamSlugs: string[],
   directAppIds?: number[],
   startDate?: Date,
+  deployerUsernames?: string[],
 ): Promise<DevTeamSummaryStats> {
   const ids = directAppIds ?? []
+
+  const hasDeployerFilter = deployerUsernames !== undefined
+  const deployerFilterClause = hasDeployerFilter ? ` AND ${userDeploymentMatchAnySql(4, 'd')}` : ''
+  const params: unknown[] = [naisTeamSlugs, ids, startDate ?? null]
+  if (hasDeployerFilter) params.push(lowerUsernames(deployerUsernames))
 
   const result = await pool.query(
     `WITH team_apps AS (
@@ -194,7 +210,7 @@ export async function getDevTeamSummaryStats(
        FROM team_apps ta
        JOIN deployments d ON d.monitored_app_id = ta.id
          AND ($3::timestamptz IS NULL OR d.created_at >= $3)
-         AND (ta.audit_start_year IS NULL OR d.created_at >= make_date(ta.audit_start_year, 1, 1))
+         AND (ta.audit_start_year IS NULL OR d.created_at >= make_date(ta.audit_start_year, 1, 1))${deployerFilterClause}
        LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id AND dgl.is_active = true
        GROUP BY d.monitored_app_id
      ),
@@ -215,7 +231,7 @@ export async function getDevTeamSummaryStats(
      FROM team_apps ta
      LEFT JOIN app_stats s ON s.monitored_app_id = ta.id
      LEFT JOIN app_alerts a ON a.monitored_app_id = ta.id`,
-    [naisTeamSlugs, ids, startDate ?? null],
+    params,
   )
 
   const row = result.rows[0]

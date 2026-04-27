@@ -193,6 +193,31 @@ describe('getDevTeamSummaryStats SQL', () => {
     expect(stats.total_apps).toBe(1)
     expect(stats.total_deployments).toBe(1)
   })
+
+  it('restricts deployment counts to the given deployerUsernames (person-scope)', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'team-scope', appName: 'scoped', environment: 'prod' })
+    // 3 deployments by team member, 2 by an outsider
+    await seedDeploymentWithStatus(pool, appId, 'team-scope', new Date(), 'approved_pr', 'alice')
+    await seedDeploymentWithStatus(pool, appId, 'team-scope', new Date(), 'approved_pr', 'alice')
+    await seedDeploymentWithStatus(pool, appId, 'team-scope', new Date(), 'direct_push', 'alice')
+    await seedDeploymentWithStatus(pool, appId, 'team-scope', new Date(), 'approved_pr', 'outsider')
+    await seedDeploymentWithStatus(pool, appId, 'team-scope', new Date(), 'direct_push', 'outsider')
+
+    const personScope = await getDevTeamSummaryStats(['team-scope'], undefined, undefined, ['alice'])
+    expect(personScope.total_apps).toBe(1) // app-scope: app is still in scope
+    expect(personScope.total_deployments).toBe(3) // person-scope: only alice's
+    expect(personScope.with_four_eyes).toBe(2)
+    expect(personScope.without_four_eyes).toBe(1)
+
+    // Empty array ⇒ no team members mapped ⇒ deployment counts are 0.
+    const emptyScope = await getDevTeamSummaryStats(['team-scope'], undefined, undefined, [])
+    expect(emptyScope.total_apps).toBe(1)
+    expect(emptyScope.total_deployments).toBe(0)
+
+    // undefined ⇒ no filter ⇒ all 5 deployments.
+    const noFilter = await getDevTeamSummaryStats(['team-scope'])
+    expect(noFilter.total_deployments).toBe(5)
+  })
 })
 
 async function seedDeploymentWithStatus(
@@ -201,15 +226,16 @@ async function seedDeploymentWithStatus(
   teamSlug: string,
   createdAt: Date,
   fourEyesStatus: string,
+  deployerUsername: string = 'test-user',
 ): Promise<number> {
   const naisId = `deploy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const { rows } = await pool.query<{ id: number }>(
     `INSERT INTO deployments (
       monitored_app_id, nais_deployment_id, team_slug, app_name, environment_name,
-      commit_sha, created_at, four_eyes_status
-    ) VALUES ($1, $2, $3, 'test-app', 'prod', $4, $5, $6)
+      commit_sha, created_at, four_eyes_status, deployer_username
+    ) VALUES ($1, $2, $3, 'test-app', 'prod', $4, $5, $6, $7)
     RETURNING id`,
-    [monitoredAppId, naisId, teamSlug, `sha-${naisId}`, createdAt, fourEyesStatus],
+    [monitoredAppId, naisId, teamSlug, `sha-${naisId}`, createdAt, fourEyesStatus, deployerUsername],
   )
   return rows[0].id
 }
