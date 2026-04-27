@@ -358,7 +358,7 @@ export async function getDeploymentsPaginated(filters?: DeploymentFilters): Prom
   const dataSql = `
     SELECT 
       d.*,
-      COALESCE(d.title, c.message) AS title,
+      COALESCE(d.title, d.github_pr_data->>'title', c.original_pr_title, c.message, d.unverified_commits->0->>'message') AS title,
       ma.team_slug,
       ma.environment_name,
       ma.app_name,
@@ -391,7 +391,7 @@ export async function getDeploymentById(id: number): Promise<DeploymentWithApp |
   const result = await pool.query(
     `SELECT 
       d.*,
-      COALESCE(d.title, c.message) AS title,
+      COALESCE(d.title, d.github_pr_data->>'title', c.original_pr_title, c.message, d.unverified_commits->0->>'message') AS title,
       ma.team_slug,
       ma.environment_name,
       ma.app_name,
@@ -1043,7 +1043,7 @@ export async function getDeployerDeploymentsPaginated(
     pool.query(
       `SELECT
          d.*,
-         COALESCE(d.title, c.message) AS title,
+         COALESCE(d.title, d.github_pr_data->>'title', c.original_pr_title, c.message, d.unverified_commits->0->>'message') AS title,
          ma.team_slug,
          ma.environment_name,
          ma.app_name,

@@ -183,7 +183,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   if (deployment.four_eyes_status === 'error') {
     const nearbyResult = await pool.query(
       `SELECT d.id, d.commit_sha, d.created_at, d.four_eyes_status, d.deployer_username,
-              COALESCE(d.title, c.message) AS title
+              COALESCE(d.title, d.github_pr_data->>'title', c.original_pr_title, c.message, d.unverified_commits->0->>'message') AS title
        FROM deployments d
        LEFT JOIN commits c ON c.sha = d.commit_sha
          AND c.repo_owner = d.detected_github_owner
