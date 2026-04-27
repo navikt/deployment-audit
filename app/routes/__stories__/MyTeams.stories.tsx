@@ -252,21 +252,29 @@ function MyTeamsPage({
             </VStack>
           )}
 
-          <PersonalGoalStatus personalMissingGoalLinks={personalMissingGoalLinks} profileId={profileId} />
-
-          {issueApps.length > 0 ? (
-            <VStack gap="space-16">
-              <Heading level="3" size="small">
-                Applikasjoner som trenger oppfølging ({issueApps.length})
-              </Heading>
-              <div>
-                {issueApps.map((app) => (
-                  <AppCard key={app.id} app={app} />
-                ))}
-              </div>
-            </VStack>
+          {personalMissingGoalLinks === 0 && issueApps.length === 0 ? (
+            <HStack gap="space-8" align="center">
+              <CheckmarkCircleIcon aria-hidden style={{ color: 'var(--ax-text-success)' }} />
+              <BodyShort size="small" textColor="subtle">
+                Alle dine deployments har endringsopphav og alle applikasjoner er i orden
+              </BodyShort>
+            </HStack>
           ) : (
-            <Alert variant="success">Alle applikasjoner er i orden — ingen krever oppfølging.</Alert>
+            <>
+              <PersonalGoalStatus personalMissingGoalLinks={personalMissingGoalLinks} profileId={profileId} />
+              {issueApps.length > 0 && (
+                <VStack gap="space-16">
+                  <Heading level="3" size="small">
+                    Applikasjoner som trenger oppfølging ({issueApps.length})
+                  </Heading>
+                  <div>
+                    {issueApps.map((app) => (
+                      <AppCard key={app.id} app={app} />
+                    ))}
+                  </div>
+                </VStack>
+              )}
+            </>
           )}
         </VStack>
       )}
