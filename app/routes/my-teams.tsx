@@ -1,7 +1,7 @@
 import { BarChartIcon, CheckmarkCircleIcon, ExclamationmarkTriangleIcon, LinkIcon } from '@navikt/aksel-icons'
 import { Alert, BodyShort, Box, Button, Detail, Heading, HGrid, HStack, VStack } from '@navikt/ds-react'
 import type { ReactNode } from 'react'
-import { Link, useRouteLoaderData } from 'react-router'
+import { Link } from 'react-router'
 import { AppCard, type AppCardData } from '~/components/AppCard'
 import { type BoardSummary, BoardSummaryCard } from '~/components/BoardSummaryCard'
 import { getAllActiveRepositories } from '~/db/application-repositories.server'
@@ -16,7 +16,6 @@ import { getAppDeploymentStatsBatch } from '../db/deployments.server'
 import { getAllAlertCounts, getAllMonitoredApplications } from '../db/monitored-applications.server'
 import { requireUser } from '../lib/auth.server'
 import type { Route } from './+types/my-teams'
-import type { loader as layoutLoader } from './layout'
 
 export function meta(_args: Route.MetaArgs) {
   return [{ title: 'NDA' }, { name: 'description', content: 'Audit Nais deployments for godkjenningsstatus' }]
@@ -51,6 +50,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       noTeamMembersMapped: false,
       personalMissingGoalLinks,
       navIdent: identity.navIdent,
+      githubUsername,
     }
   }
 
@@ -169,6 +169,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     noTeamMembersMapped,
     personalMissingGoalLinks,
     navIdent: identity.navIdent,
+    githubUsername,
   }
 }
 
@@ -296,9 +297,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     noTeamMembersMapped,
     personalMissingGoalLinks,
     navIdent,
+    githubUsername,
   } = loaderData
-  const layoutData = useRouteLoaderData<typeof layoutLoader>('routes/layout')
-  const githubUsername = layoutData?.user?.githubUsername
   const profileId = githubUsername || navIdent
 
   return (
@@ -327,6 +327,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           </VStack>
         </Alert>
       )}
+
+      {/* Personal goal-link status — mirrors the Slack home tab */}
+      <PersonalGoalStatus personalMissingGoalLinks={personalMissingGoalLinks} profileId={profileId} />
 
       {/* Teams selected — show combined overview */}
       {selectedDevTeams.length > 0 && teamStats && (
@@ -393,8 +396,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               </HGrid>
             </VStack>
           )}
-          {/* Personal goal-link status — mirrors the Slack home tab */}
-          <PersonalGoalStatus personalMissingGoalLinks={personalMissingGoalLinks} profileId={profileId} />
           {/* Issue apps */}
           {issueApps.length > 0 ? (
             <VStack gap="space-16">
