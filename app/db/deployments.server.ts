@@ -4,6 +4,12 @@ import { pool } from './connection.server'
 import { logStatusTransition } from './deployments/status-history.server'
 import { userDeploymentMatchSql } from './user-deployment-match'
 
+/**
+ * Shared SQL fragment for resolving deployment title with fallbacks.
+ * Requires a LEFT JOIN to commits as alias `c`.
+ */
+export const TITLE_COALESCE_SQL = `COALESCE(d.title, d.github_pr_data->>'title', c.original_pr_title, c.message, d.unverified_commits->0->>'message')`
+
 export interface UnverifiedCommit {
   sha: string
   message: string
@@ -358,7 +364,7 @@ export async function getDeploymentsPaginated(filters?: DeploymentFilters): Prom
   const dataSql = `
     SELECT 
       d.*,
-      COALESCE(d.title, d.github_pr_data->>'title', c.original_pr_title, c.message, d.unverified_commits->0->>'message') AS title,
+      ${TITLE_COALESCE_SQL} AS title,
       ma.team_slug,
       ma.environment_name,
       ma.app_name,
@@ -391,7 +397,7 @@ export async function getDeploymentById(id: number): Promise<DeploymentWithApp |
   const result = await pool.query(
     `SELECT 
       d.*,
-      COALESCE(d.title, d.github_pr_data->>'title', c.original_pr_title, c.message, d.unverified_commits->0->>'message') AS title,
+      ${TITLE_COALESCE_SQL} AS title,
       ma.team_slug,
       ma.environment_name,
       ma.app_name,
@@ -1043,7 +1049,7 @@ export async function getDeployerDeploymentsPaginated(
     pool.query(
       `SELECT
          d.*,
-         COALESCE(d.title, d.github_pr_data->>'title', c.original_pr_title, c.message, d.unverified_commits->0->>'message') AS title,
+         ${TITLE_COALESCE_SQL} AS title,
          ma.team_slug,
          ma.environment_name,
          ma.app_name,

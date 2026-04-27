@@ -252,7 +252,10 @@ describe('title fallback chain (COALESCE)', () => {
     expect(r3[0].title).toBe('Original PR title')
 
     // Remove original_pr_title: commits.message wins
-    await pool.query("UPDATE commits SET original_pr_title = NULL WHERE sha = $1 AND repo_owner = 'navikt'", [sha])
+    await pool.query(
+      "UPDATE commits SET original_pr_title = NULL WHERE sha = $1 AND repo_owner = 'navikt' AND repo_name = 'my-repo'",
+      [sha],
+    )
     const { rows: r4 } = await pool.query(titleQuery, [depId])
     expect(r4[0].title).toBe('commit message')
   })
