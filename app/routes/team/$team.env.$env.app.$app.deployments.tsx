@@ -263,7 +263,17 @@ export default function AppDeployments() {
             <BodyShort size="small">
               Denne appen er del av gruppen <strong>{appGroup.name}</strong>
               {groupSiblings.length > 0 && (
-                <> — {groupSiblings.map((s) => `${s.app_name} (${s.environment_name})`).join(', ')}</>
+                <>
+                  {' — '}
+                  {groupSiblings.map((s, i) => (
+                    <span key={s.id}>
+                      {i > 0 && ', '}
+                      <Link to={`/team/${s.team_slug}/env/${s.environment_name}/app/${s.app_name}/deployments`}>
+                        {s.app_name} ({s.environment_name})
+                      </Link>
+                    </span>
+                  ))}
+                </>
               )}
             </BodyShort>
             {hasGroup && (
