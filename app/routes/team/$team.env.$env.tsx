@@ -3,8 +3,8 @@ import { useLoaderData } from 'react-router'
 import { AppCard, type AppCardData } from '~/components/AppCard'
 import { ExternalLink } from '~/components/ExternalLink'
 import { getAlertCountsByApp } from '~/db/alerts.server'
-import { getRepositoriesByAppId } from '~/db/application-repositories.server'
-import { getAppDeploymentStats } from '~/db/deployments.server'
+import { getAllActiveRepositories } from '~/db/application-repositories.server'
+import { getAppDeploymentStatsBatch } from '~/db/deployments.server'
 import { getApplicationsByTeamAndEnv } from '~/db/monitored-applications.server'
 import { requireTeamEnvParams } from '~/lib/route-params.server'
 import type { Route } from './+types/$team.env.$env'
@@ -18,21 +18,26 @@ export async function loader({ params }: Route.LoaderArgs) {
     throw new Response('Team/environment not found or has no monitored applications', { status: 404 })
   }
 
-  const alertCountsByApp = await getAlertCountsByApp()
+  const [alertCountsByApp, activeRepos, statsByApp] = await Promise.all([
+    getAlertCountsByApp(),
+    getAllActiveRepositories(),
+    getAppDeploymentStatsBatch(applications.map((a) => ({ id: a.id, audit_start_year: a.audit_start_year }))),
+  ])
 
-  const appsWithData = await Promise.all(
-    applications.map(async (app) => {
-      const repos = await getRepositoriesByAppId(app.id)
-      const activeRepo = repos.find((r) => r.status === 'active')
-      const appStats = await getAppDeploymentStats(app.id, undefined, undefined, app.audit_start_year)
-      return {
-        ...app,
-        active_repo: activeRepo ? `${activeRepo.github_owner}/${activeRepo.github_repo_name}` : null,
-        stats: appStats,
-        alertCount: alertCountsByApp.get(app.id) || 0,
-      } satisfies AppCardData
-    }),
-  )
+  const appsWithData: AppCardData[] = applications.map((app) => ({
+    ...app,
+    active_repo: activeRepos.get(app.id) || null,
+    stats: statsByApp.get(app.id) || {
+      total: 0,
+      with_four_eyes: 0,
+      without_four_eyes: 0,
+      pending_verification: 0,
+      last_deployment: null,
+      last_deployment_id: null,
+      four_eyes_percentage: 0,
+    },
+    alertCount: alertCountsByApp.get(app.id) || 0,
+  }))
 
   return {
     team,
