@@ -96,15 +96,10 @@ export async function getGroupByAppId(monitoredAppId: number): Promise<Applicati
   return rows[0] ?? null
 }
 
-export async function getSiblingApps(
-  monitoredAppId: number,
-): Promise<Array<{ id: number; team_slug: string; environment_name: string; app_name: string }>> {
-  const { rows } = await pool.query<{
-    id: number
-    team_slug: string
-    environment_name: string
-    app_name: string
-  }>(
+type SiblingApp = { id: number; team_slug: string; environment_name: string; app_name: string }
+
+export async function getSiblingApps(monitoredAppId: number): Promise<SiblingApp[]> {
+  const { rows } = await pool.query<SiblingApp>(
     `SELECT ma.id, ma.team_slug, ma.environment_name, ma.app_name
      FROM monitored_applications ma
      WHERE ma.application_group_id = (
@@ -116,6 +111,66 @@ export async function getSiblingApps(
     [monitoredAppId],
   )
   return rows
+}
+
+interface GroupContext {
+  group: ApplicationGroup | null
+  siblings: SiblingApp[]
+}
+
+interface GroupContextRow {
+  group_id: number | null
+  group_name: string | null
+  group_created_at: Date | null
+  sibling_id: number | null
+  team_slug: string | null
+  environment_name: string | null
+  app_name: string | null
+}
+
+/**
+ * Get an app's group and its siblings in a single SQL query.
+ * Returns `{ group: null, siblings: [] }` for ungrouped apps.
+ */
+export async function getGroupContext(monitoredAppId: number): Promise<GroupContext> {
+  const { rows } = await pool.query<GroupContextRow>(
+    `SELECT
+       ag.id AS group_id, ag.name AS group_name, ag.created_at AS group_created_at,
+       sibling.id AS sibling_id, sibling.team_slug, sibling.environment_name, sibling.app_name
+     FROM monitored_applications ma
+     LEFT JOIN application_groups ag ON ag.id = ma.application_group_id AND ag.deleted_at IS NULL
+     LEFT JOIN monitored_applications sibling
+       ON sibling.application_group_id = ag.id AND sibling.id != $1
+     WHERE ma.id = $1
+     ORDER BY sibling.environment_name, sibling.team_slug`,
+    [monitoredAppId],
+  )
+
+  if (rows.length === 0 || rows[0].group_id === null) {
+    return { group: null, siblings: [] }
+  }
+
+  const group: ApplicationGroup = {
+    id: rows[0].group_id,
+    name: rows[0].group_name as string,
+    created_at: rows[0].group_created_at as Date,
+  }
+
+  const siblings: SiblingApp[] = rows
+    .filter(
+      (
+        r,
+      ): r is GroupContextRow & { sibling_id: number; team_slug: string; environment_name: string; app_name: string } =>
+        r.sibling_id !== null,
+    )
+    .map((r) => ({
+      id: r.sibling_id,
+      team_slug: r.team_slug,
+      environment_name: r.environment_name,
+      app_name: r.app_name,
+    }))
+
+  return { group, siblings }
 }
 
 /**
