@@ -28,18 +28,9 @@ export async function getAppDeploymentStats(
     startDate,
     endDate,
   })
-  return (
-    map.get(monitoredAppId) ?? {
-      total: 0,
-      with_four_eyes: 0,
-      without_four_eyes: 0,
-      pending_verification: 0,
-      last_deployment: null,
-      last_deployment_id: null,
-      four_eyes_percentage: 0,
-      missing_goal_links: 0,
-    }
-  )
+  // Batch always pre-initializes the Map for every requested app ID
+  // biome-ignore lint/style/noNonNullAssertion: guaranteed by getAppDeploymentStatsBatch
+  return map.get(monitoredAppId)!
 }
 
 /**
@@ -146,6 +137,7 @@ export async function getAppDeploymentStatsBatch(
       with_four_eyes: 0,
       without_four_eyes: 0,
       pending_verification: 0,
+      missing_goal_links: 0,
       last_deployment: null,
       last_deployment_id: lastDeploymentIds.get(app.id) || null,
       four_eyes_percentage: 0,

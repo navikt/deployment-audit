@@ -215,7 +215,7 @@ export async function getAllActiveRepositories(): Promise<Map<number, string>> {
     `SELECT DISTINCT ON (monitored_app_id) monitored_app_id, github_owner, github_repo_name
      FROM application_repositories 
      WHERE status = 'active'
-     ORDER BY monitored_app_id, created_at DESC`,
+     ORDER BY monitored_app_id, created_at DESC, id DESC`,
   )
 
   const map = new Map<number, string>()

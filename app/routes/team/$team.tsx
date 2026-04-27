@@ -24,16 +24,8 @@ export async function loader({ params: { team } }: Route.LoaderArgs) {
   const appsWithData: AppCardData[] = applications.map((app) => ({
     ...app,
     active_repo: activeRepos.get(app.id) || null,
-    stats: statsByApp.get(app.id) || {
-      total: 0,
-      with_four_eyes: 0,
-      without_four_eyes: 0,
-      pending_verification: 0,
-      last_deployment: null,
-      last_deployment_id: null,
-      four_eyes_percentage: 0,
-      missing_goal_links: 0,
-    },
+    // biome-ignore lint/style/noNonNullAssertion: guaranteed by getAppDeploymentStatsBatch
+    stats: statsByApp.get(app.id)!,
     alertCount: alertCountsByApp.get(app.id) || 0,
   }))
 

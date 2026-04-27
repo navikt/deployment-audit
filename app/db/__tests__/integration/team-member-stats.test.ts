@@ -226,6 +226,9 @@ describe('getAppDeploymentStats / batch parity', () => {
     expect(single.pending_verification).toBe(batch!.pending_verification)
     expect(single.four_eyes_percentage).toBe(batch!.four_eyes_percentage)
     expect(single.last_deployment_id).toBe(batch!.last_deployment_id)
+    expect(single.missing_goal_links).toBe(batch!.missing_goal_links)
+    // No goal links seeded, so missing_goal_links should equal total
+    expect(single.missing_goal_links).toBe(single.total)
   })
 
   it('date range filters apply identically in single and batch', async () => {
