@@ -4,8 +4,8 @@
 -- team's scope for dashboards, stats, and issue lists.
 
 CREATE TABLE dev_team_application_groups (
-  dev_team_id   INTEGER NOT NULL REFERENCES dev_teams(id) ON DELETE CASCADE,
-  application_group_id INTEGER NOT NULL REFERENCES application_groups(id) ON DELETE CASCADE,
+  dev_team_id   INTEGER NOT NULL REFERENCES dev_teams(id) ON DELETE RESTRICT,
+  application_group_id INTEGER NOT NULL REFERENCES application_groups(id) ON DELETE RESTRICT,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   deleted_at    TIMESTAMPTZ,
   deleted_by    TEXT,
