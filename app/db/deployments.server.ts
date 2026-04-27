@@ -208,9 +208,10 @@ export interface DeploymentFilters {
   only_repository_mismatch?: boolean
   deployer_username?: string
   /**
-   * Filter to deployments whose deployer_username is in this list. Used by
-   * the dev-team filter on the deployments page. An empty array forces zero
-   * results (selected team has no GitHub-mapped members).
+   * Filter to deployments where a team member is the deployer **or** PR creator.
+   * Uses `userDeploymentMatchAnySql` — consistent with `getAppDeploymentStatsBatch`
+   * so stat counts agree with list results. An empty array forces zero results
+   * (selected team has no GitHub-mapped members).
    */
   deployer_usernames?: string[]
   commit_sha?: string
