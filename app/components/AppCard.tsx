@@ -84,6 +84,7 @@ export function AppCard({ app, showEnvironment = true, appendSearchParams }: App
     ? [app.environment_name, ...app.siblingEnvironments]
     : [app.environment_name]
   const extraParams = appendSearchParams ? `&${appendSearchParams}` : ''
+  const groupParam = app.groupName ? '&group=true' : ''
 
   // Show all member app names when the group contains apps with different names
   const uniqueAppNames = app.groupApps ? [...new Set(app.groupApps.map((a) => a.app_name))] : []
@@ -126,7 +127,7 @@ export function AppCard({ app, showEnvironment = true, appendSearchParams }: App
             )}
             {(app.stats.missing_goal_links ?? 0) > 0 && (
               <Link
-                to={`${appUrl}/deployments?goal=missing&period=all${extraParams}`}
+                to={`${appUrl}/deployments?goal=missing&period=all${groupParam}${extraParams}`}
                 style={{ textDecoration: 'none' }}
               >
                 <Tag data-color="warning" variant="outline" size="xsmall" icon={<LinkBrokenIcon aria-hidden />}>
@@ -136,7 +137,7 @@ export function AppCard({ app, showEnvironment = true, appendSearchParams }: App
             )}
             {app.stats.without_four_eyes > 0 ? (
               <Link
-                to={`${appUrl}/deployments?status=not_approved&period=all${extraParams}`}
+                to={`${appUrl}/deployments?status=not_approved&period=all${groupParam}${extraParams}`}
                 style={{ textDecoration: 'none' }}
               >
                 {getStatusTag(app.stats)}
