@@ -262,7 +262,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               Ingen av medlemmene i dine team er koblet til en GitHub-bruker, så tallene under er 0. Be teammedlemmene
               registrere GitHub-brukernavn under <Link to="/users">Brukermapping</Link> så blir tallene riktige.
             </Alert>
-          )}{' '}
+          )}
           {/* Summary cards */}
           <HGrid gap="space-16" columns={{ xs: 1, sm: 2, lg: 4 }}>
             <SummaryCard
