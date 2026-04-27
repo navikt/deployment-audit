@@ -1097,7 +1097,7 @@ export async function getDeployerApps(deployerUsername: string): Promise<string[
  * Search result types for global search
  */
 export interface SearchResult {
-  type: 'deployment' | 'user' | 'team' | 'app' | 'group'
+  type: 'deployment' | 'user' | 'team' | 'app' | 'group' | 'dev_team'
   id?: number
   url: string
   title: string
@@ -1192,7 +1192,7 @@ export async function searchDeployments(query: string, limit = 10): Promise<Sear
 
   // Otherwise, search by deployer username OR user mapping fields (nav_ident, nav_email, display_name, slack_member_id)
   // Also search for teams, applications, and application groups
-  const [userResult, teamResult, appResult, groupResult] = await Promise.all([
+  const [userResult, teamResult, appResult, groupResult, devTeamResult] = await Promise.all([
     pool.query(
       `SELECT DISTINCT d.deployer_username, 
               um.display_name, um.nav_email, um.nav_ident, um.slack_member_id,
@@ -1241,6 +1241,18 @@ export async function searchDeployments(query: string, limit = 10): Promise<Sear
        LIMIT $2`,
       [`%${trimmedQuery}%`, limit],
     ),
+    pool.query(
+      `SELECT dt.id, dt.name, dt.slug, s.slug AS section_slug,
+              COUNT(DISTINCT dta.monitored_app_id)::int AS app_count
+       FROM dev_teams dt
+       JOIN sections s ON s.id = dt.section_id
+       LEFT JOIN dev_team_applications dta ON dta.dev_team_id = dt.id AND dta.deleted_at IS NULL
+       WHERE dt.is_active = true AND (dt.name ILIKE $1 OR dt.slug ILIKE $1)
+       GROUP BY dt.id, dt.name, dt.slug, s.slug
+       ORDER BY dt.name
+       LIMIT $2`,
+      [`%${trimmedQuery}%`, limit],
+    ),
   ])
 
   // Application groups first
@@ -1255,6 +1267,17 @@ export async function searchDeployments(query: string, limit = 10): Promise<Sear
       url: row.first_app_url ?? '/search',
       title: row.name,
       subtitle: displayNames.length > 0 ? `Gruppe: ${displayNames.join(', ')}` : 'Gruppe (tom)',
+    })
+  }
+
+  // Dev teams
+  for (const row of devTeamResult.rows) {
+    results.push({
+      type: 'dev_team',
+      id: row.id,
+      url: `/sections/${row.section_slug}/teams/${row.slug}`,
+      title: row.name,
+      subtitle: `Utviklerteam${row.app_count > 0 ? ` · ${row.app_count} app${row.app_count === 1 ? '' : 'er'}` : ''}`,
     })
   }
 

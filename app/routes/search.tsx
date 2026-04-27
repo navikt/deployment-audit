@@ -1,4 +1,4 @@
-import { LayersIcon, MagnifyingGlassIcon } from '@navikt/aksel-icons'
+import { LayersIcon, MagnifyingGlassIcon, PersonGroupIcon } from '@navikt/aksel-icons'
 import { BodyShort, Box, Heading, Hide, HStack, Search, Show, Tag, VStack } from '@navikt/ds-react'
 import { Form, Link, useLoaderData } from 'react-router'
 import { type SearchResult, searchDeployments } from '~/db/deployments.server'
@@ -86,6 +86,11 @@ export default function SearchPage() {
                 <HStack gap="space-12" align="center">
                   {result.type === 'group' ? (
                     <LayersIcon style={{ fontSize: '1.25rem', color: 'var(--ax-text-neutral-subtle)' }} aria-hidden />
+                  ) : result.type === 'dev_team' ? (
+                    <PersonGroupIcon
+                      style={{ fontSize: '1.25rem', color: 'var(--ax-text-neutral-subtle)' }}
+                      aria-hidden
+                    />
                   ) : (
                     <MagnifyingGlassIcon
                       style={{ fontSize: '1.25rem', color: 'var(--ax-text-neutral-subtle)' }}
@@ -98,18 +103,24 @@ export default function SearchPage() {
                       <Tag
                         size="xsmall"
                         variant={
-                          result.type === 'deployment' ? 'info' : result.type === 'group' ? 'moderate' : 'neutral'
+                          result.type === 'deployment'
+                            ? 'info'
+                            : result.type === 'group' || result.type === 'dev_team'
+                              ? 'moderate'
+                              : 'neutral'
                         }
                       >
                         {result.type === 'deployment'
                           ? 'Deployment'
                           : result.type === 'group'
                             ? 'Gruppe'
-                            : result.type === 'team'
-                              ? 'Team'
-                              : result.type === 'app'
-                                ? 'App'
-                                : 'Bruker'}
+                            : result.type === 'dev_team'
+                              ? 'Utviklerteam'
+                              : result.type === 'team'
+                                ? 'Team'
+                                : result.type === 'app'
+                                  ? 'App'
+                                  : 'Bruker'}
                       </Tag>
                     </HStack>
                     {result.subtitle && (
