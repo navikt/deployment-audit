@@ -260,3 +260,65 @@ describe('title fallback chain (COALESCE)', () => {
     expect(r4[0].title).toBe('commit message')
   })
 })
+
+describe('manual approval preserves existing data', () => {
+  it('should keep title and github_pr_data when status changes to manually_approved', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'team-1', appName: 'my-app', environment: 'prod' })
+    const depId = await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team-1',
+      environment: 'prod',
+      title: 'Legg til oversetting for AFP Stat kontroll',
+      fourEyesStatus: 'unverified_commits',
+      githubPrData: { title: 'Legg til oversetting for AFP Stat kontroll', number: 579 },
+    })
+
+    // Set unverified_commits JSON
+    await pool.query(
+      `UPDATE deployments 
+       SET github_pr_number = 579,
+           github_pr_url = 'https://github.com/navikt/repo/pull/579',
+           unverified_commits = $2::jsonb
+       WHERE id = $1`,
+      [
+        depId,
+        JSON.stringify([
+          { sha: '7de20a1', message: 'Legg til oversetting for AFP Stat kontroll (#579)', author: 'alice' },
+        ]),
+      ],
+    )
+
+    // Simulate manual approval that preserves existing data (the fixed behavior)
+    const before = await pool.query('SELECT * FROM deployments WHERE id = $1', [depId])
+    const existing = before.rows[0]
+
+    await pool.query(
+      `UPDATE deployments 
+       SET four_eyes_status = 'manually_approved',
+           github_pr_number = $2,
+           github_pr_url = $3,
+           github_pr_data = $4,
+           title = $5,
+           unverified_commits = $6
+       WHERE id = $1`,
+      [
+        depId,
+        existing.github_pr_number,
+        existing.github_pr_url,
+        existing.github_pr_data ? JSON.stringify(existing.github_pr_data) : null,
+        existing.title,
+        existing.unverified_commits ? JSON.stringify(existing.unverified_commits) : null,
+      ],
+    )
+
+    const { rows } = await pool.query('SELECT * FROM deployments WHERE id = $1', [depId])
+    expect(rows[0].four_eyes_status).toBe('manually_approved')
+    expect(rows[0].title).toBe('Legg til oversetting for AFP Stat kontroll')
+    expect(rows[0].github_pr_number).toBe(579)
+    expect(rows[0].github_pr_url).toBe('https://github.com/navikt/repo/pull/579')
+    expect(rows[0].github_pr_data).toEqual({ title: 'Legg til oversetting for AFP Stat kontroll', number: 579 })
+    expect(rows[0].unverified_commits).toEqual([
+      { sha: '7de20a1', message: 'Legg til oversetting for AFP Stat kontroll (#579)', author: 'alice' },
+    ])
+  })
+})

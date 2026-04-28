@@ -102,13 +102,16 @@ export async function action({ request, params }: { request: Request; params: Re
         approved_by: identity.navIdent,
       })
 
-      // Update deployment to mark as manually approved
+      // Update deployment to mark as manually approved, preserving existing GitHub data
       await updateDeploymentFourEyes(
         deploymentId,
         {
           fourEyesStatus: 'manually_approved',
-          githubPrNumber: null,
-          githubPrUrl: null,
+          githubPrNumber: deployment.github_pr_number ?? null,
+          githubPrUrl: deployment.github_pr_url ?? null,
+          githubPrData: deployment.github_pr_data ?? undefined,
+          title: deployment.title ?? null,
+          unverifiedCommits: deployment.unverified_commits ?? undefined,
         },
         { changeSource: 'manual_approval', changedBy: identity.navIdent },
       )
