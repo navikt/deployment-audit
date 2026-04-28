@@ -1,0 +1,263 @@
+/**
+ * Integration test: getDevTeamAppsWithIssues - unmapped deployer count
+ *
+ * Verifies that apps with unmapped deployers are returned by the query
+ * and that the unmapped_deployer_count is correct.
+ */
+
+import { Pool } from 'pg'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { getDevTeamAppsWithIssues } from '~/db/deployments/home.server'
+import { seedApp, seedDeployment, truncateAllTables } from './helpers'
+
+let pool: Pool
+
+beforeAll(() => {
+  pool = new Pool({ connectionString: process.env.DATABASE_URL })
+})
+
+afterAll(async () => {
+  await pool.end()
+})
+
+afterEach(async () => {
+  await truncateAllTables(pool)
+})
+
+async function seedUserMapping(githubUsername: string): Promise<void> {
+  await pool.query(`INSERT INTO user_mappings (github_username, display_name) VALUES ($1, $2)`, [
+    githubUsername,
+    `Name of ${githubUsername}`,
+  ])
+}
+
+describe('getDevTeamAppsWithIssues - unmapped_deployer_count', () => {
+  it('includes app with only unmapped deployers in results', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'team-a', appName: 'svc', environment: 'prod' })
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team-a',
+      environment: 'prod',
+      deployerUsername: 'unmapped-user',
+      fourEyesStatus: 'approved',
+    })
+
+    const result = await getDevTeamAppsWithIssues(['team-a'])
+    expect(result).toHaveLength(1)
+    expect(result[0].app_name).toBe('svc')
+    expect(result[0].unmapped_deployer_count).toBe(1)
+  })
+
+  it('counts distinct unmapped deployers per app', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'team-a', appName: 'svc', environment: 'prod' })
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team-a',
+      environment: 'prod',
+      deployerUsername: 'alice',
+      fourEyesStatus: 'approved',
+    })
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team-a',
+      environment: 'prod',
+      deployerUsername: 'bob',
+      fourEyesStatus: 'approved',
+    })
+    // Same user again — should not double-count
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team-a',
+      environment: 'prod',
+      deployerUsername: 'alice',
+      fourEyesStatus: 'approved',
+    })
+
+    const result = await getDevTeamAppsWithIssues(['team-a'])
+    expect(result).toHaveLength(1)
+    expect(result[0].unmapped_deployer_count).toBe(2)
+  })
+
+  it('excludes bot accounts from unmapped count', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'team-a', appName: 'svc', environment: 'prod' })
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team-a',
+      environment: 'prod',
+      deployerUsername: 'dependabot[bot]',
+      fourEyesStatus: 'approved',
+    })
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team-a',
+      environment: 'prod',
+      deployerUsername: 'github-actions[bot]',
+      fourEyesStatus: 'approved',
+    })
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team-a',
+      environment: 'prod',
+      deployerUsername: 'real-person',
+      fourEyesStatus: 'approved',
+    })
+
+    const result = await getDevTeamAppsWithIssues(['team-a'])
+    expect(result).toHaveLength(1)
+    expect(result[0].unmapped_deployer_count).toBe(1)
+  })
+
+  it('excludes known non-bracket bot accounts (snyk-bot, semantic-release-bot)', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'team-a', appName: 'svc', environment: 'prod' })
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team-a',
+      environment: 'prod',
+      deployerUsername: 'snyk-bot',
+      fourEyesStatus: 'approved',
+    })
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team-a',
+      environment: 'prod',
+      deployerUsername: 'semantic-release-bot',
+      fourEyesStatus: 'approved',
+    })
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team-a',
+      environment: 'prod',
+      deployerUsername: 'real-person',
+      fourEyesStatus: 'approved',
+    })
+
+    const result = await getDevTeamAppsWithIssues(['team-a'])
+    expect(result).toHaveLength(1)
+    expect(result[0].unmapped_deployer_count).toBe(1)
+  })
+
+  it('does not count mapped deployers', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'team-a', appName: 'svc', environment: 'prod' })
+    const deployId = await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team-a',
+      environment: 'prod',
+      deployerUsername: 'mapped-user',
+      fourEyesStatus: 'approved',
+    })
+    await seedUserMapping('mapped-user')
+    // Add goal link so app doesn't appear due to missing_goal_links
+    await pool.query(
+      `INSERT INTO deployment_goal_links (deployment_id, external_url, link_method, is_active) VALUES ($1, 'http://example.com', 'manual', true)`,
+      [deployId],
+    )
+
+    const result = await getDevTeamAppsWithIssues(['team-a'])
+    // App has no issues (deployer is mapped, status is approved, has goal link)
+    expect(result).toHaveLength(0)
+  })
+
+  it('handles case-insensitive username matching', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'team-a', appName: 'svc', environment: 'prod' })
+    const deployId = await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team-a',
+      environment: 'prod',
+      deployerUsername: 'Alice',
+      fourEyesStatus: 'approved',
+    })
+    await seedUserMapping('alice')
+    // Add goal link so app doesn't appear due to missing_goal_links
+    await pool.query(
+      `INSERT INTO deployment_goal_links (deployment_id, external_url, link_method, is_active) VALUES ($1, 'http://example.com', 'manual', true)`,
+      [deployId],
+    )
+
+    const result = await getDevTeamAppsWithIssues(['team-a'])
+    // Alice is mapped (case-insensitive), so no unmapped deployers or other issues
+    expect(result).toHaveLength(0)
+  })
+
+  it('excludes soft-deleted user mappings', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'team-a', appName: 'svc', environment: 'prod' })
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team-a',
+      environment: 'prod',
+      deployerUsername: 'alice',
+      fourEyesStatus: 'approved',
+    })
+    await seedUserMapping('alice')
+    await pool.query(`UPDATE user_mappings SET deleted_at = NOW() WHERE github_username = 'alice'`)
+
+    const result = await getDevTeamAppsWithIssues(['team-a'])
+    expect(result).toHaveLength(1)
+    expect(result[0].unmapped_deployer_count).toBe(1)
+  })
+
+  it('respects audit_start_year for unmapped count', async () => {
+    const currentYear = new Date().getFullYear()
+    const appId = await seedApp(pool, {
+      teamSlug: 'team-a',
+      appName: 'svc',
+      environment: 'prod',
+      auditStartYear: currentYear,
+    })
+    // Deployment before audit start year — should be excluded
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team-a',
+      environment: 'prod',
+      deployerUsername: 'old-deployer',
+      fourEyesStatus: 'approved',
+      createdAt: new Date(currentYear - 1, 6, 1),
+    })
+    // Deployment in audit year
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team-a',
+      environment: 'prod',
+      deployerUsername: 'current-deployer',
+      fourEyesStatus: 'approved',
+    })
+
+    const result = await getDevTeamAppsWithIssues(['team-a'])
+    expect(result).toHaveLength(1)
+    expect(result[0].unmapped_deployer_count).toBe(1)
+  })
+
+  it('combines unmapped count with other issue types', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'team-a', appName: 'svc', environment: 'prod' })
+    // Unmapped deployer with four-eyes issue (direct_push is a NOT_APPROVED status)
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team-a',
+      environment: 'prod',
+      deployerUsername: 'unmapped-user',
+      fourEyesStatus: 'direct_push',
+    })
+
+    const result = await getDevTeamAppsWithIssues(['team-a'])
+    expect(result).toHaveLength(1)
+    expect(result[0].without_four_eyes).toBe(1)
+    expect(result[0].unmapped_deployer_count).toBe(1)
+  })
+
+  it('unmapped_deployer_count is not affected by deployerUsernames filter', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'team-a', appName: 'svc', environment: 'prod' })
+    // Deployer NOT in the filter list
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team-a',
+      environment: 'prod',
+      deployerUsername: 'outsider',
+      fourEyesStatus: 'approved',
+    })
+
+    // Pass deployer filter — four_eyes counts are filtered, but unmapped count is NOT
+    const result = await getDevTeamAppsWithIssues(['team-a'], undefined, ['team-member'])
+    expect(result).toHaveLength(1)
+    expect(result[0].without_four_eyes).toBe(0) // filtered by deployer
+    expect(result[0].unmapped_deployer_count).toBe(1) // NOT filtered
+  })
+})

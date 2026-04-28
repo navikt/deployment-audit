@@ -217,3 +217,34 @@ export const GroupedList: Story = {
     </VStack>
   ),
 }
+
+export const WithUnmappedDeployers: Story = {
+  name: 'Med umappede deployere',
+  args: {
+    app: {
+      ...baseApp,
+      stats: { total: 42, without_four_eyes: 0, pending_verification: 0, unmapped_deployers: 3 },
+    },
+  },
+}
+
+export const WithUnmappedDeployersSingular: Story = {
+  name: 'Med 1 umappet deployer',
+  args: {
+    app: {
+      ...baseApp,
+      stats: { total: 42, without_four_eyes: 0, pending_verification: 0, unmapped_deployers: 1 },
+    },
+  },
+}
+
+export const WithAllIssueTypes: Story = {
+  name: 'Alle issue-typer samtidig',
+  args: {
+    app: {
+      ...baseApp,
+      stats: { total: 42, without_four_eyes: 2, pending_verification: 0, missing_goal_links: 5, unmapped_deployers: 3 },
+      alertCount: 1,
+    },
+  },
+}

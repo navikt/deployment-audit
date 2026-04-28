@@ -53,6 +53,7 @@ export function groupAppCards(apps: AppWithGroup[], groupNames?: Map<number, str
       without_four_eyes: groupApps.reduce((sum, a) => sum + a.stats.without_four_eyes, 0),
       pending_verification: groupApps.reduce((sum, a) => sum + a.stats.pending_verification, 0),
       missing_goal_links: groupApps.reduce((sum, a) => sum + (a.stats.missing_goal_links ?? 0), 0),
+      unmapped_deployers: groupApps.reduce((sum, a) => sum + (a.stats.unmapped_deployers ?? 0), 0),
     }
 
     const totalAlerts = groupApps.reduce((sum, a) => sum + a.alertCount, 0)

@@ -49,6 +49,15 @@ export const GITHUB_BOTS: Record<string, GitHubBot> = {
 }
 
 /**
+ * Known GitHub bot usernames that do NOT end with `[bot]`.
+ * Used in SQL queries that already filter `LIKE '%[bot]'` to also
+ * exclude these additional known bots (e.g. `snyk-bot`).
+ */
+export const NON_BRACKET_BOT_USERNAMES = Object.keys(GITHUB_BOTS)
+  .filter((u) => !u.endsWith('[bot]'))
+  .map((u) => u.toLowerCase())
+
+/**
  * Check if a username is a known GitHub bot
  */
 export function isGitHubBot(username: string | null | undefined): boolean {
