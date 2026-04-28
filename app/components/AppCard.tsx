@@ -4,9 +4,11 @@ import {
   ExclamationmarkTriangleIcon,
   LayersIcon,
   LinkBrokenIcon,
+  PersonGroupIcon,
   XMarkOctagonIcon,
 } from '@navikt/aksel-icons'
 import { BodyShort, Box, Detail, Hide, HStack, Show, Tag, VStack } from '@navikt/ds-react'
+import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import styles from '../styles/common.module.css'
 import { ExternalLink } from './ExternalLink'
@@ -16,6 +18,7 @@ interface AppStats {
   without_four_eyes: number
   pending_verification: number
   missing_goal_links?: number
+  unmapped_deployers?: number
 }
 
 export interface AppCardData {
@@ -32,33 +35,61 @@ export interface AppCardData {
   groupApps?: { app_name: string; environment_name: string }[]
 }
 
-function getStatusTag(appStats: AppStats) {
+interface IssueBadgeProps {
+  to?: string
+  icon: ReactNode
+  color: 'danger' | 'warning' | 'success' | 'neutral'
+  variant?: 'outline' | 'moderate'
+  children: ReactNode
+}
+
+/**
+ * Consistent badge used in AppCard tag rows.
+ * Standardizes size, link wrapping, and styling across all issue indicators.
+ */
+function IssueBadge({ to, icon, color, variant = 'outline', children }: IssueBadgeProps) {
+  const tag = (
+    <Tag data-color={color} variant={variant} size="xsmall" icon={icon}>
+      {children}
+    </Tag>
+  )
+  if (to) {
+    return (
+      <Link to={to} style={{ textDecoration: 'none', display: 'flex' }}>
+        {tag}
+      </Link>
+    )
+  }
+  return tag
+}
+
+function getStatusBadge(appStats: AppStats, to?: string) {
   if (appStats.without_four_eyes > 0) {
     const label = appStats.without_four_eyes === 1 ? 'mangel' : 'mangler'
     return (
-      <Tag data-color="danger" variant="outline" size="small" icon={<XMarkOctagonIcon aria-hidden />}>
+      <IssueBadge to={to} icon={<XMarkOctagonIcon aria-hidden />} color="danger">
         {appStats.without_four_eyes} {label}
-      </Tag>
+      </IssueBadge>
     )
   }
   if (appStats.pending_verification > 0) {
     return (
-      <Tag data-color="warning" variant="outline" size="small" icon={<ExclamationmarkTriangleIcon aria-hidden />}>
+      <IssueBadge icon={<ExclamationmarkTriangleIcon aria-hidden />} color="warning">
         {appStats.pending_verification} venter
-      </Tag>
+      </IssueBadge>
     )
   }
   if (appStats.total === 0) {
     return (
-      <Tag data-color="warning" variant="outline" size="small" icon={<ExclamationmarkTriangleIcon aria-hidden />}>
+      <IssueBadge icon={<ExclamationmarkTriangleIcon aria-hidden />} color="warning">
         Ingen data
-      </Tag>
+      </IssueBadge>
     )
   }
   return (
-    <Tag data-color="success" variant="outline" size="small" icon={<CheckmarkCircleIcon aria-hidden />}>
+    <IssueBadge icon={<CheckmarkCircleIcon aria-hidden />} color="success">
       OK
-    </Tag>
+    </IssueBadge>
   )
 }
 
@@ -119,31 +150,34 @@ export function AppCard({ app, showEnvironment = true, appendSearchParams }: App
           </HStack>
           <HStack gap="space-8" align="center">
             {app.alertCount > 0 && (
-              <Link to={`${appUrl}#varsler`} style={{ textDecoration: 'none' }}>
-                <Tag data-color="danger" variant="moderate" size="xsmall" icon={<BellIcon aria-hidden />}>
-                  {app.alertCount}
-                </Tag>
-              </Link>
+              <IssueBadge to={`${appUrl}#varsler`} icon={<BellIcon aria-hidden />} color="danger" variant="moderate">
+                {app.alertCount}
+              </IssueBadge>
+            )}
+            {(app.stats.unmapped_deployers ?? 0) > 0 && (
+              <IssueBadge
+                to={`${appUrl}/deployments?period=all${groupParam}`}
+                icon={<PersonGroupIcon aria-hidden />}
+                color="warning"
+              >
+                {app.stats.unmapped_deployers}{' '}
+                {app.stats.unmapped_deployers === 1 ? 'umappet' : 'umappede'}
+              </IssueBadge>
             )}
             {(app.stats.missing_goal_links ?? 0) > 0 && (
-              <Link
+              <IssueBadge
                 to={`${appUrl}/deployments?goal=missing&period=all${groupParam}${extraParams}`}
-                style={{ textDecoration: 'none' }}
+                icon={<LinkBrokenIcon aria-hidden />}
+                color="warning"
               >
-                <Tag data-color="warning" variant="outline" size="xsmall" icon={<LinkBrokenIcon aria-hidden />}>
-                  {app.stats.missing_goal_links} uten opphav
-                </Tag>
-              </Link>
+                {app.stats.missing_goal_links} uten opphav
+              </IssueBadge>
             )}
-            {app.stats.without_four_eyes > 0 ? (
-              <Link
-                to={`${appUrl}/deployments?status=not_approved&period=all${groupParam}${extraParams}`}
-                style={{ textDecoration: 'none' }}
-              >
-                {getStatusTag(app.stats)}
-              </Link>
-            ) : (
-              getStatusTag(app.stats)
+            {getStatusBadge(
+              app.stats,
+              app.stats.without_four_eyes > 0
+                ? `${appUrl}/deployments?status=not_approved&period=all${groupParam}${extraParams}`
+                : undefined,
             )}
           </HStack>
         </HStack>

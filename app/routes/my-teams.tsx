@@ -96,8 +96,11 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   // Build a map of missing_goal_links from the issue query
   const missingGoalsByKey = new Map<string, number>()
+  const unmappedByKey = new Map<string, number>()
   for (const a of issueApps) {
-    missingGoalsByKey.set(`${a.team_slug}/${a.environment_name}/${a.app_name}`, a.missing_goal_links)
+    const key = `${a.team_slug}/${a.environment_name}/${a.app_name}`
+    missingGoalsByKey.set(key, a.missing_goal_links)
+    unmappedByKey.set(key, a.unmapped_deployer_count)
   }
 
   // Resolve group names for grouped app cards
@@ -123,6 +126,7 @@ export async function loader({ request }: Route.LoaderArgs) {
         stats: {
           ...baseStats,
           missing_goal_links: missingGoalsByKey.get(`${app.team_slug}/${app.environment_name}/${app.app_name}`) ?? 0,
+          unmapped_deployers: unmappedByKey.get(`${app.team_slug}/${app.environment_name}/${app.app_name}`) ?? 0,
         },
         alertCount: alertCounts.get(app.id) || 0,
       }
@@ -131,8 +135,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   )
 
   issueAppCards.sort((a, b) => {
-    const aIssues = a.stats.without_four_eyes + a.alertCount + (a.stats.missing_goal_links ?? 0)
-    const bIssues = b.stats.without_four_eyes + b.alertCount + (b.stats.missing_goal_links ?? 0)
+    const aIssues =
+      a.stats.without_four_eyes + a.alertCount + (a.stats.missing_goal_links ?? 0) + (a.stats.unmapped_deployers ?? 0)
+    const bIssues =
+      b.stats.without_four_eyes + b.alertCount + (b.stats.missing_goal_links ?? 0) + (b.stats.unmapped_deployers ?? 0)
     return bIssues - aIssues
   })
 

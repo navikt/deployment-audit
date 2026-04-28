@@ -1347,6 +1347,7 @@ export interface AppWithIssues {
   pending_verification: number
   alert_count: number
   missing_goal_links: number
+  unmapped_deployer_count: number
 }
 
 // =============================================================================
