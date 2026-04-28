@@ -1,5 +1,5 @@
 /**
- * Integration test: getUnmappedDeployers
+ * Integration test: getUnmappedContributors
  *
  * Verifies that the function correctly identifies GitHub usernames from
  * a team's deployments that lack a corresponding user_mappings row.
@@ -7,7 +7,7 @@
 
 import { Pool } from 'pg'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { getUnmappedDeployers } from '~/db/deployments/home.server'
+import { getUnmappedContributors } from '~/db/deployments/home.server'
 import { seedApp, seedDeployment, truncateAllTables } from './helpers'
 
 let pool: Pool
@@ -31,7 +31,7 @@ async function seedUserMapping(githubUsername: string): Promise<void> {
   ])
 }
 
-describe('getUnmappedDeployers', () => {
+describe('getUnmappedContributors', () => {
   it('returns deployer usernames that have no user_mappings row', async () => {
     const appId = await seedApp(pool, { teamSlug: 'team-a', appName: 'svc', environment: 'prod' })
     await seedDeployment(pool, {
@@ -48,7 +48,7 @@ describe('getUnmappedDeployers', () => {
     })
     await seedUserMapping('alice')
 
-    const result = await getUnmappedDeployers(['team-a'])
+    const result = await getUnmappedContributors(['team-a'])
     expect(result).toEqual(['bob'])
   })
 
@@ -62,14 +62,14 @@ describe('getUnmappedDeployers', () => {
     })
     await seedUserMapping('alice')
 
-    const result = await getUnmappedDeployers(['team-a'])
+    const result = await getUnmappedContributors(['team-a'])
     expect(result).toEqual([])
   })
 
   it('returns empty array when there are no deployments', async () => {
     await seedApp(pool, { teamSlug: 'team-a', appName: 'svc', environment: 'prod' })
 
-    const result = await getUnmappedDeployers(['team-a'])
+    const result = await getUnmappedContributors(['team-a'])
     expect(result).toEqual([])
   })
 
@@ -88,7 +88,7 @@ describe('getUnmappedDeployers', () => {
       deployerUsername: 'real-person',
     })
 
-    const result = await getUnmappedDeployers(['team-a'])
+    const result = await getUnmappedContributors(['team-a'])
     expect(result).toEqual(['real-person'])
   })
 
@@ -103,7 +103,7 @@ describe('getUnmappedDeployers', () => {
     })
     await seedUserMapping('deployer-1')
 
-    const result = await getUnmappedDeployers(['team-a'])
+    const result = await getUnmappedContributors(['team-a'])
     expect(result).toEqual(['pr-author-1'])
   })
 
@@ -118,7 +118,7 @@ describe('getUnmappedDeployers', () => {
       githubPrData: { creator: { username: 'alice' } },
     })
 
-    const result = await getUnmappedDeployers(['team-a'])
+    const result = await getUnmappedContributors(['team-a'])
     expect(result).toEqual(['alice'])
   })
 
@@ -132,7 +132,7 @@ describe('getUnmappedDeployers', () => {
     })
     await seedUserMapping('alice')
 
-    const result = await getUnmappedDeployers(['team-a'])
+    const result = await getUnmappedContributors(['team-a'])
     expect(result).toEqual([])
   })
 
@@ -147,7 +147,7 @@ describe('getUnmappedDeployers', () => {
     await seedUserMapping('alice')
     await pool.query(`UPDATE user_mappings SET deleted_at = NOW() WHERE github_username = 'alice'`)
 
-    const result = await getUnmappedDeployers(['team-a'])
+    const result = await getUnmappedContributors(['team-a'])
     expect(result).toEqual(['alice'])
   })
 
@@ -167,7 +167,7 @@ describe('getUnmappedDeployers', () => {
       deployerUsername: 'bob',
     })
 
-    const result = await getUnmappedDeployers(['team-a'])
+    const result = await getUnmappedContributors(['team-a'])
     expect(result).toEqual(['alice'])
   })
 
@@ -180,7 +180,7 @@ describe('getUnmappedDeployers', () => {
       deployerUsername: 'charlie',
     })
 
-    const result = await getUnmappedDeployers([], [appId])
+    const result = await getUnmappedContributors([], [appId])
     expect(result).toEqual(['charlie'])
   })
 
@@ -194,7 +194,7 @@ describe('getUnmappedDeployers', () => {
     })
     await pool.query('UPDATE monitored_applications SET is_active = false WHERE id = $1', [appId])
 
-    const result = await getUnmappedDeployers(['team-a'])
+    const result = await getUnmappedContributors(['team-a'])
     expect(result).toEqual([])
   })
 
@@ -215,7 +215,7 @@ describe('getUnmappedDeployers', () => {
       deployerUsername: 'current-deployer',
     })
 
-    const result = await getUnmappedDeployers(['team-a'])
+    const result = await getUnmappedContributors(['team-a'])
     expect(result).toEqual(['current-deployer'])
   })
 
@@ -240,7 +240,7 @@ describe('getUnmappedDeployers', () => {
       deployerUsername: 'bob',
     })
 
-    const result = await getUnmappedDeployers(['team-a'])
+    const result = await getUnmappedContributors(['team-a'])
     expect(result).toEqual(['alice', 'bob', 'charlie'])
   })
 })

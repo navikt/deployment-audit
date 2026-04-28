@@ -57,12 +57,13 @@ export async function resolveDevTeamScope(
  * Find GitHub usernames that appear as deployers or PR creators in a dev
  * team's apps but do NOT have a corresponding `user_mappings` row.
  *
- * These users' deployments are invisible to the deployer-filtered views
- * (/my-teams, Slack Home Tab) because the filter only matches known members.
+ * Includes both `deployer_username` and `github_pr_data.creator.username`
+ * because both roles need a user mapping for the person-scope filter to
+ * count their deployments correctly.
  *
  * Excludes bot accounts using the canonical `isGitHubBot` helper.
  */
-export async function getUnmappedDeployers(
+export async function getUnmappedContributors(
   naisTeamSlugs: string[],
   directAppIds?: number[],
   since?: Date,

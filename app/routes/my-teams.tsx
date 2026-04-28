@@ -11,7 +11,7 @@ import { getBoardObjectiveProgress, getDevTeamSummaryStats } from '~/db/dashboar
 import {
   getDevTeamAppsWithIssues,
   getPersonalDeploymentsMissingGoalLinks,
-  getUnmappedDeployers,
+  getUnmappedContributors,
   resolveDevTeamScope,
 } from '~/db/deployments/home.server'
 import { getUserDevTeams } from '~/db/user-dev-team-preference.server'
@@ -70,7 +70,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     getDevTeamSummaryStats(scope.naisTeamSlugs, scope.directAppIds, ytdStart, scope.deployerUsernames),
     getDevTeamAppsWithIssues(scope.naisTeamSlugs, scope.directAppIds, scope.deployerUsernames),
     scope.deployerUsernames !== undefined
-      ? getUnmappedDeployers(scope.naisTeamSlugs, scope.directAppIds, ytdStart)
+      ? getUnmappedContributors(scope.naisTeamSlugs, scope.directAppIds, ytdStart)
       : Promise.resolve([] as string[]),
     getAllAlertCounts(),
     getAllActiveRepositories(),

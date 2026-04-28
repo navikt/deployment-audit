@@ -15,7 +15,7 @@
 import { App, type BlockAction, LogLevel } from '@slack/bolt'
 import type { KnownBlock } from '@slack/types'
 import { getActiveBoardsWithKeywordsForDevTeam } from '~/db/boards.server'
-import { getDevTeamAppsWithIssues, getUnmappedDeployers, resolveDevTeamScope } from '~/db/deployments/home.server'
+import { getDevTeamAppsWithIssues, getUnmappedContributors, resolveDevTeamScope } from '~/db/deployments/home.server'
 import {
   claimDeploymentForDeployNotify,
   claimDeploymentForSlackNotification,
@@ -722,7 +722,7 @@ async function buildPersonalizedHomeTabInput({
   const [issueApps, unmappedDeployers] = await Promise.all([
     getDevTeamAppsWithIssues(scope.naisTeamSlugs, scope.directAppIds, deployerUsernames),
     deployerFilterActive
-      ? getUnmappedDeployers(scope.naisTeamSlugs, scope.directAppIds)
+      ? getUnmappedContributors(scope.naisTeamSlugs, scope.directAppIds)
       : Promise.resolve([] as string[]),
   ])
 
