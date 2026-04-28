@@ -92,7 +92,7 @@ describe('getUnmappedContributors', () => {
     expect(result).toEqual(['real-person'])
   })
 
-  it('includes PR creator usernames from github_pr_data', async () => {
+  it('does not include PR creator usernames (only deployers matter)', async () => {
     const appId = await seedApp(pool, { teamSlug: 'team-a', appName: 'svc', environment: 'prod' })
     await seedDeployment(pool, {
       monitoredAppId: appId,
@@ -104,18 +104,23 @@ describe('getUnmappedContributors', () => {
     await seedUserMapping('deployer-1')
 
     const result = await getUnmappedContributors(['team-a'])
-    expect(result).toEqual(['pr-author-1'])
+    // pr-author-1 is NOT included — only deployer_username is checked
+    expect(result).toEqual([])
   })
 
-  it('deduplicates usernames across deployer and PR creator', async () => {
+  it('deduplicates deployer usernames across multiple deployments', async () => {
     const appId = await seedApp(pool, { teamSlug: 'team-a', appName: 'svc', environment: 'prod' })
-    // Same person is both deployer and PR creator
     await seedDeployment(pool, {
       monitoredAppId: appId,
       teamSlug: 'team-a',
       environment: 'prod',
       deployerUsername: 'alice',
-      githubPrData: { creator: { username: 'alice' } },
+    })
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team-a',
+      environment: 'prod',
+      deployerUsername: 'alice',
     })
 
     const result = await getUnmappedContributors(['team-a'])

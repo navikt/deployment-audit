@@ -54,12 +54,14 @@ export async function resolveDevTeamScope(
 }
 
 /**
- * Find GitHub usernames that appear as deployers or PR creators in a dev
- * team's apps but do NOT have a corresponding `user_mappings` row.
+ * Find GitHub usernames that appear as deployers in a dev team's apps
+ * but do NOT have a corresponding `user_mappings` row.
  *
- * Includes both `deployer_username` and `github_pr_data.creator.username`
- * because both roles need a user mapping for the person-scope filter to
- * count their deployments correctly.
+ * Only checks `deployer_username`, not PR creators. PR creators don't
+ * affect deployer-filtered stats because the filter
+ * (`userDeploymentMatchAnySql`) matches on deployer OR PR creator — so
+ * an unmapped PR creator's PR is still counted when a mapped team member
+ * deploys it.
  *
  * Excludes bot accounts using the canonical `isGitHubBot` helper.
  */
@@ -72,24 +74,15 @@ export async function getUnmappedContributors(
   const sinceDate = since ?? new Date(new Date().getFullYear(), 0, 1)
   const result = await pool.query<{ username: string }>(
     `WITH team_deployers AS (
-       SELECT username FROM (
-         SELECT LOWER(d.deployer_username) AS username
-         FROM deployments d
-         JOIN monitored_applications ma ON d.monitored_app_id = ma.id
-         WHERE ma.is_active = true
-           AND (ma.team_slug = ANY($1::text[]) OR ma.id = ANY($2::int[]))
-           AND d.deployer_username IS NOT NULL
-           AND d.created_at >= $3
-         UNION
-         SELECT LOWER(d.github_pr_data->'creator'->>'username') AS username
-         FROM deployments d
-         JOIN monitored_applications ma ON d.monitored_app_id = ma.id
-         WHERE ma.is_active = true
-           AND (ma.team_slug = ANY($1::text[]) OR ma.id = ANY($2::int[]))
-           AND d.github_pr_data->'creator'->>'username' IS NOT NULL
-           AND d.created_at >= $3
-       ) all_deployers
-       WHERE username != ''
+       SELECT LOWER(d.deployer_username) AS username
+       FROM deployments d
+       JOIN monitored_applications ma ON d.monitored_app_id = ma.id
+       WHERE ma.is_active = true
+         AND (ma.team_slug = ANY($1::text[]) OR ma.id = ANY($2::int[]))
+         AND d.deployer_username IS NOT NULL
+         AND d.deployer_username != ''
+         AND d.created_at >= $3
+       GROUP BY LOWER(d.deployer_username)
      ),
      mapped_usernames AS (
        SELECT DISTINCT LOWER(um.github_username) AS username
