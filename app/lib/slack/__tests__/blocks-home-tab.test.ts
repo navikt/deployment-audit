@@ -65,7 +65,7 @@ describe('buildHomeTabBlocks (personalized)', () => {
   it('shows unmapped contributors warning when present', () => {
     const blocks = buildHomeTabBlocks(homeTabFixtures.withIssues)
     const text = JSON.stringify(blocks)
-    expect(text).toContain('bidragsytere mangler brukermapping')
+    expect(text).toContain('deployere mangler brukermapping')
     expect(text).toContain('external-contractor')
     expect(text).toContain('summer-intern')
     expect(text).toContain('open_user_mapping_unmapped')
@@ -74,6 +74,6 @@ describe('buildHomeTabBlocks (personalized)', () => {
   it('does not show unmapped contributors warning when list is empty', () => {
     const blocks = buildHomeTabBlocks(homeTabFixtures.noIssues)
     const text = JSON.stringify(blocks)
-    expect(text).not.toContain('bidragsytere mangler')
+    expect(text).not.toContain('deployere mangler')
   })
 })

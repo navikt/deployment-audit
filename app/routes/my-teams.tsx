@@ -337,7 +337,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           {noTeamMembersMapped && (
             <Alert variant="info">
               Ingen av medlemmene i dine team er koblet til en GitHub-bruker, så tallene under er 0. Be teammedlemmene
-              registrere GitHub-brukernavn under <Link to="/users">Brukermapping</Link> så blir tallene riktige.
+              registrere GitHub-brukernavn under <Link to="/admin/users">Brukermapping</Link> så blir tallene riktige.
             </Alert>
           )}
           {unmappedContributors.length > 0 && (
@@ -345,8 +345,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               <VStack gap="space-8">
                 <BodyShort>
                   {unmappedContributors.length === 1
-                    ? '1 person som har deployet eller opprettet PR-er i år mangler brukermapping.'
-                    : `${unmappedContributors.length} personer som har deployet eller opprettet PR-er i år mangler brukermapping.`}{' '}
+                    ? '1 deployer i år mangler brukermapping.'
+                    : `${unmappedContributors.length} deployere i år mangler brukermapping.`}{' '}
                   Deres deployments telles ikke med i de personfiltrerte tallene under.
                 </BodyShort>
                 <BodyShort size="small" textColor="subtle">
@@ -354,7 +354,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                   {unmappedContributors.length > 10 && ` og ${unmappedContributors.length - 10} til`}
                 </BodyShort>
                 <div>
-                  <Button as={Link} to="/users" size="small" variant="secondary">
+                  <Button as={Link} to="/admin/users" size="small" variant="secondary">
                     Gå til brukermapping
                   </Button>
                 </div>

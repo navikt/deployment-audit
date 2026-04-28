@@ -557,8 +557,8 @@ export function buildHomeTabBlocks({
       text: {
         type: 'mrkdwn',
         text:
-          `*⚠️ ${count} ${count === 1 ? 'bidragsyter mangler' : 'bidragsytere mangler'} brukermapping*\n` +
-          `Disse GitHub-brukerne har deployet eller opprettet PR-er i teamets apper i år, men er ikke koblet til en NAV-ident: ${userList}${suffix}\n` +
+          `*⚠️ ${count} ${count === 1 ? 'deployer mangler' : 'deployere mangler'} brukermapping*\n` +
+          `Disse GitHub-brukerne har deployet til teamets apper i år, men er ikke koblet til en NAV-ident: ${userList}${suffix}\n` +
           `Deres deployments telles ikke med i de personfiltrerte tallene over.`,
       },
     })
@@ -568,7 +568,7 @@ export function buildHomeTabBlocks({
         {
           type: 'button',
           text: { type: 'plain_text', text: 'Gå til brukermapping', emoji: true },
-          url: `${baseUrl}/users`,
+          url: `${baseUrl}/admin/users`,
           action_id: 'open_user_mapping_unmapped',
         },
       ],
