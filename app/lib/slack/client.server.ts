@@ -38,18 +38,15 @@ import {
   buildDeploymentBlocks,
   buildDeviationBlocks,
   buildHomeTabBlocks,
-  buildKeywordsModalView,
   buildNewDeploymentBlocks,
   buildReminderBlocks,
   type DeploymentNotification,
   type DeviationNotification,
-  decodeKeywordsButtonValue,
   getStatusEmoji,
   type NewDeploymentNotification,
   type PersonalHomeTabBoard,
   type PersonalHomeTabTeamIssues,
   type ReminderNotification,
-  SHOW_KEYWORDS_ACTION_ID,
 } from './blocks'
 
 // NOTE: Types and block builders are exported from `./blocks` and surfaced
@@ -666,33 +663,7 @@ function registerEventHandlers(app: App): void {
     }
   })
 
-  // Handle "Vis kodeord"-button: open a copy-friendly modal listing each
-  // keyword on its own line. The button's `value` carries the title +
-  // keywords as JSON so we don't need a DB round-trip.
-  app.action(/^show_kr_keywords:.*/, async ({ ack, body, client }) => {
-    await ack()
-    try {
-      const action = (body as BlockAction).actions[0]
-      if (!action || action.type !== 'button') {
-        logger.warn('[Slack Home Tab] show_kr_keywords action without button payload')
-        return
-      }
-      const decoded = decodeKeywordsButtonValue(action.value ?? '')
-      if (!decoded) {
-        logger.warn('[Slack Home Tab] Could not decode keywords button value')
-        return
-      }
-      const triggerId = (body as BlockAction).trigger_id
-      await client.views.open({
-        trigger_id: triggerId,
-        view: buildKeywordsModalView(decoded),
-      })
-    } catch (error) {
-      logger.error(`[Slack Home Tab] Error opening keywords modal: ${(error as Error).message}`)
-    }
-  })
-
-  logger.info(`[Slack] Event handlers registered (app_home_opened, ${SHOW_KEYWORDS_ACTION_ID})`)
+  logger.info('[Slack] Event handlers registered (app_home_opened)')
 }
 
 /**
