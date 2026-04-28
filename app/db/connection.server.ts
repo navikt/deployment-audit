@@ -95,6 +95,7 @@ export function getSyncClient(): PoolClient | undefined {
  */
 export async function withSyncClient<T>(fn: () => Promise<T>): Promise<T | null> {
   const client = await getPool().connect()
+  let destroyed = false
   try {
     const { rows } = await client.query<{ locked: boolean }>(
       `SELECT pg_try_advisory_lock(${SYNC_ADVISORY_LOCK_KEY}) AS locked`,
@@ -106,10 +107,20 @@ export async function withSyncClient<T>(fn: () => Promise<T>): Promise<T | null>
     try {
       return await syncClientStore.run(client, fn)
     } finally {
-      await client.query(`SELECT pg_advisory_unlock(${SYNC_ADVISORY_LOCK_KEY})`)
+      try {
+        await client.query(`SELECT pg_advisory_unlock(${SYNC_ADVISORY_LOCK_KEY})`)
+      } catch (unlockError) {
+        // If unlock fails, destroy the connection so the advisory lock cannot
+        // remain held on a pooled session (which would block all future sync cycles).
+        logger.error('Failed to release advisory lock, destroying connection', unlockError)
+        destroyed = true
+        client.release(true)
+      }
     }
   } finally {
-    client.release()
+    if (!destroyed) {
+      client.release()
+    }
   }
 }
 
