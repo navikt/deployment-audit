@@ -12,7 +12,7 @@ import {
   getUserMappings,
   upsertUserMapping,
 } from '../../user-mappings.server'
-import { truncateAllTables } from './helpers'
+import { seedApp, seedDeployment, truncateAllTables } from './helpers'
 
 let pool: Pool
 
@@ -170,5 +170,103 @@ describe('user_mappings soft delete', () => {
     // Direct deployer_username search still finds the deployment activity.
     const byUsername = await searchDeployments('octocat')
     expect(byUsername.some((r) => r.type === 'user' && r.url === '/users/octocat')).toBe(true)
+  })
+})
+
+describe('getUnmappedUsers audit_start_year filtering', () => {
+  beforeEach(async () => {
+    await truncateAllTables(pool)
+    clearUserMappingCache()
+  })
+
+  it('excludes deployers whose only deployments are before audit_start_year', async () => {
+    const appId = await seedApp(pool, {
+      teamSlug: 't',
+      appName: 'app1',
+      environment: 'prod',
+      auditStartYear: 2026,
+    })
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 't',
+      environment: 'prod',
+      deployerUsername: 'old-deployer',
+      createdAt: new Date('2025-06-01'),
+    })
+
+    const unmapped = await getUnmappedUsers()
+    expect(unmapped.map((u) => u.github_username)).not.toContain('old-deployer')
+  })
+
+  it('includes deployers with deployments after audit_start_year', async () => {
+    const appId = await seedApp(pool, {
+      teamSlug: 't',
+      appName: 'app1',
+      environment: 'prod',
+      auditStartYear: 2026,
+    })
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 't',
+      environment: 'prod',
+      deployerUsername: 'new-deployer',
+      createdAt: new Date('2026-03-15'),
+    })
+
+    const unmapped = await getUnmappedUsers()
+    expect(unmapped.map((u) => u.github_username)).toContain('new-deployer')
+  })
+
+  it('only counts deployments within audit window', async () => {
+    const appId = await seedApp(pool, {
+      teamSlug: 't',
+      appName: 'app1',
+      environment: 'prod',
+      auditStartYear: 2026,
+    })
+    // 2 before audit window, 1 after
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 't',
+      environment: 'prod',
+      deployerUsername: 'mixed-deployer',
+      createdAt: new Date('2025-01-01'),
+    })
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 't',
+      environment: 'prod',
+      deployerUsername: 'mixed-deployer',
+      createdAt: new Date('2025-11-15'),
+    })
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 't',
+      environment: 'prod',
+      deployerUsername: 'mixed-deployer',
+      createdAt: new Date('2026-02-01'),
+    })
+
+    const unmapped = await getUnmappedUsers()
+    const mixed = unmapped.find((u) => u.github_username === 'mixed-deployer')
+    expect(mixed).toBeDefined()
+    expect(mixed?.deployment_count).toBe(1)
+  })
+
+  it('excludes deployers on inactive apps', async () => {
+    const { rows } = await pool.query<{ id: number }>(
+      `INSERT INTO monitored_applications (team_slug, app_name, environment_name, is_active, audit_start_year)
+       VALUES ('t', 'inactive-app', 'prod', false, NULL) RETURNING id`,
+    )
+    await seedDeployment(pool, {
+      monitoredAppId: rows[0].id,
+      teamSlug: 't',
+      environment: 'prod',
+      deployerUsername: 'inactive-deployer',
+      createdAt: new Date('2026-03-15'),
+    })
+
+    const unmapped = await getUnmappedUsers()
+    expect(unmapped.map((u) => u.github_username)).not.toContain('inactive-deployer')
   })
 })
