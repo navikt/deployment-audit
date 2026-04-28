@@ -393,9 +393,10 @@ export async function reverifyDeployment(deploymentId: number): Promise<{
 
   const statusChanged = dep.four_eyes_status !== newResult.status
 
-  if (statusChanged) {
-    await storeVerificationResult(dep.id, newResult, { prSnapshotIds: [], commitSnapshotIds: [] }, 'reverification')
+  // Always store verification result to keep metadata (title, PR data, unverified commits) up to date
+  await storeVerificationResult(dep.id, newResult, { prSnapshotIds: [], commitSnapshotIds: [] }, 'reverification')
 
+  if (statusChanged) {
     // Propagate to sibling deployments in the same application group
     await propagateVerificationToSiblings(dep.id, newResult.status, dep.commit_sha, dep.monitored_app_id)
   }

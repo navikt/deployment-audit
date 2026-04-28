@@ -1,0 +1,288 @@
+import { WrenchIcon } from '@navikt/aksel-icons'
+import { Alert, BodyShort, Box, Button, Heading, Hide, HStack, Show, Table, Tag, VStack } from '@navikt/ds-react'
+import { Form, Link, useActionData, useLoaderData } from 'react-router'
+import { ActionAlert } from '~/components/ActionAlert'
+import { ExternalLink } from '~/components/ExternalLink'
+import { pool } from '~/db/connection.server'
+import { requireAdmin } from '~/lib/auth.server'
+import type { Route } from './+types/title-mismatches'
+
+export function meta(_args: Route.MetaArgs) {
+  return [{ title: 'Tittel-avvik - Admin - NDA' }]
+}
+
+interface TitleMismatch {
+  id: number
+  app_name: string
+  team_slug: string
+  environment_name: string
+  stored_title: string
+  pr_title: string
+  four_eyes_status: string
+  github_pr_number: number
+  detected_github_owner: string
+  detected_github_repo_name: string
+}
+
+interface MissingSummary {
+  total_missing: number
+  with_pr_data: number
+  with_unverified_commits: number
+  no_fallback: number
+}
+
+export async function loader({ request }: Route.LoaderArgs) {
+  await requireAdmin(request)
+
+  const mismatchResult = await pool.query<TitleMismatch>(
+    `SELECT
+       d.id,
+       ma.app_name,
+       ma.team_slug,
+       ma.environment_name,
+       d.title AS stored_title,
+       d.github_pr_data->>'title' AS pr_title,
+       d.four_eyes_status,
+       d.github_pr_number,
+       d.detected_github_owner,
+       d.detected_github_repo_name
+     FROM deployments d
+     JOIN monitored_applications ma ON d.monitored_app_id = ma.id
+     WHERE d.github_pr_data IS NOT NULL
+       AND d.github_pr_data->>'title' IS NOT NULL
+       AND d.github_pr_data->>'title' != ''
+       AND d.title IS NOT NULL
+       AND d.title != d.github_pr_data->>'title'
+     ORDER BY d.id DESC`,
+  )
+
+  const missingResult = await pool.query<MissingSummary>(
+    `SELECT
+       COUNT(*) FILTER (WHERE d.title IS NULL) AS total_missing,
+       COUNT(*) FILTER (WHERE d.title IS NULL AND d.github_pr_data IS NOT NULL AND d.github_pr_data->>'title' IS NOT NULL) AS with_pr_data,
+       COUNT(*) FILTER (WHERE d.title IS NULL AND (d.github_pr_data IS NULL OR d.github_pr_data->>'title' IS NULL) AND d.unverified_commits IS NOT NULL AND jsonb_array_length(d.unverified_commits) > 0) AS with_unverified_commits,
+       COUNT(*) FILTER (WHERE d.title IS NULL AND (d.github_pr_data IS NULL OR d.github_pr_data->>'title' IS NULL) AND (d.unverified_commits IS NULL OR jsonb_array_length(d.unverified_commits) = 0)) AS no_fallback
+     FROM deployments d`,
+  )
+
+  return {
+    mismatches: mismatchResult.rows,
+    mismatchCount: mismatchResult.rowCount ?? 0,
+    missing: missingResult.rows[0] ?? { total_missing: 0, with_pr_data: 0, with_unverified_commits: 0, no_fallback: 0 },
+  }
+}
+
+export async function action({ request }: Route.ActionArgs) {
+  await requireAdmin(request)
+
+  const formData = await request.formData()
+  const intent = formData.get('intent')
+
+  if (intent === 'fix_mismatches') {
+    const result = await pool.query(
+      `UPDATE deployments
+       SET title = github_pr_data->>'title'
+       WHERE github_pr_data IS NOT NULL
+         AND github_pr_data->>'title' IS NOT NULL
+         AND github_pr_data->>'title' != ''
+         AND title IS NOT NULL
+         AND title != github_pr_data->>'title'`,
+    )
+    const count = result.rowCount ?? 0
+    return { success: `Korrigerte ${count} feil titler.` }
+  }
+
+  if (intent === 'fix_missing') {
+    const result = await pool.query(
+      `UPDATE deployments
+       SET title = github_pr_data->>'title'
+       WHERE title IS NULL
+         AND github_pr_data IS NOT NULL
+         AND github_pr_data->>'title' IS NOT NULL
+         AND github_pr_data->>'title' != ''`,
+    )
+    const count = result.rowCount ?? 0
+    return { success: `Fylte inn ${count} manglende titler fra PR-data.` }
+  }
+
+  return { error: 'Ukjent handling' }
+}
+
+function truncate(str: string, maxLength: number) {
+  if (str.length <= maxLength) return str
+  return `${str.slice(0, maxLength)}…`
+}
+
+export default function TitleMismatches() {
+  const { mismatches, mismatchCount, missing } = useLoaderData<typeof loader>()
+  const actionData = useActionData<typeof action>()
+
+  return (
+    <VStack gap="space-24">
+      <div>
+        <Heading level="1" size="large" spacing>
+          Tittel-avvik
+        </Heading>
+        <BodyShort textColor="subtle">
+          Deployments der lagret tittel (<code>d.title</code>) avviker fra PR-tittelen (
+          <code>github_pr_data.title</code>).
+        </BodyShort>
+      </div>
+
+      <ActionAlert data={actionData} />
+
+      {/* Summary cards */}
+      <HStack gap="space-16" wrap>
+        <Box
+          padding="space-16"
+          borderRadius="8"
+          borderWidth="1"
+          borderColor={mismatchCount > 0 ? 'danger-subtle' : 'success-subtle'}
+        >
+          <VStack gap="space-4">
+            <Heading size="medium">{mismatchCount}</Heading>
+            <BodyShort size="small">Feil tittel (mismatch)</BodyShort>
+          </VStack>
+        </Box>
+        <Box
+          padding="space-16"
+          borderRadius="8"
+          borderWidth="1"
+          borderColor={Number(missing.total_missing) > 0 ? 'warning-subtle' : 'success-subtle'}
+        >
+          <VStack gap="space-4">
+            <Heading size="medium">{missing.total_missing}</Heading>
+            <BodyShort size="small">Manglende tittel (NULL)</BodyShort>
+          </VStack>
+        </Box>
+        <Box padding="space-16" borderRadius="8" borderWidth="1" borderColor="neutral-subtle">
+          <VStack gap="space-4">
+            <Heading size="medium">{missing.with_pr_data}</Heading>
+            <BodyShort size="small">Kan fylles fra PR-data</BodyShort>
+          </VStack>
+        </Box>
+      </HStack>
+
+      {/* Fix actions */}
+      <HStack gap="space-12">
+        {mismatchCount > 0 && (
+          <Form method="post">
+            <input type="hidden" name="intent" value="fix_mismatches" />
+            <Button variant="primary" size="small" icon={<WrenchIcon aria-hidden />}>
+              Korriger {mismatchCount} feil titler
+            </Button>
+          </Form>
+        )}
+        {Number(missing.with_pr_data) > 0 && (
+          <Form method="post">
+            <input type="hidden" name="intent" value="fix_missing" />
+            <Button variant="secondary" size="small" icon={<WrenchIcon aria-hidden />}>
+              Fyll inn {missing.with_pr_data} manglende titler
+            </Button>
+          </Form>
+        )}
+      </HStack>
+
+      {/* Mismatch table */}
+      {mismatchCount > 0 && (
+        <VStack gap="space-12">
+          <Heading level="2" size="medium">
+            Mismatches ({mismatchCount})
+          </Heading>
+
+          <Show above="md">
+            <Box borderWidth="1" borderColor="neutral-subtle" borderRadius="8" style={{ overflow: 'auto' }}>
+              <Table size="small">
+                <Table.Header>
+                  <Table.Row>
+                    <Table.HeaderCell>ID</Table.HeaderCell>
+                    <Table.HeaderCell>App</Table.HeaderCell>
+                    <Table.HeaderCell>Lagret tittel</Table.HeaderCell>
+                    <Table.HeaderCell>PR-tittel (riktig)</Table.HeaderCell>
+                    <Table.HeaderCell>Status</Table.HeaderCell>
+                    <Table.HeaderCell>PR</Table.HeaderCell>
+                  </Table.Row>
+                </Table.Header>
+                <Table.Body>
+                  {mismatches.map((m) => (
+                    <Table.Row key={m.id}>
+                      <Table.DataCell>
+                        <Link to={`/deployments/${m.id}`}>{m.id}</Link>
+                      </Table.DataCell>
+                      <Table.DataCell>
+                        <BodyShort size="small">{m.app_name}</BodyShort>
+                      </Table.DataCell>
+                      <Table.DataCell>
+                        <Tag variant="moderate" data-color="danger" size="xsmall">
+                          {truncate(m.stored_title, 60)}
+                        </Tag>
+                      </Table.DataCell>
+                      <Table.DataCell>
+                        <Tag variant="moderate" data-color="success" size="xsmall">
+                          {truncate(m.pr_title, 60)}
+                        </Tag>
+                      </Table.DataCell>
+                      <Table.DataCell>
+                        <BodyShort size="small">{m.four_eyes_status}</BodyShort>
+                      </Table.DataCell>
+                      <Table.DataCell>
+                        {m.github_pr_number && (
+                          <ExternalLink
+                            href={`https://github.com/${m.detected_github_owner}/${m.detected_github_repo_name}/pull/${m.github_pr_number}`}
+                          >
+                            #{m.github_pr_number}
+                          </ExternalLink>
+                        )}
+                      </Table.DataCell>
+                    </Table.Row>
+                  ))}
+                </Table.Body>
+              </Table>
+            </Box>
+          </Show>
+
+          <Hide above="md">
+            <VStack gap="space-12">
+              {mismatches.map((m) => (
+                <Box key={m.id} padding="space-16" borderRadius="8" borderWidth="1" borderColor="neutral-subtle">
+                  <VStack gap="space-8">
+                    <HStack justify="space-between" align="center">
+                      <Link to={`/deployments/${m.id}`}>
+                        <BodyShort weight="semibold">#{m.id}</BodyShort>
+                      </Link>
+                      <BodyShort size="small" textColor="subtle">
+                        {m.app_name}
+                      </BodyShort>
+                    </HStack>
+                    <VStack gap="space-4">
+                      <BodyShort size="small" textColor="subtle">
+                        Lagret:
+                      </BodyShort>
+                      <Tag variant="moderate" data-color="danger" size="xsmall">
+                        {truncate(m.stored_title, 80)}
+                      </Tag>
+                    </VStack>
+                    <VStack gap="space-4">
+                      <BodyShort size="small" textColor="subtle">
+                        PR-tittel:
+                      </BodyShort>
+                      <Tag variant="moderate" data-color="success" size="xsmall">
+                        {truncate(m.pr_title, 80)}
+                      </Tag>
+                    </VStack>
+                  </VStack>
+                </Box>
+              ))}
+            </VStack>
+          </Hide>
+        </VStack>
+      )}
+
+      {mismatchCount === 0 && (
+        <Alert variant="success">
+          Ingen tittel-mismatches funnet. Alle deployments med PR-data har konsistente titler.
+        </Alert>
+      )}
+    </VStack>
+  )
+}

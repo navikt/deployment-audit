@@ -70,6 +70,7 @@ export default [
     route('admin/verification-diffs', 'routes/admin/verification-diffs.tsx'),
     route('admin/env', 'routes/admin/environment.tsx'),
     route('admin/validate-monitored-apps', 'routes/admin/validate-monitored-apps.tsx'),
+    route('admin/title-mismatches', 'routes/admin/title-mismatches.tsx'),
     route('sections', 'routes/admin/sections.tsx'),
     route('sections/:slug/edit', 'routes/admin/sections.$slug.dev-teams.tsx'),
     route('sections/:sectionSlug/teams/:devTeamSlug', 'routes/sections.$sectionSlug.teams.$devTeamSlug.tsx'),
