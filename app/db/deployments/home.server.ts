@@ -65,7 +65,7 @@ export async function getUnmappedDeployers(naisTeamSlugs: string[], directAppIds
   const ids = directAppIds ?? []
   const result = await pool.query<{ username: string }>(
     `WITH team_deployers AS (
-       SELECT DISTINCT username FROM (
+       SELECT username FROM (
          SELECT LOWER(d.deployer_username) AS username
          FROM deployments d
          JOIN monitored_applications ma ON d.monitored_app_id = ma.id

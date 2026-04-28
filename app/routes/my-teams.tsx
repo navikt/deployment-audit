@@ -69,7 +69,9 @@ export async function loader({ request }: Route.LoaderArgs) {
   const [teamStats, issueApps, unmappedDeployers, alertCounts, activeReposByApp, ...boardsByTeam] = await Promise.all([
     getDevTeamSummaryStats(scope.naisTeamSlugs, scope.directAppIds, ytdStart, scope.deployerUsernames),
     getDevTeamAppsWithIssues(scope.naisTeamSlugs, scope.directAppIds, scope.deployerUsernames),
-    getUnmappedDeployers(scope.naisTeamSlugs, scope.directAppIds),
+    scope.deployerUsernames !== undefined
+      ? getUnmappedDeployers(scope.naisTeamSlugs, scope.directAppIds)
+      : Promise.resolve([] as string[]),
     getAllAlertCounts(),
     getAllActiveRepositories(),
     ...selectedDevTeams.map((t) => getBoardsByDevTeam(t.id)),
@@ -163,7 +165,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     issueApps: issueAppCards,
     boardSummaries,
     noTeamMembersMapped: scope.noMembersMapped,
-    unmappedDeployers: scope.deployerUsernames !== undefined ? unmappedDeployers : [],
+    unmappedDeployers,
     personalMissingGoalLinks,
     navIdent: identity.navIdent,
     githubUsername,

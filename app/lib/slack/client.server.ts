@@ -718,9 +718,12 @@ async function buildPersonalizedHomeTabInput({
   // user mapping page.  We still fall back to team-level counts so the
   // summary numbers remain meaningful.
   const deployerUsernames = scope.noMembersMapped ? undefined : scope.deployerUsernames
+  const deployerFilterActive = deployerUsernames !== undefined
   const [issueApps, unmappedDeployers] = await Promise.all([
     getDevTeamAppsWithIssues(scope.naisTeamSlugs, scope.directAppIds, deployerUsernames),
-    getUnmappedDeployers(scope.naisTeamSlugs, scope.directAppIds),
+    deployerFilterActive
+      ? getUnmappedDeployers(scope.naisTeamSlugs, scope.directAppIds)
+      : Promise.resolve([] as string[]),
   ])
 
   const boards: PersonalHomeTabBoard[] = teamBoardResults.flat()
