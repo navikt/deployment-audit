@@ -122,6 +122,44 @@ async function updateDeploymentVerification(
     ],
   )
 
+  // Backfill metadata for manually_approved/legacy deployments that lost their title.
+  // This only fills in NULL fields without changing the status.
+  const title = result.deployedPr?.title || result.unverifiedCommits[0]?.message || null
+  if (title || githubPrDataJson) {
+    await pool.query(
+      `UPDATE deployments
+       SET
+         title = COALESCE(title, $1),
+         github_pr_data = COALESCE(github_pr_data, $2::jsonb),
+         github_pr_number = COALESCE(github_pr_number, $3),
+         github_pr_url = COALESCE(github_pr_url, $4),
+         unverified_commits = COALESCE(unverified_commits, $5::jsonb)
+       WHERE id = $6
+         AND four_eyes_status IN ('manually_approved', 'legacy')
+         AND title IS NULL`,
+      [
+        title,
+        githubPrDataJson,
+        result.deployedPr?.number || null,
+        result.deployedPr?.url || null,
+        result.unverifiedCommits.length > 0
+          ? JSON.stringify(
+              result.unverifiedCommits.map((c) => ({
+                sha: c.sha,
+                message: c.message,
+                author: c.author,
+                date: c.date,
+                html_url: c.htmlUrl,
+                pr_number: c.prNumber,
+                reason: c.reason,
+              })),
+            )
+          : null,
+        deploymentId,
+      ],
+    )
+  }
+
   // Log status transition if status changed
   if (current.rows.length > 0) {
     const prev = current.rows[0]
