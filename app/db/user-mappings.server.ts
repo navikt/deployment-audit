@@ -1,4 +1,5 @@
 import { isGitHubBot } from '~/lib/github-bots'
+import { AUDIT_START_YEAR_FILTER } from './audit-start-year'
 import { pool } from './connection.server'
 
 export interface UserMapping {
@@ -210,16 +211,22 @@ export async function getAllUserMappings(): Promise<UserMapping[]> {
  * Get GitHub usernames from deployments that don't have an active user mapping.
  * Soft-deleted mappings are treated as missing so admins can re-create them.
  * Excludes known bot accounts.
+ *
+ * Only counts deployments to actively monitored apps, respecting each app's
+ * `audit_start_year` — deployments before the audit window are excluded.
  */
 export async function getUnmappedUsers(): Promise<{ github_username: string; deployment_count: number }[]> {
   const result = await pool.query(`
     SELECT d.deployer_username as github_username, COUNT(*) as deployment_count
     FROM deployments d
+    INNER JOIN monitored_applications ma
+      ON d.monitored_app_id = ma.id AND ma.is_active = true
     LEFT JOIN user_mappings um
       ON d.deployer_username = um.github_username AND um.deleted_at IS NULL
     WHERE d.deployer_username IS NOT NULL
       AND d.deployer_username != ''
       AND um.github_username IS NULL
+      AND ${AUDIT_START_YEAR_FILTER}
     GROUP BY d.deployer_username
     ORDER BY github_username
   `)
