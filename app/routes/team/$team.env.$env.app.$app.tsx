@@ -36,7 +36,7 @@ import { ExternalLink } from '~/components/ExternalLink'
 import { StatCard } from '~/components/StatCard'
 import { getUnresolvedAlertsByApp, resolveRepositoryAlert } from '~/db/alerts.server'
 import { updateImplicitApprovalSettings } from '~/db/app-settings.server'
-import { getGroupByAppId, getSiblingApps } from '~/db/application-groups.server'
+import { getGroupContext } from '~/db/application-groups.server'
 import {
   approveRepository,
   getRepositoriesByAppId,
@@ -69,15 +69,16 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     throw new Response('Application not found', { status: 404 })
   }
 
-  const [repositories, deploymentStats, alerts, auditReports, group, siblings, devTeams] = await Promise.all([
+  const [repositories, deploymentStats, alerts, auditReports, groupContext, devTeams] = await Promise.all([
     getRepositoriesByAppId(app.id),
     getAppDeploymentStats(app.id, startDate, endDate, app.audit_start_year),
     getUnresolvedAlertsByApp(app.id),
     getAuditReportsForApp(app.id),
-    getGroupByAppId(app.id),
-    getSiblingApps(app.id),
+    getGroupContext(app.id),
     getDevTeamsForApp(app.id, team),
   ])
+
+  const { group, siblings } = groupContext
 
   const activeRepo = repositories.find((r) => r.status === 'active')
   const pendingRepos = repositories.filter((r) => r.status === 'pending_approval')

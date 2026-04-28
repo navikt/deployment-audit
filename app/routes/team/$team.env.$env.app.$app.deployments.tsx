@@ -5,7 +5,7 @@ import { MethodTag, StatusTag } from '~/components/deployment-tags'
 import { ErrorReasonWithLink } from '~/components/ErrorReasonWithLink'
 import { ExternalLink } from '~/components/ExternalLink'
 import { UserName } from '~/components/UserName'
-import { getGroupByAppId, getSiblingApps } from '~/db/application-groups.server'
+import { getGroupContext } from '~/db/application-groups.server'
 import { pool } from '~/db/connection.server'
 import { type DeploymentFilters, getDeploymentsPaginated } from '~/db/deployments.server'
 import { getDevTeamsForApp, getDevTeamsForApps } from '~/db/dev-teams.server'
@@ -46,8 +46,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const range = getDateRangeForPeriod(period)
 
   // Check if this app belongs to an application group
-  const appGroup = await getGroupByAppId(app.id)
-  const allSiblings = appGroup ? await getSiblingApps(app.id) : []
+  const { group: appGroup, siblings: allSiblings } = await getGroupContext(app.id)
   const hasGroup = allSiblings.length > 0
   const siblings = showGroup ? allSiblings : []
 

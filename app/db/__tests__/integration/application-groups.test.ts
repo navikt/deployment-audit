@@ -235,7 +235,81 @@ describe('application-groups CRUD', () => {
   })
 })
 
-// ─── Verification propagation ────────────────────────────────────────────────
+// ─── getGroupContext (single-query helper) ───────────────────────────────────
+
+describe('getGroupContext', () => {
+  it('should return group and siblings for a grouped app', async () => {
+    const { createApplicationGroup, addAppToGroup, getGroupContext } = await import('~/db/application-groups.server')
+    const group = await createApplicationGroup('my-service')
+    const app1 = await seedApp(pool, { teamSlug: 'team-a', appName: 'svc', environment: 'prod-gcp' })
+    const app2 = await seedApp(pool, { teamSlug: 'team-a', appName: 'svc', environment: 'prod-fss' })
+    const app3 = await seedApp(pool, { teamSlug: 'team-a', appName: 'svc', environment: 'dev-gcp' })
+    await addAppToGroup(group.id, app1)
+    await addAppToGroup(group.id, app2)
+    await addAppToGroup(group.id, app3)
+
+    const ctx = await getGroupContext(app1)
+    expect(ctx.group).not.toBeNull()
+    expect(ctx.group?.id).toBe(group.id)
+    expect(ctx.group?.name).toBe('my-service')
+    expect(ctx.siblings).toHaveLength(2)
+    expect(ctx.siblings.map((s) => s.id).sort()).toEqual([app2, app3].sort())
+  })
+
+  it('should return null group and empty siblings for ungrouped app', async () => {
+    const { getGroupContext } = await import('~/db/application-groups.server')
+    const appId = await seedApp(pool, { teamSlug: 'team-a', appName: 'svc', environment: 'prod-gcp' })
+
+    const ctx = await getGroupContext(appId)
+    expect(ctx.group).toBeNull()
+    expect(ctx.siblings).toEqual([])
+  })
+
+  it('should return empty siblings for sole app in group', async () => {
+    const { createApplicationGroup, addAppToGroup, getGroupContext } = await import('~/db/application-groups.server')
+    const group = await createApplicationGroup('solo')
+    const appId = await seedApp(pool, { teamSlug: 'team-a', appName: 'svc', environment: 'prod-gcp' })
+    await addAppToGroup(group.id, appId)
+
+    const ctx = await getGroupContext(appId)
+    expect(ctx.group).not.toBeNull()
+    expect(ctx.group?.id).toBe(group.id)
+    expect(ctx.siblings).toEqual([])
+  })
+
+  it('should treat soft-deleted group as ungrouped', async () => {
+    const { createApplicationGroup, addAppToGroup, deleteGroup, getGroupContext } = await import(
+      '~/db/application-groups.server'
+    )
+    const group = await createApplicationGroup('my-service')
+    const app1 = await seedApp(pool, { teamSlug: 'team-a', appName: 'svc', environment: 'prod-gcp' })
+    const app2 = await seedApp(pool, { teamSlug: 'team-a', appName: 'svc', environment: 'prod-fss' })
+    await addAppToGroup(group.id, app1)
+    await addAppToGroup(group.id, app2)
+
+    await deleteGroup(group.id, 'A123456')
+
+    const ctx = await getGroupContext(app1)
+    expect(ctx.group).toBeNull()
+    expect(ctx.siblings).toEqual([])
+  })
+
+  it('should match getSiblingApps ordering (environment_name, team_slug)', async () => {
+    const { createApplicationGroup, addAppToGroup, getGroupContext } = await import('~/db/application-groups.server')
+    const group = await createApplicationGroup('my-service')
+    const app1 = await seedApp(pool, { teamSlug: 'team-a', appName: 'svc', environment: 'prod-gcp' })
+    const app2 = await seedApp(pool, { teamSlug: 'team-b', appName: 'svc', environment: 'prod-gcp' })
+    const app3 = await seedApp(pool, { teamSlug: 'team-a', appName: 'svc', environment: 'dev-gcp' })
+    await addAppToGroup(group.id, app1)
+    await addAppToGroup(group.id, app2)
+    await addAppToGroup(group.id, app3)
+
+    const ctx = await getGroupContext(app1)
+    // dev-gcp comes before prod-gcp alphabetically
+    expect(ctx.siblings[0].environment_name).toBe('dev-gcp')
+    expect(ctx.siblings[1].environment_name).toBe('prod-gcp')
+  })
+})
 
 describe('verification propagation', () => {
   it('should propagate approved status to sibling deployments with same commit SHA', async () => {
