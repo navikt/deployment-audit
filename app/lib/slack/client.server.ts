@@ -15,7 +15,7 @@
 import { App, type BlockAction, LogLevel } from '@slack/bolt'
 import type { KnownBlock } from '@slack/types'
 import { getActiveBoardsWithKeywordsForDevTeam } from '~/db/boards.server'
-import { getDevTeamAppsWithIssues } from '~/db/deployments/home.server'
+import { getDevTeamAppsWithIssues, resolveDevTeamScope } from '~/db/deployments/home.server'
 import {
   claimDeploymentForDeployNotify,
   claimDeploymentForSlackNotification,
@@ -24,7 +24,6 @@ import {
   getDeploymentsNeedingDeployNotify,
   getPersonalDeploymentsMissingGoalLinks,
 } from '~/db/deployments.server'
-import { getDevTeamApplications } from '~/db/dev-teams.server'
 import {
   createSlackNotification,
   getSlackNotificationByMessage,
@@ -691,57 +690,47 @@ async function buildPersonalizedHomeTabInput({
       githubUsername: null,
       baseUrl,
       boards: [],
-      teamIssues: { appsWithIssuesCount: 0, withoutFourEyes: 0, pendingVerification: 0, alertCount: 0 },
+      teamIssues: {
+        appsWithIssuesCount: 0,
+        withoutFourEyes: 0,
+        pendingVerification: 0,
+        alertCount: 0,
+        missingGoalLinks: 0,
+      },
       personalMissingGoalLinks: null,
     }
   }
 
   const devTeams = await getUserDevTeams(navIdent)
 
-  // Per-team work in parallel: boards, direct apps + issue apps. For users in
-  // many dev teams sequential awaits would noticeably slow down the
-  // `app_home_opened` handler (which Slack expects us to ack within 3s).
-  const perTeamResults = await Promise.all(
-    devTeams.map(async (team) => {
-      const [teamBoards, directApps] = await Promise.all([
-        getActiveBoardsWithKeywordsForDevTeam(team.id),
-        getDevTeamApplications(team.id),
-      ])
-      const directAppIds = directApps.map((a) => a.monitored_app_id)
-      const issueApps = await getDevTeamAppsWithIssues(team.nais_team_slugs, directAppIds)
-      return { teamBoards, issueApps }
-    }),
-  )
+  // Resolve scope (nais slugs, app IDs, deployer filter) — shared with
+  // /my-teams so that both views show consistent numbers.
+  const [scope, ...teamBoardResults] = await Promise.all([
+    resolveDevTeamScope(devTeams),
+    ...devTeams.map((t) => getActiveBoardsWithKeywordsForDevTeam(t.id)),
+  ])
 
-  const boards: PersonalHomeTabBoard[] = []
+  // When no team members are mapped to GitHub usernames the deployer
+  // filter would match zero users → zero results.  On the web /my-teams
+  // page this is communicated with an explicit Alert.  On Slack we can't
+  // guide the user to fix the mapping, so fall back to team-level counts.
+  const deployerUsernames = scope.noMembersMapped ? undefined : scope.deployerUsernames
+  const issueApps = await getDevTeamAppsWithIssues(scope.naisTeamSlugs, scope.directAppIds, deployerUsernames)
+
+  const boards: PersonalHomeTabBoard[] = teamBoardResults.flat()
   const teamIssues: PersonalHomeTabTeamIssues = {
-    appsWithIssuesCount: 0,
+    appsWithIssuesCount: issueApps.length,
     withoutFourEyes: 0,
     pendingVerification: 0,
     alertCount: 0,
+    missingGoalLinks: 0,
   }
 
-  // Dedupe issue apps across teams (an app can match more than one team if a
-  // user belongs to multiple dev teams that share monitored apps).
-  const seenAppKeys = new Set<string>()
-  for (const { teamBoards, issueApps } of perTeamResults) {
-    boards.push(...teamBoards)
-    for (const app of issueApps) {
-      const key = `${app.team_slug}/${app.environment_name}/${app.app_name}`
-      if (seenAppKeys.has(key)) continue
-      seenAppKeys.add(key)
-      // Count an app under "trenger oppfølging" only if it has issues in the
-      // categories surfaced in the home tab (approval / verification / alerts).
-      // `getDevTeamAppsWithIssues` also returns apps where only
-      // `missing_goal_links > 0`, but those are reflected in the personal
-      // section instead so counting them here would inflate the header
-      // relative to the breakdown shown.
-      const surfaced = app.without_four_eyes > 0 || app.pending_verification > 0 || app.alert_count > 0
-      if (surfaced) teamIssues.appsWithIssuesCount += 1
-      teamIssues.withoutFourEyes += app.without_four_eyes
-      teamIssues.pendingVerification += app.pending_verification
-      teamIssues.alertCount += app.alert_count
-    }
+  for (const app of issueApps) {
+    teamIssues.withoutFourEyes += app.without_four_eyes
+    teamIssues.pendingVerification += app.pending_verification
+    teamIssues.alertCount += app.alert_count
+    teamIssues.missingGoalLinks += app.missing_goal_links
   }
 
   const personalMissingGoalLinks = githubUsername ? await getPersonalDeploymentsMissingGoalLinks(githubUsername) : null
