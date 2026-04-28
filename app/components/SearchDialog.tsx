@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 
 interface SearchResult {
-  type: 'deployment' | 'user' | 'team' | 'app'
+  type: 'deployment' | 'user' | 'team' | 'app' | 'dev_team' | 'group'
   id?: number
   url: string
   title: string
@@ -30,7 +30,7 @@ function Kbd({ children }: { children: React.ReactNode }) {
   )
 }
 
-function resultTagVariant(type: SearchResult['type']): 'info' | 'neutral' | 'success' | 'warning' {
+function resultTagVariant(type: SearchResult['type']): 'info' | 'neutral' | 'success' | 'warning' | 'moderate' {
   switch (type) {
     case 'deployment':
       return 'info'
@@ -38,6 +38,9 @@ function resultTagVariant(type: SearchResult['type']): 'info' | 'neutral' | 'suc
       return 'success'
     case 'app':
       return 'warning'
+    case 'dev_team':
+    case 'group':
+      return 'moderate'
     default:
       return 'neutral'
   }
@@ -50,9 +53,13 @@ function resultTagLabel(type: SearchResult['type']): string {
     case 'user':
       return 'Bruker'
     case 'team':
-      return 'Team'
+      return 'Nais-team'
+    case 'dev_team':
+      return 'Utviklerteam'
     case 'app':
       return 'Applikasjon'
+    case 'group':
+      return 'Gruppe'
   }
 }
 

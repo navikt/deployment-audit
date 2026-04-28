@@ -22,11 +22,26 @@ function SearchResultItem({
   subtitle,
   selected,
 }: {
-  type: 'deployment' | 'user'
+  type: 'deployment' | 'user' | 'team' | 'dev_team' | 'app'
   title: string
   subtitle?: string
   selected?: boolean
 }) {
+  const variantMap: Record<typeof type, string> = {
+    deployment: 'info',
+    team: 'success',
+    app: 'warning',
+    dev_team: 'moderate',
+    user: 'neutral',
+  }
+  const labelMap: Record<typeof type, string> = {
+    deployment: 'Leveranse',
+    team: 'Nais-team',
+    app: 'Applikasjon',
+    dev_team: 'Utviklerteam',
+    user: 'Bruker',
+  }
+
   return (
     <Box
       padding="space-12"
@@ -35,13 +50,15 @@ function SearchResultItem({
       style={{ cursor: 'pointer' }}
     >
       <HStack gap="space-12" align="center">
-        <Tag variant="outline" size="xsmall" data-color={type === 'deployment' ? 'info' : 'neutral'}>
-          {type === 'deployment' ? 'Deployment' : 'Bruker'}
-        </Tag>
-        <VStack gap="space-2">
-          <BodyShort size="small" weight="semibold">
-            {title}
-          </BodyShort>
+        <VStack gap="space-2" style={{ flex: 1 }}>
+          <HStack gap="space-8" align="center">
+            <BodyShort size="small" weight="semibold">
+              {title}
+            </BodyShort>
+            <Tag variant={variantMap[type] as 'info'} size="xsmall">
+              {labelMap[type]}
+            </Tag>
+          </HStack>
           {subtitle && <Detail textColor="subtle">{subtitle}</Detail>}
         </VStack>
       </HStack>
@@ -65,6 +82,9 @@ export const SearchResults: Story = {
         <VStack gap="space-4">
           <SearchResultItem type="deployment" title="Deployment #123" subtitle="pensjon-pen • abc1234" selected />
           <SearchResultItem type="deployment" title="Deployment #122" subtitle="pensjon-pen • def5678" />
+          <SearchResultItem type="dev_team" title="Pensjon Opptjening" subtitle="Utviklerteam · 14 apper" />
+          <SearchResultItem type="team" title="pensjonopptjening" subtitle="14 applikasjoner" />
+          <SearchResultItem type="app" title="pensjon-pen" subtitle="pensjonopptjening" />
           <SearchResultItem type="user" title="Ola Nordmann" subtitle="olanord • 42 deployment(s)" />
         </VStack>
       </VStack>
