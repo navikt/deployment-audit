@@ -559,7 +559,7 @@ export function buildHomeTabBlocks({
         text:
           `*⚠️ ${count} ${count === 1 ? 'deployer mangler' : 'deployers mangler'} brukermapping*\n` +
           `Disse GitHub-brukerne har deployments i teamets apper i år, men er ikke koblet til en NAV-ident: ${userList}${suffix}\n` +
-          `Deres deployments telles ikke med i oversikten over.`,
+          `Deres deployments telles ikke med i de personfiltrerte tallene over.`,
       },
     })
     blocks.push({

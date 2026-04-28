@@ -200,12 +200,13 @@ describe('getUnmappedDeployers', () => {
 
   it('ignores deployments from previous years', async () => {
     const appId = await seedApp(pool, { teamSlug: 'team-a', appName: 'svc', environment: 'prod' })
+    const previousYearDate = new Date(new Date().getFullYear() - 1, 0, 1)
     await seedDeployment(pool, {
       monitoredAppId: appId,
       teamSlug: 'team-a',
       environment: 'prod',
       deployerUsername: 'old-deployer',
-      createdAt: new Date('2024-06-15'),
+      createdAt: previousYearDate,
     })
     await seedDeployment(pool, {
       monitoredAppId: appId,

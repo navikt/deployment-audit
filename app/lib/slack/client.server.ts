@@ -713,8 +713,10 @@ async function buildPersonalizedHomeTabInput({
 
   // When no team members are mapped to GitHub usernames the deployer
   // filter would match zero users → zero results.  On the web /my-teams
-  // page this is communicated with an explicit Alert.  On Slack we can't
-  // guide the user to fix the mapping, so fall back to team-level counts.
+  // page this is communicated with an explicit Alert; on Slack the Home Tab
+  // now also shows a warning about unmapped deployers with a link to the
+  // user mapping page.  We still fall back to team-level counts so the
+  // summary numbers remain meaningful.
   const deployerUsernames = scope.noMembersMapped ? undefined : scope.deployerUsernames
   const [issueApps, unmappedDeployers] = await Promise.all([
     getDevTeamAppsWithIssues(scope.naisTeamSlugs, scope.directAppIds, deployerUsernames),

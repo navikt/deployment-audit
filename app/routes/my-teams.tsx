@@ -163,7 +163,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     issueApps: issueAppCards,
     boardSummaries,
     noTeamMembersMapped: scope.noMembersMapped,
-    unmappedDeployers,
+    unmappedDeployers: scope.deployerUsernames !== undefined ? unmappedDeployers : [],
     personalMissingGoalLinks,
     navIdent: identity.navIdent,
     githubUsername,
@@ -344,7 +344,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                   {unmappedDeployers.length === 1
                     ? '1 person som har deployet eller opprettet PR-er i år mangler brukermapping.'
                     : `${unmappedDeployers.length} personer som har deployet eller opprettet PR-er i år mangler brukermapping.`}{' '}
-                  Deres deployments telles ikke med i oversikten under.
+                  Deres deployments telles ikke med i de personfiltrerte tallene under.
                 </BodyShort>
                 <BodyShort size="small" textColor="subtle">
                   Umappede brukernavn: {unmappedDeployers.join(', ')}
