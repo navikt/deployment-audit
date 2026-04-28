@@ -9,6 +9,7 @@ import {
   FileTextIcon,
   LaptopIcon,
   LayersIcon,
+  MagnifyingGlassIcon,
   PersonGroupIcon,
   PlusCircleIcon,
 } from '@navikt/aksel-icons'
@@ -48,11 +49,23 @@ export async function loader({ request }: Route.LoaderArgs) {
   `)
   const softDeletedCount = parseInt(softDeletedResult.rows[0].total, 10)
 
-  return { pendingCount, diffCount, softDeletedCount }
+  // Count title mismatches
+  const titleMismatchResult = await pool.query<{ count: string }>(`
+    SELECT COUNT(*)::text AS count
+    FROM deployments
+    WHERE github_pr_data IS NOT NULL
+      AND github_pr_data->>'title' IS NOT NULL
+      AND github_pr_data->>'title' != ''
+      AND title IS NOT NULL
+      AND title != github_pr_data->>'title'
+  `)
+  const titleMismatchCount = parseInt(titleMismatchResult.rows[0].count, 10)
+
+  return { pendingCount, diffCount, softDeletedCount, titleMismatchCount }
 }
 
 export default function AdminIndex() {
-  const { pendingCount, diffCount, softDeletedCount } = useLoaderData<typeof loader>()
+  const { pendingCount, diffCount, softDeletedCount, titleMismatchCount } = useLoaderData<typeof loader>()
   return (
     <VStack gap="space-24">
       <div>
@@ -273,6 +286,33 @@ export default function AdminIndex() {
                   {diffCount > 0
                     ? `${diffCount} avvik funnet på tvers av applikasjoner.`
                     : 'Sjekk verifiseringsavvik på tvers av alle applikasjoner.'}
+                </BodyShort>
+              </div>
+            </VStack>
+          </Box>
+        </Link>
+
+        <Link to="/admin/title-mismatches" style={{ textDecoration: 'none', height: '100%' }}>
+          <Box
+            padding="space-24"
+            borderRadius="8"
+            background="raised"
+            borderColor={titleMismatchCount > 0 ? 'danger-subtle' : 'neutral-subtle'}
+            borderWidth="1"
+            data-color={titleMismatchCount > 0 ? 'danger' : undefined}
+            className="admin-card"
+            style={{ height: '100%' }}
+          >
+            <VStack gap="space-12">
+              <MagnifyingGlassIcon fontSize="2rem" aria-hidden />
+              <div>
+                <Heading level="2" size="small" spacing>
+                  Tittel-avvik
+                </Heading>
+                <BodyShort textColor="subtle">
+                  {titleMismatchCount > 0
+                    ? `${titleMismatchCount} deployments har feil tittel (avviker fra PR-tittel).`
+                    : 'Sjekk at lagrede titler samsvarer med PR-titler.'}
                 </BodyShort>
               </div>
             </VStack>

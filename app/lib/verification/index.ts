@@ -28,7 +28,7 @@ import {
 } from '~/db/verification-diff.server'
 import { logger } from '~/lib/logger.server'
 import { buildCommitsBetweenFromCache, fetchVerificationData } from './fetch-data.server'
-import { storeVerificationResult } from './store-data.server'
+import { storeVerificationResult, updateDeploymentVerification } from './store-data.server'
 import type { CompareData, PrCommit, PrMetadata, PrReview, VerificationInput, VerificationResult } from './types'
 import { verifyDeployment } from './verify'
 
@@ -394,10 +394,13 @@ export async function reverifyDeployment(deploymentId: number): Promise<{
   const statusChanged = dep.four_eyes_status !== newResult.status
 
   if (statusChanged) {
+    // Full store: save verification run history + update deployment record
     await storeVerificationResult(dep.id, newResult, { prSnapshotIds: [], commitSnapshotIds: [] }, 'reverification')
-
     // Propagate to sibling deployments in the same application group
     await propagateVerificationToSiblings(dep.id, newResult.status, dep.commit_sha, dep.monitored_app_id)
+  } else {
+    // Metadata-only update: refresh title, PR data, unverified commits without creating history rows
+    await updateDeploymentVerification(dep.id, newResult, 'reverification')
   }
 
   return {

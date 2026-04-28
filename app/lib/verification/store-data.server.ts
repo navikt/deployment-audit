@@ -65,9 +65,10 @@ export async function storeVerificationResult(
 }
 
 /**
- * Update the deployment table with verification results
+ * Update the deployment table with verification results.
+ * Exported for use in reverifyDeployment when only metadata needs updating (no status change).
  */
-async function updateDeploymentVerification(
+export async function updateDeploymentVerification(
   deploymentId: number,
   result: VerificationResult,
   changeSource?: string,
@@ -117,7 +118,7 @@ async function updateDeploymentVerification(
           )
         : null,
       githubPrDataJson,
-      result.deployedPr?.title || result.unverifiedCommits[0]?.message || null,
+      result.deployedPr?.title || null,
       result.deployedPr?.url || null,
     ],
   )
