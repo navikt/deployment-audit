@@ -117,7 +117,7 @@ export default function SearchPage() {
                             : result.type === 'dev_team'
                               ? 'Utviklerteam'
                               : result.type === 'team'
-                                ? 'Team'
+                                ? 'Nais-team'
                                 : result.type === 'app'
                                   ? 'App'
                                   : 'Bruker'}
