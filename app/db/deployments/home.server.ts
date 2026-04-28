@@ -63,6 +63,12 @@ export async function resolveDevTeamScope(
  * an unmapped PR creator's PR is still counted when a mapped team member
  * deploys it.
  *
+ * Respects `audit_start_year` per app — deployments before an app's
+ * audit start year are excluded, matching how `getDevTeamAppsWithIssues`
+ * and `getAppDeploymentStatsBatch` filter. Without this, deployers from
+ * before the audit period would appear as "unmapped" even though their
+ * deployments don't show up in any stats or issue lists.
+ *
  * Excludes bot accounts using the canonical `isGitHubBot` helper.
  */
 export async function getUnmappedContributors(
@@ -82,6 +88,7 @@ export async function getUnmappedContributors(
          AND d.deployer_username IS NOT NULL
          AND d.deployer_username != ''
          AND d.created_at >= $3
+         AND (ma.audit_start_year IS NULL OR d.created_at >= make_date(ma.audit_start_year, 1, 1))
        GROUP BY LOWER(d.deployer_username)
      ),
      mapped_usernames AS (
