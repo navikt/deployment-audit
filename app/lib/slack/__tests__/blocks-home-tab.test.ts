@@ -62,18 +62,18 @@ describe('buildHomeTabBlocks (personalized)', () => {
     expect(text).not.toContain('show_kr_keywords')
   })
 
-  it('shows unmapped deployers warning when present', () => {
+  it('shows unmapped contributors warning when present', () => {
     const blocks = buildHomeTabBlocks(homeTabFixtures.withIssues)
     const text = JSON.stringify(blocks)
-    expect(text).toContain('deployers mangler brukermapping')
+    expect(text).toContain('bidragsytere mangler brukermapping')
     expect(text).toContain('external-contractor')
     expect(text).toContain('summer-intern')
     expect(text).toContain('open_user_mapping_unmapped')
   })
 
-  it('does not show unmapped deployers warning when list is empty', () => {
+  it('does not show unmapped contributors warning when list is empty', () => {
     const blocks = buildHomeTabBlocks(homeTabFixtures.noIssues)
     const text = JSON.stringify(blocks)
-    expect(text).not.toContain('deployers mangler')
+    expect(text).not.toContain('bidragsytere mangler')
   })
 })

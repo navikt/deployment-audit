@@ -53,7 +53,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       issueApps: [] as AppCardData[],
       boardSummaries: [] as BoardSummary[],
       noTeamMembersMapped: false,
-      unmappedDeployers: [] as string[],
+      unmappedContributors: [] as string[],
       personalMissingGoalLinks,
       navIdent: identity.navIdent,
       githubUsername,
@@ -66,16 +66,17 @@ export async function loader({ request }: Route.LoaderArgs) {
   const ytdStart = new Date(new Date().getFullYear(), 0, 1)
 
   // Fetch stats, issue apps, unmapped deployers, and boards in parallel
-  const [teamStats, issueApps, unmappedDeployers, alertCounts, activeReposByApp, ...boardsByTeam] = await Promise.all([
-    getDevTeamSummaryStats(scope.naisTeamSlugs, scope.directAppIds, ytdStart, scope.deployerUsernames),
-    getDevTeamAppsWithIssues(scope.naisTeamSlugs, scope.directAppIds, scope.deployerUsernames),
-    scope.deployerUsernames !== undefined
-      ? getUnmappedContributors(scope.naisTeamSlugs, scope.directAppIds, ytdStart)
-      : Promise.resolve([] as string[]),
-    getAllAlertCounts(),
-    getAllActiveRepositories(),
-    ...selectedDevTeams.map((t) => getBoardsByDevTeam(t.id)),
-  ])
+  const [teamStats, issueApps, unmappedContributors, alertCounts, activeReposByApp, ...boardsByTeam] =
+    await Promise.all([
+      getDevTeamSummaryStats(scope.naisTeamSlugs, scope.directAppIds, ytdStart, scope.deployerUsernames),
+      getDevTeamAppsWithIssues(scope.naisTeamSlugs, scope.directAppIds, scope.deployerUsernames),
+      scope.deployerUsernames !== undefined
+        ? getUnmappedContributors(scope.naisTeamSlugs, scope.directAppIds, ytdStart)
+        : Promise.resolve([] as string[]),
+      getAllAlertCounts(),
+      getAllActiveRepositories(),
+      ...selectedDevTeams.map((t) => getBoardsByDevTeam(t.id)),
+    ])
 
   const allApps = await getAllMonitoredApplications()
 
@@ -165,7 +166,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     issueApps: issueAppCards,
     boardSummaries,
     noTeamMembersMapped: scope.noMembersMapped,
-    unmappedDeployers,
+    unmappedContributors,
     personalMissingGoalLinks,
     navIdent: identity.navIdent,
     githubUsername,
@@ -297,7 +298,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     issueApps,
     boardSummaries,
     noTeamMembersMapped,
-    unmappedDeployers,
+    unmappedContributors,
     personalMissingGoalLinks,
     navIdent,
     githubUsername,
@@ -339,18 +340,18 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               registrere GitHub-brukernavn under <Link to="/users">Brukermapping</Link> så blir tallene riktige.
             </Alert>
           )}
-          {unmappedDeployers.length > 0 && (
+          {unmappedContributors.length > 0 && (
             <Alert variant="warning">
               <VStack gap="space-8">
                 <BodyShort>
-                  {unmappedDeployers.length === 1
+                  {unmappedContributors.length === 1
                     ? '1 person som har deployet eller opprettet PR-er i år mangler brukermapping.'
-                    : `${unmappedDeployers.length} personer som har deployet eller opprettet PR-er i år mangler brukermapping.`}{' '}
+                    : `${unmappedContributors.length} personer som har deployet eller opprettet PR-er i år mangler brukermapping.`}{' '}
                   Deres deployments telles ikke med i de personfiltrerte tallene under.
                 </BodyShort>
                 <BodyShort size="small" textColor="subtle">
-                  Umappede brukernavn: {unmappedDeployers.slice(0, 10).join(', ')}
-                  {unmappedDeployers.length > 10 && ` og ${unmappedDeployers.length - 10} til`}
+                  Umappede brukernavn: {unmappedContributors.slice(0, 10).join(', ')}
+                  {unmappedContributors.length > 10 && ` og ${unmappedContributors.length - 10} til`}
                 </BodyShort>
                 <div>
                   <Button as={Link} to="/users" size="small" variant="secondary">

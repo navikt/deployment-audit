@@ -696,7 +696,7 @@ async function buildPersonalizedHomeTabInput({
         pendingVerification: 0,
         alertCount: 0,
         missingGoalLinks: 0,
-        unmappedDeployers: [],
+        unmappedContributors: [],
       },
       personalMissingGoalLinks: null,
     }
@@ -712,14 +712,16 @@ async function buildPersonalizedHomeTabInput({
   ])
 
   // When no team members are mapped to GitHub usernames the deployer
-  // filter would match zero users → zero results.  On the web /my-teams
-  // page this is communicated with an explicit Alert; on Slack the Home Tab
-  // now also shows a warning about unmapped deployers with a link to the
-  // user mapping page.  We still fall back to team-level counts so the
-  // summary numbers remain meaningful.
+  // filter would match zero users → zero results.  We fall back to
+  // team-level counts so the summary numbers remain meaningful.
+  // The unmapped-contributors warning is only shown when the deployer
+  // filter is actually active (i.e. at least some members are mapped).
+  // When noMembersMapped is true the warning is skipped because the
+  // displayed numbers are unfiltered and therefore already include
+  // those contributors' deployments.
   const deployerUsernames = scope.noMembersMapped ? undefined : scope.deployerUsernames
   const deployerFilterActive = deployerUsernames !== undefined
-  const [issueApps, unmappedDeployers] = await Promise.all([
+  const [issueApps, unmappedContributors] = await Promise.all([
     getDevTeamAppsWithIssues(scope.naisTeamSlugs, scope.directAppIds, deployerUsernames),
     deployerFilterActive
       ? getUnmappedContributors(scope.naisTeamSlugs, scope.directAppIds)
@@ -733,7 +735,7 @@ async function buildPersonalizedHomeTabInput({
     pendingVerification: 0,
     alertCount: 0,
     missingGoalLinks: 0,
-    unmappedDeployers,
+    unmappedContributors,
   }
 
   for (const app of issueApps) {
