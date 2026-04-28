@@ -160,8 +160,7 @@ export function AppCard({ app, showEnvironment = true, appendSearchParams }: App
                 icon={<PersonGroupIcon aria-hidden />}
                 color="warning"
               >
-                {app.stats.unmapped_deployers}{' '}
-                {app.stats.unmapped_deployers === 1 ? 'umappet' : 'umappede'}
+                {app.stats.unmapped_deployers} {app.stats.unmapped_deployers === 1 ? 'umappet' : 'umappede'}
               </IssueBadge>
             )}
             {(app.stats.missing_goal_links ?? 0) > 0 && (
