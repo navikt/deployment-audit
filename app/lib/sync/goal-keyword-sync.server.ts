@@ -14,16 +14,29 @@ import { logger } from '~/lib/logger.server'
 export async function autoLinkGoalKeywords(
   deploymentId: number,
   teamSlug: string,
+  monitoredAppId: number,
   commitMessages: CommitInfo[],
 ): Promise<number> {
   if (commitMessages.length === 0) return 0
 
-  // Find dev teams linked to this nais team
+  // Find dev teams linked to this deployment through any ownership path:
+  // 1. Nais team mapping (dev_team_nais_teams)
+  // 2. Direct app ownership (dev_team_applications)
+  // 3. Application group ownership (dev_team_application_groups)
   const devTeamResult = await pool.query(
     `SELECT dt.id FROM dev_teams dt
      JOIN dev_team_nais_teams dtn ON dtn.dev_team_id = dt.id
-     WHERE dtn.nais_team_slug = $1 AND dtn.deleted_at IS NULL AND dt.is_active = true`,
-    [teamSlug],
+     WHERE dtn.nais_team_slug = $1 AND dtn.deleted_at IS NULL AND dt.is_active = true
+     UNION
+     SELECT dt.id FROM dev_teams dt
+     JOIN dev_team_applications dta ON dta.dev_team_id = dt.id
+     WHERE dta.monitored_app_id = $2 AND dta.deleted_at IS NULL AND dt.is_active = true
+     UNION
+     SELECT dt.id FROM dev_teams dt
+     JOIN dev_team_application_groups dtag ON dtag.dev_team_id = dt.id
+     JOIN monitored_applications ma ON ma.application_group_id = dtag.application_group_id
+     WHERE ma.id = $2 AND dtag.deleted_at IS NULL AND dt.is_active = true`,
+    [teamSlug, monitoredAppId],
   )
 
   if (devTeamResult.rows.length === 0) return 0
