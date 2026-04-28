@@ -58,10 +58,10 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const missingResult = await pool.query<MissingSummary>(
     `SELECT
-       COUNT(*)::int FILTER (WHERE d.title IS NULL) AS total_missing,
-       COUNT(*)::int FILTER (WHERE d.title IS NULL AND d.github_pr_data IS NOT NULL AND d.github_pr_data->>'title' IS NOT NULL) AS with_pr_data,
-       COUNT(*)::int FILTER (WHERE d.title IS NULL AND (d.github_pr_data IS NULL OR d.github_pr_data->>'title' IS NULL) AND d.unverified_commits IS NOT NULL AND jsonb_array_length(d.unverified_commits) > 0) AS with_unverified_commits,
-       COUNT(*)::int FILTER (WHERE d.title IS NULL AND (d.github_pr_data IS NULL OR d.github_pr_data->>'title' IS NULL) AND (d.unverified_commits IS NULL OR jsonb_array_length(d.unverified_commits) = 0)) AS no_fallback
+       (COUNT(*) FILTER (WHERE d.title IS NULL))::int AS total_missing,
+       (COUNT(*) FILTER (WHERE d.title IS NULL AND d.github_pr_data IS NOT NULL AND d.github_pr_data->>'title' IS NOT NULL))::int AS with_pr_data,
+       (COUNT(*) FILTER (WHERE d.title IS NULL AND (d.github_pr_data IS NULL OR d.github_pr_data->>'title' IS NULL) AND d.unverified_commits IS NOT NULL AND jsonb_array_length(d.unverified_commits) > 0))::int AS with_unverified_commits,
+       (COUNT(*) FILTER (WHERE d.title IS NULL AND (d.github_pr_data IS NULL OR d.github_pr_data->>'title' IS NULL) AND (d.unverified_commits IS NULL OR jsonb_array_length(d.unverified_commits) = 0)))::int AS no_fallback
      FROM deployments d`,
   )
 
