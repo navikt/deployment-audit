@@ -11,6 +11,7 @@ import { getBoardObjectiveProgress, getDevTeamSummaryStats } from '~/db/dashboar
 import {
   getDevTeamAppsWithIssues,
   getPersonalDeploymentsMissingGoalLinks,
+  getUnmappedContributors,
   resolveDevTeamScope,
 } from '~/db/deployments/home.server'
 import { getUserDevTeams } from '~/db/user-dev-team-preference.server'
@@ -52,6 +53,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       issueApps: [] as AppCardData[],
       boardSummaries: [] as BoardSummary[],
       noTeamMembersMapped: false,
+      unmappedContributors: [] as string[],
       personalMissingGoalLinks,
       navIdent: identity.navIdent,
       githubUsername,
@@ -63,14 +65,18 @@ export async function loader({ request }: Route.LoaderArgs) {
   const scope = await resolveDevTeamScope(selectedDevTeams)
   const ytdStart = new Date(new Date().getFullYear(), 0, 1)
 
-  // Fetch stats, issue apps, and boards in parallel
-  const [teamStats, issueApps, alertCounts, activeReposByApp, ...boardsByTeam] = await Promise.all([
-    getDevTeamSummaryStats(scope.naisTeamSlugs, scope.directAppIds, ytdStart, scope.deployerUsernames),
-    getDevTeamAppsWithIssues(scope.naisTeamSlugs, scope.directAppIds, scope.deployerUsernames),
-    getAllAlertCounts(),
-    getAllActiveRepositories(),
-    ...selectedDevTeams.map((t) => getBoardsByDevTeam(t.id)),
-  ])
+  // Fetch stats, issue apps, unmapped deployers, and boards in parallel
+  const [teamStats, issueApps, unmappedContributors, alertCounts, activeReposByApp, ...boardsByTeam] =
+    await Promise.all([
+      getDevTeamSummaryStats(scope.naisTeamSlugs, scope.directAppIds, ytdStart, scope.deployerUsernames),
+      getDevTeamAppsWithIssues(scope.naisTeamSlugs, scope.directAppIds, scope.deployerUsernames),
+      scope.deployerUsernames !== undefined
+        ? getUnmappedContributors(scope.naisTeamSlugs, scope.directAppIds, ytdStart)
+        : Promise.resolve([] as string[]),
+      getAllAlertCounts(),
+      getAllActiveRepositories(),
+      ...selectedDevTeams.map((t) => getBoardsByDevTeam(t.id)),
+    ])
 
   const allApps = await getAllMonitoredApplications()
 
@@ -160,6 +166,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     issueApps: issueAppCards,
     boardSummaries,
     noTeamMembersMapped: scope.noMembersMapped,
+    unmappedContributors,
     personalMissingGoalLinks,
     navIdent: identity.navIdent,
     githubUsername,
@@ -291,6 +298,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     issueApps,
     boardSummaries,
     noTeamMembersMapped,
+    unmappedContributors,
     personalMissingGoalLinks,
     navIdent,
     githubUsername,
@@ -330,6 +338,27 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             <Alert variant="info">
               Ingen av medlemmene i dine team er koblet til en GitHub-bruker, så tallene under er 0. Be teammedlemmene
               registrere GitHub-brukernavn under <Link to="/users">Brukermapping</Link> så blir tallene riktige.
+            </Alert>
+          )}
+          {unmappedContributors.length > 0 && (
+            <Alert variant="warning">
+              <VStack gap="space-8">
+                <BodyShort>
+                  {unmappedContributors.length === 1
+                    ? '1 person som har deployet eller opprettet PR-er i år mangler brukermapping.'
+                    : `${unmappedContributors.length} personer som har deployet eller opprettet PR-er i år mangler brukermapping.`}{' '}
+                  Deres deployments telles ikke med i de personfiltrerte tallene under.
+                </BodyShort>
+                <BodyShort size="small" textColor="subtle">
+                  Umappede brukernavn: {unmappedContributors.slice(0, 10).join(', ')}
+                  {unmappedContributors.length > 10 && ` og ${unmappedContributors.length - 10} til`}
+                </BodyShort>
+                <div>
+                  <Button as={Link} to="/users" size="small" variant="secondary">
+                    Gå til brukermapping
+                  </Button>
+                </div>
+              </VStack>
             </Alert>
           )}
           {/* Summary cards */}

@@ -84,6 +84,7 @@ export interface PersonalHomeTabTeamIssues {
   pendingVerification: number
   alertCount: number
   missingGoalLinks: number
+  unmappedContributors: string[]
 }
 
 export interface HomeTabInput {
@@ -543,6 +544,34 @@ export function buildHomeTabBlocks({
         type: 'mrkdwn',
         text: '*✅ Ingen åpne mangler i mine team*',
       },
+    })
+  }
+
+  // --- Warning about unmapped deployers. ---
+  if (teamIssues.unmappedContributors.length > 0) {
+    const count = teamIssues.unmappedContributors.length
+    const userList = teamIssues.unmappedContributors.slice(0, 10).join(', ')
+    const suffix = count > 10 ? ` og ${count - 10} til` : ''
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text:
+          `*⚠️ ${count} ${count === 1 ? 'bidragsyter mangler' : 'bidragsytere mangler'} brukermapping*\n` +
+          `Disse GitHub-brukerne har deployet eller opprettet PR-er i teamets apper i år, men er ikke koblet til en NAV-ident: ${userList}${suffix}\n` +
+          `Deres deployments telles ikke med i de personfiltrerte tallene over.`,
+      },
+    })
+    blocks.push({
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Gå til brukermapping', emoji: true },
+          url: `${baseUrl}/users`,
+          action_id: 'open_user_mapping_unmapped',
+        },
+      ],
     })
   }
 

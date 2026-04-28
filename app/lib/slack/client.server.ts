@@ -15,7 +15,7 @@
 import { App, type BlockAction, LogLevel } from '@slack/bolt'
 import type { KnownBlock } from '@slack/types'
 import { getActiveBoardsWithKeywordsForDevTeam } from '~/db/boards.server'
-import { getDevTeamAppsWithIssues, resolveDevTeamScope } from '~/db/deployments/home.server'
+import { getDevTeamAppsWithIssues, getUnmappedContributors, resolveDevTeamScope } from '~/db/deployments/home.server'
 import {
   claimDeploymentForDeployNotify,
   claimDeploymentForSlackNotification,
@@ -696,6 +696,7 @@ async function buildPersonalizedHomeTabInput({
         pendingVerification: 0,
         alertCount: 0,
         missingGoalLinks: 0,
+        unmappedContributors: [],
       },
       personalMissingGoalLinks: null,
     }
@@ -711,11 +712,21 @@ async function buildPersonalizedHomeTabInput({
   ])
 
   // When no team members are mapped to GitHub usernames the deployer
-  // filter would match zero users → zero results.  On the web /my-teams
-  // page this is communicated with an explicit Alert.  On Slack we can't
-  // guide the user to fix the mapping, so fall back to team-level counts.
+  // filter would match zero users → zero results.  We fall back to
+  // team-level counts so the summary numbers remain meaningful.
+  // The unmapped-contributors warning is only shown when the deployer
+  // filter is actually active (i.e. at least some members are mapped).
+  // When noMembersMapped is true the warning is skipped because the
+  // displayed numbers are unfiltered and therefore already include
+  // those contributors' deployments.
   const deployerUsernames = scope.noMembersMapped ? undefined : scope.deployerUsernames
-  const issueApps = await getDevTeamAppsWithIssues(scope.naisTeamSlugs, scope.directAppIds, deployerUsernames)
+  const deployerFilterActive = deployerUsernames !== undefined
+  const [issueApps, unmappedContributors] = await Promise.all([
+    getDevTeamAppsWithIssues(scope.naisTeamSlugs, scope.directAppIds, deployerUsernames),
+    deployerFilterActive
+      ? getUnmappedContributors(scope.naisTeamSlugs, scope.directAppIds)
+      : Promise.resolve([] as string[]),
+  ])
 
   const boards: PersonalHomeTabBoard[] = teamBoardResults.flat()
   const teamIssues: PersonalHomeTabTeamIssues = {
@@ -724,6 +735,7 @@ async function buildPersonalizedHomeTabInput({
     pendingVerification: 0,
     alertCount: 0,
     missingGoalLinks: 0,
+    unmappedContributors,
   }
 
   for (const app of issueApps) {
