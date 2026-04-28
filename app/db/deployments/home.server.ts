@@ -1,4 +1,5 @@
 import { NOT_APPROVED_STATUSES, PENDING_STATUSES } from '~/lib/four-eyes-status'
+import { isGitHubBot } from '~/lib/github-bots'
 import { pool } from '../connection.server'
 import type { AppWithIssues, DeploymentWithApp } from '../deployments.server'
 import { getDevTeamApplications, getGroupAppIdsForDevTeams } from '../dev-teams.server'
@@ -59,10 +60,15 @@ export async function resolveDevTeamScope(
  * These users' deployments are invisible to the deployer-filtered views
  * (/my-teams, Slack Home Tab) because the filter only matches known members.
  *
- * Excludes bot accounts (usernames ending with `[bot]`).
+ * Excludes bot accounts using the canonical `isGitHubBot` helper.
  */
-export async function getUnmappedDeployers(naisTeamSlugs: string[], directAppIds?: number[]): Promise<string[]> {
+export async function getUnmappedDeployers(
+  naisTeamSlugs: string[],
+  directAppIds?: number[],
+  since?: Date,
+): Promise<string[]> {
   const ids = directAppIds ?? []
+  const sinceDate = since ?? new Date(new Date().getFullYear(), 0, 1)
   const result = await pool.query<{ username: string }>(
     `WITH team_deployers AS (
        SELECT username FROM (
@@ -72,7 +78,7 @@ export async function getUnmappedDeployers(naisTeamSlugs: string[], directAppIds
          WHERE ma.is_active = true
            AND (ma.team_slug = ANY($1::text[]) OR ma.id = ANY($2::int[]))
            AND d.deployer_username IS NOT NULL
-           AND d.created_at >= make_date(EXTRACT(YEAR FROM NOW())::int, 1, 1)
+           AND d.created_at >= $3
          UNION
          SELECT LOWER(d.github_pr_data->'creator'->>'username') AS username
          FROM deployments d
@@ -80,10 +86,9 @@ export async function getUnmappedDeployers(naisTeamSlugs: string[], directAppIds
          WHERE ma.is_active = true
            AND (ma.team_slug = ANY($1::text[]) OR ma.id = ANY($2::int[]))
            AND d.github_pr_data->'creator'->>'username' IS NOT NULL
-           AND d.created_at >= make_date(EXTRACT(YEAR FROM NOW())::int, 1, 1)
+           AND d.created_at >= $3
        ) all_deployers
-       WHERE username NOT LIKE '%[bot]'
-         AND username != ''
+       WHERE username != ''
      ),
      mapped_usernames AS (
        SELECT DISTINCT LOWER(um.github_username) AS username
@@ -95,9 +100,9 @@ export async function getUnmappedDeployers(naisTeamSlugs: string[], directAppIds
      LEFT JOIN mapped_usernames mu ON mu.username = td.username
      WHERE mu.username IS NULL
      ORDER BY td.username`,
-    [naisTeamSlugs, ids],
+    [naisTeamSlugs, ids, sinceDate],
   )
-  return result.rows.map((r) => r.username)
+  return result.rows.map((r) => r.username).filter((u) => !isGitHubBot(u))
 }
 
 /**
