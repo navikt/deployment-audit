@@ -95,7 +95,7 @@ export async function verifyDeploymentsFourEyes(filters?: DeploymentFilters & { 
         try {
           const commitInfos = extractCommitInfos(deployment as Parameters<typeof extractCommitInfos>[0])
           if (commitInfos.length > 0) {
-            await autoLinkGoalKeywords(deployment.id, deployment.team_slug, commitInfos)
+            await autoLinkGoalKeywords(deployment.id, deployment.team_slug, deployment.monitored_app_id, commitInfos)
           }
         } catch (e) {
           logger.warn(`⚠️  Goal keyword auto-linking failed for deployment ${deployment.id}: ${e}`)
