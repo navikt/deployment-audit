@@ -224,6 +224,88 @@ describe('getUnmappedContributors', () => {
     expect(result).toEqual(['current-deployer'])
   })
 
+  it('excludes deployments before the app audit_start_year', async () => {
+    const appId = await seedApp(pool, {
+      teamSlug: 'team-a',
+      appName: 'svc',
+      environment: 'prod',
+      auditStartYear: new Date().getFullYear(),
+    })
+    // Deploy before audit start year — should be excluded
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team-a',
+      environment: 'prod',
+      deployerUsername: 'old-deployer',
+      createdAt: new Date(new Date().getFullYear() - 1, 6, 1),
+    })
+    // Deploy in audit year — should be included
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team-a',
+      environment: 'prod',
+      deployerUsername: 'current-deployer',
+    })
+
+    const result = await getUnmappedContributors(['team-a'])
+    expect(result).toEqual(['current-deployer'])
+  })
+
+  it('includes all deployments when audit_start_year is null', async () => {
+    const appId = await seedApp(pool, {
+      teamSlug: 'team-a',
+      appName: 'svc',
+      environment: 'prod',
+      auditStartYear: null,
+    })
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team-a',
+      environment: 'prod',
+      deployerUsername: 'deployer-a',
+    })
+
+    const result = await getUnmappedContributors(['team-a'])
+    expect(result).toEqual(['deployer-a'])
+  })
+
+  it('handles mixed apps with different audit_start_year values', async () => {
+    const currentYear = new Date().getFullYear()
+    // App with audit start this year
+    const appWithAudit = await seedApp(pool, {
+      teamSlug: 'team-a',
+      appName: 'new-svc',
+      environment: 'prod',
+      auditStartYear: currentYear,
+    })
+    // App with no audit start year (all deployments count)
+    const appNoAudit = await seedApp(pool, {
+      teamSlug: 'team-a',
+      appName: 'old-svc',
+      environment: 'prod',
+      auditStartYear: null,
+    })
+
+    // Deploy before audit year on the app WITH audit_start_year — excluded
+    await seedDeployment(pool, {
+      monitoredAppId: appWithAudit,
+      teamSlug: 'team-a',
+      environment: 'prod',
+      deployerUsername: 'excluded-deployer',
+      createdAt: new Date(currentYear - 1, 6, 1),
+    })
+    // Deploy on the app WITHOUT audit_start_year — included (since filter allows)
+    await seedDeployment(pool, {
+      monitoredAppId: appNoAudit,
+      teamSlug: 'team-a',
+      environment: 'prod',
+      deployerUsername: 'included-deployer',
+    })
+
+    const result = await getUnmappedContributors(['team-a'])
+    expect(result).toEqual(['included-deployer'])
+  })
+
   it('returns usernames sorted alphabetically', async () => {
     const appId = await seedApp(pool, { teamSlug: 'team-a', appName: 'svc', environment: 'prod' })
     await seedDeployment(pool, {
