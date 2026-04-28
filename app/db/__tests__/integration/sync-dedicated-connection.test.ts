@@ -6,6 +6,7 @@
 
 import { Pool } from 'pg'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { SYNC_ADVISORY_LOCK_KEY } from '~/db/connection.server'
 import { truncateAllTables } from './helpers'
 
 let pool: Pool
@@ -42,7 +43,7 @@ describe('withSyncClient advisory lock', () => {
     const holdingClient = await pool.connect()
     try {
       const { rows } = await holdingClient.query<{ locked: boolean }>(
-        'SELECT pg_try_advisory_lock(839201471) AS locked',
+        `SELECT pg_try_advisory_lock(${SYNC_ADVISORY_LOCK_KEY}) AS locked`,
       )
       expect(rows[0].locked).toBe(true)
 
@@ -53,7 +54,7 @@ describe('withSyncClient advisory lock', () => {
 
       expect(result).toBeNull()
     } finally {
-      await holdingClient.query('SELECT pg_advisory_unlock(839201471)')
+      await holdingClient.query(`SELECT pg_advisory_unlock(${SYNC_ADVISORY_LOCK_KEY})`)
       holdingClient.release()
     }
   })
@@ -68,10 +69,12 @@ describe('withSyncClient advisory lock', () => {
     // After withSyncClient returns, lock should be released — try acquiring it
     const testClient = await pool.connect()
     try {
-      const { rows } = await testClient.query<{ locked: boolean }>('SELECT pg_try_advisory_lock(839201471) AS locked')
+      const { rows } = await testClient.query<{ locked: boolean }>(
+        `SELECT pg_try_advisory_lock(${SYNC_ADVISORY_LOCK_KEY}) AS locked`,
+      )
       expect(rows[0].locked).toBe(true)
     } finally {
-      await testClient.query('SELECT pg_advisory_unlock(839201471)')
+      await testClient.query(`SELECT pg_advisory_unlock(${SYNC_ADVISORY_LOCK_KEY})`)
       testClient.release()
     }
   })
@@ -88,10 +91,12 @@ describe('withSyncClient advisory lock', () => {
     // Lock should still be released
     const testClient = await pool.connect()
     try {
-      const { rows } = await testClient.query<{ locked: boolean }>('SELECT pg_try_advisory_lock(839201471) AS locked')
+      const { rows } = await testClient.query<{ locked: boolean }>(
+        `SELECT pg_try_advisory_lock(${SYNC_ADVISORY_LOCK_KEY}) AS locked`,
+      )
       expect(rows[0].locked).toBe(true)
     } finally {
-      await testClient.query('SELECT pg_advisory_unlock(839201471)')
+      await testClient.query(`SELECT pg_advisory_unlock(${SYNC_ADVISORY_LOCK_KEY})`)
       testClient.release()
     }
   })
@@ -101,19 +106,22 @@ describe('withSyncClient advisory lock', () => {
 
 describe('sync client query routing', () => {
   it('should route pool.query() through the sync client', async () => {
-    const { withSyncClient, pool: appPool } = await import('~/db/connection.server')
+    const { withSyncClient, getSyncClient, pool: appPool } = await import('~/db/connection.server')
 
     const result = await withSyncClient(async () => {
-      // This query should run on the sync client, not a fresh pool connection.
-      // We verify by checking that the backend PID is consistent across calls.
-      const { rows: r1 } = await appPool.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')
-      const { rows: r2 } = await appPool.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')
-      return { pid1: r1[0].pid, pid2: r2[0].pid }
+      const syncClient = getSyncClient()
+      expect(syncClient).toBeDefined()
+      if (!syncClient) throw new Error('Expected sync client to be defined')
+
+      // Compare pool.query() PID against the known sync client PID
+      const { rows: syncRows } = await syncClient.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')
+      const { rows: queryRows } = await appPool.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')
+
+      return { syncPid: syncRows[0].pid, queryPid: queryRows[0].pid }
     })
 
     expect(result).not.toBeNull()
-    // Both queries should have run on the same backend (same connection)
-    expect(result?.pid1).toBe(result?.pid2)
+    expect(result?.queryPid).toBe(result?.syncPid)
   })
 
   it('should route pool.connect() through the sync client', async () => {

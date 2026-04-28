@@ -74,12 +74,13 @@ export function getPool(): Pool {
 // ─── Sync-dedicated connection (AsyncLocalStorage) ───────────────────────────
 // During periodic sync, a single PoolClient is checked out and stored in ALS.
 // The pool proxy routes query() and connect() through this client so that all
-// sync DB work uses exactly one Postgres connection across all pods.
+// sync DB work uses a single Postgres connection for the sync cycle within the
+// pod that holds the advisory lock.
 
 const syncClientStore = new AsyncLocalStorage<PoolClient>()
 
 /** Fixed advisory lock key for the global periodic sync lock. */
-const SYNC_ADVISORY_LOCK_KEY = 839_201_471
+export const SYNC_ADVISORY_LOCK_KEY = 839_201_471
 
 /** Returns the sync-dedicated client if the current async context is inside withSyncClient. */
 export function getSyncClient(): PoolClient | undefined {
@@ -132,20 +133,29 @@ export const pool: Pool = new Proxy({} as Pool, {
     }
 
     if (prop === 'connect') {
-      return async () => {
+      return (...args: any[]) => {
         const syncClient = getSyncClient()
         if (syncClient) {
           // Return a proxy that delegates to the sync client but makes release() a no-op.
           // The sync client is owned by withSyncClient() and released there.
-          return new Proxy(syncClient, {
+          const client = new Proxy(syncClient, {
             get(target, clientProp) {
               if (clientProp === 'release') return () => {}
               const val = (target as any)[clientProp]
               return typeof val === 'function' ? val.bind(target) : val
             },
           }) as PoolClient
+
+          // Support callback-style: pool.connect((err, client, done) => ...)
+          const callback = typeof args[0] === 'function' ? args[0] : undefined
+          if (callback) {
+            callback(null, client, client.release.bind(client))
+            return
+          }
+
+          return Promise.resolve(client)
         }
-        return value.call(instance)
+        return value.call(instance, ...args)
       }
     }
 
