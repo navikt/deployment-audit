@@ -1,5 +1,6 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { readFileSync } from 'node:fs'
-import { Pool, type QueryResult } from 'pg'
+import { Pool, type PoolClient, type QueryResult } from 'pg'
 import { logger } from '~/lib/logger.server'
 import { withDbSpan } from '~/lib/tracing.server'
 
@@ -70,7 +71,62 @@ export function getPool(): Pool {
   return poolInstance
 }
 
-// Lazy pool proxy — defers creation until first use and instruments queries with OTel spans
+// ─── Sync-dedicated connection (AsyncLocalStorage) ───────────────────────────
+// During periodic sync, a single PoolClient is checked out and stored in ALS.
+// The pool proxy routes query() and connect() through this client so that all
+// sync DB work uses a single Postgres connection for the sync cycle within the
+// pod that holds the advisory lock.
+
+const syncClientStore = new AsyncLocalStorage<PoolClient>()
+
+/** Fixed advisory lock key for the global periodic sync lock. */
+export const SYNC_ADVISORY_LOCK_KEY = 839_201_471
+
+/** Returns the sync-dedicated client if the current async context is inside withSyncClient. */
+export function getSyncClient(): PoolClient | undefined {
+  return syncClientStore.getStore()
+}
+
+/**
+ * Run `fn` using a single dedicated Postgres connection for all DB operations.
+ * Acquires a global advisory lock so only one pod syncs at a time.
+ *
+ * Returns `null` if the advisory lock is already held by another pod.
+ */
+export async function withSyncClient<T>(fn: () => Promise<T>): Promise<T | null> {
+  const client = await getPool().connect()
+  let destroyed = false
+  try {
+    const { rows } = await client.query<{ locked: boolean }>(
+      `SELECT pg_try_advisory_lock(${SYNC_ADVISORY_LOCK_KEY}) AS locked`,
+    )
+    if (!rows[0].locked) {
+      return null
+    }
+
+    try {
+      return await syncClientStore.run(client, fn)
+    } finally {
+      try {
+        await client.query(`SELECT pg_advisory_unlock(${SYNC_ADVISORY_LOCK_KEY})`)
+      } catch (unlockError) {
+        // If unlock fails, destroy the connection so the advisory lock cannot
+        // remain held on a pooled session (which would block all future sync cycles).
+        logger.error('Failed to release advisory lock, destroying connection', unlockError)
+        destroyed = true
+        client.release(true)
+      }
+    }
+  } finally {
+    if (!destroyed) {
+      client.release()
+    }
+  }
+}
+
+// Lazy pool proxy — defers creation until first use and instruments queries with OTel spans.
+// When running inside withSyncClient(), query() and connect() are routed through the
+// dedicated sync client so that all sync DB work uses a single Postgres connection.
 export const pool: Pool = new Proxy({} as Pool, {
   get(_target, prop) {
     const instance = getPool()
@@ -79,9 +135,38 @@ export const pool: Pool = new Proxy({} as Pool, {
 
     if (prop === 'query') {
       return (...args: any[]) => {
+        const syncClient = getSyncClient()
+        const target = syncClient ?? instance
         const sql = typeof args[0] === 'string' ? args[0] : args[0]?.text || 'unknown'
         const operation = extractOperation(sql)
-        return withDbSpan(operation, sql, () => value.apply(instance, args))
+        return withDbSpan(operation, sql, () => (target as any).query(...args))
+      }
+    }
+
+    if (prop === 'connect') {
+      return (...args: any[]) => {
+        const syncClient = getSyncClient()
+        if (syncClient) {
+          // Return a proxy that delegates to the sync client but makes release() a no-op.
+          // The sync client is owned by withSyncClient() and released there.
+          const client = new Proxy(syncClient, {
+            get(target, clientProp) {
+              if (clientProp === 'release') return () => {}
+              const val = (target as any)[clientProp]
+              return typeof val === 'function' ? val.bind(target) : val
+            },
+          }) as PoolClient
+
+          // Support callback-style: pool.connect((err, client, done) => ...)
+          const callback = typeof args[0] === 'function' ? args[0] : undefined
+          if (callback) {
+            callback(null, client, client.release.bind(client))
+            return
+          }
+
+          return Promise.resolve(client)
+        }
+        return value.call(instance, ...args)
       }
     }
 
@@ -105,8 +190,9 @@ export async function query<T extends Record<string, any> = any>(
 ): Promise<QueryResult<T>> {
   const operation = extractOperation(text)
   return withDbSpan(operation, text, () => {
-    const p = getPool()
-    return p.query<T>(text, params)
+    const syncClient = getSyncClient()
+    const target = syncClient ?? getPool()
+    return target.query<T>(text, params)
   })
 }
 
