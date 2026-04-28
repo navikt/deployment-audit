@@ -15,7 +15,7 @@
 import { App, type BlockAction, LogLevel } from '@slack/bolt'
 import type { KnownBlock } from '@slack/types'
 import { getActiveBoardsWithKeywordsForDevTeam } from '~/db/boards.server'
-import { getDevTeamAppsWithIssues, resolveDevTeamScope } from '~/db/deployments/home.server'
+import { getDevTeamAppsWithIssues, getUnmappedDeployers, resolveDevTeamScope } from '~/db/deployments/home.server'
 import {
   claimDeploymentForDeployNotify,
   claimDeploymentForSlackNotification,
@@ -696,6 +696,7 @@ async function buildPersonalizedHomeTabInput({
         pendingVerification: 0,
         alertCount: 0,
         missingGoalLinks: 0,
+        unmappedDeployers: [],
       },
       personalMissingGoalLinks: null,
     }
@@ -715,7 +716,10 @@ async function buildPersonalizedHomeTabInput({
   // page this is communicated with an explicit Alert.  On Slack we can't
   // guide the user to fix the mapping, so fall back to team-level counts.
   const deployerUsernames = scope.noMembersMapped ? undefined : scope.deployerUsernames
-  const issueApps = await getDevTeamAppsWithIssues(scope.naisTeamSlugs, scope.directAppIds, deployerUsernames)
+  const [issueApps, unmappedDeployers] = await Promise.all([
+    getDevTeamAppsWithIssues(scope.naisTeamSlugs, scope.directAppIds, deployerUsernames),
+    getUnmappedDeployers(scope.naisTeamSlugs, scope.directAppIds),
+  ])
 
   const boards: PersonalHomeTabBoard[] = teamBoardResults.flat()
   const teamIssues: PersonalHomeTabTeamIssues = {
@@ -724,6 +728,7 @@ async function buildPersonalizedHomeTabInput({
     pendingVerification: 0,
     alertCount: 0,
     missingGoalLinks: 0,
+    unmappedDeployers,
   }
 
   for (const app of issueApps) {

@@ -53,6 +53,52 @@ export async function resolveDevTeamScope(
 }
 
 /**
+ * Find GitHub usernames that appear as deployers or PR creators in a dev
+ * team's apps but do NOT have a corresponding `user_mappings` row.
+ *
+ * These users' deployments are invisible to the deployer-filtered views
+ * (/my-teams, Slack Home Tab) because the filter only matches known members.
+ *
+ * Excludes bot accounts (usernames ending with `[bot]`).
+ */
+export async function getUnmappedDeployers(naisTeamSlugs: string[], directAppIds?: number[]): Promise<string[]> {
+  const ids = directAppIds ?? []
+  const result = await pool.query<{ username: string }>(
+    `WITH team_deployers AS (
+       SELECT DISTINCT username FROM (
+         SELECT LOWER(d.deployer_username) AS username
+         FROM deployments d
+         JOIN monitored_applications ma ON d.monitored_app_id = ma.id
+         WHERE ma.is_active = true
+           AND (ma.team_slug = ANY($1::text[]) OR ma.id = ANY($2::int[]))
+           AND d.deployer_username IS NOT NULL
+           AND d.created_at >= make_date(EXTRACT(YEAR FROM NOW())::int, 1, 1)
+         UNION
+         SELECT LOWER(d.github_pr_data->'creator'->>'username') AS username
+         FROM deployments d
+         JOIN monitored_applications ma ON d.monitored_app_id = ma.id
+         WHERE ma.is_active = true
+           AND (ma.team_slug = ANY($1::text[]) OR ma.id = ANY($2::int[]))
+           AND d.github_pr_data->'creator'->>'username' IS NOT NULL
+           AND d.created_at >= make_date(EXTRACT(YEAR FROM NOW())::int, 1, 1)
+       ) all_deployers
+       WHERE username NOT LIKE '%[bot]'
+         AND username != ''
+     )
+     SELECT td.username
+     FROM team_deployers td
+     WHERE NOT EXISTS (
+       SELECT 1 FROM user_mappings um
+       WHERE LOWER(um.github_username) = td.username
+         AND um.deleted_at IS NULL
+     )
+     ORDER BY td.username`,
+    [naisTeamSlugs, ids],
+  )
+  return result.rows.map((r) => r.username)
+}
+
+/**
  * Get apps with issues filtered to a dev team's scope.
  *
  * The scope is the **union** of `nais_team_slugs` (apps owned by the team via

@@ -11,6 +11,7 @@ import { getBoardObjectiveProgress, getDevTeamSummaryStats } from '~/db/dashboar
 import {
   getDevTeamAppsWithIssues,
   getPersonalDeploymentsMissingGoalLinks,
+  getUnmappedDeployers,
   resolveDevTeamScope,
 } from '~/db/deployments/home.server'
 import { getUserDevTeams } from '~/db/user-dev-team-preference.server'
@@ -52,6 +53,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       issueApps: [] as AppCardData[],
       boardSummaries: [] as BoardSummary[],
       noTeamMembersMapped: false,
+      unmappedDeployers: [] as string[],
       personalMissingGoalLinks,
       navIdent: identity.navIdent,
       githubUsername,
@@ -63,10 +65,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   const scope = await resolveDevTeamScope(selectedDevTeams)
   const ytdStart = new Date(new Date().getFullYear(), 0, 1)
 
-  // Fetch stats, issue apps, and boards in parallel
-  const [teamStats, issueApps, alertCounts, activeReposByApp, ...boardsByTeam] = await Promise.all([
+  // Fetch stats, issue apps, unmapped deployers, and boards in parallel
+  const [teamStats, issueApps, unmappedDeployers, alertCounts, activeReposByApp, ...boardsByTeam] = await Promise.all([
     getDevTeamSummaryStats(scope.naisTeamSlugs, scope.directAppIds, ytdStart, scope.deployerUsernames),
     getDevTeamAppsWithIssues(scope.naisTeamSlugs, scope.directAppIds, scope.deployerUsernames),
+    getUnmappedDeployers(scope.naisTeamSlugs, scope.directAppIds),
     getAllAlertCounts(),
     getAllActiveRepositories(),
     ...selectedDevTeams.map((t) => getBoardsByDevTeam(t.id)),
@@ -160,6 +163,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     issueApps: issueAppCards,
     boardSummaries,
     noTeamMembersMapped: scope.noMembersMapped,
+    unmappedDeployers,
     personalMissingGoalLinks,
     navIdent: identity.navIdent,
     githubUsername,
@@ -291,6 +295,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     issueApps,
     boardSummaries,
     noTeamMembersMapped,
+    unmappedDeployers,
     personalMissingGoalLinks,
     navIdent,
     githubUsername,
@@ -330,6 +335,26 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             <Alert variant="info">
               Ingen av medlemmene i dine team er koblet til en GitHub-bruker, så tallene under er 0. Be teammedlemmene
               registrere GitHub-brukernavn under <Link to="/users">Brukermapping</Link> så blir tallene riktige.
+            </Alert>
+          )}
+          {unmappedDeployers.length > 0 && (
+            <Alert variant="warning">
+              <VStack gap="space-8">
+                <BodyShort>
+                  {unmappedDeployers.length === 1
+                    ? '1 person som har deployet eller opprettet PR-er i år mangler brukermapping.'
+                    : `${unmappedDeployers.length} personer som har deployet eller opprettet PR-er i år mangler brukermapping.`}{' '}
+                  Deres deployments telles ikke med i oversikten under.
+                </BodyShort>
+                <BodyShort size="small" textColor="subtle">
+                  Umappede brukernavn: {unmappedDeployers.join(', ')}
+                </BodyShort>
+                <div>
+                  <Button as={Link} to="/users" size="small" variant="secondary">
+                    Gå til brukermapping
+                  </Button>
+                </div>
+              </VStack>
             </Alert>
           )}
           {/* Summary cards */}
