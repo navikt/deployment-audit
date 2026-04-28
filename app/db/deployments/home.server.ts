@@ -84,14 +84,16 @@ export async function getUnmappedDeployers(naisTeamSlugs: string[], directAppIds
        ) all_deployers
        WHERE username NOT LIKE '%[bot]'
          AND username != ''
+     ),
+     mapped_usernames AS (
+       SELECT DISTINCT LOWER(um.github_username) AS username
+       FROM user_mappings um
+       WHERE um.deleted_at IS NULL
      )
      SELECT td.username
      FROM team_deployers td
-     WHERE NOT EXISTS (
-       SELECT 1 FROM user_mappings um
-       WHERE LOWER(um.github_username) = td.username
-         AND um.deleted_at IS NULL
-     )
+     LEFT JOIN mapped_usernames mu ON mu.username = td.username
+     WHERE mu.username IS NULL
      ORDER BY td.username`,
     [naisTeamSlugs, ids],
   )

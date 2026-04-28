@@ -349,7 +349,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                   Deres deployments telles ikke med i de personfiltrerte tallene under.
                 </BodyShort>
                 <BodyShort size="small" textColor="subtle">
-                  Umappede brukernavn: {unmappedDeployers.join(', ')}
+                  Umappede brukernavn: {unmappedDeployers.slice(0, 10).join(', ')}
+                  {unmappedDeployers.length > 10 && ` og ${unmappedDeployers.length - 10} til`}
                 </BodyShort>
                 <div>
                   <Button as={Link} to="/users" size="small" variant="secondary">
