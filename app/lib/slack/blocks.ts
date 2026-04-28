@@ -83,6 +83,7 @@ export interface PersonalHomeTabTeamIssues {
   withoutFourEyes: number
   pendingVerification: number
   alertCount: number
+  missingGoalLinks: number
 }
 
 export interface HomeTabInput {
@@ -499,7 +500,7 @@ export function buildHomeTabBlocks({
     }
   }
 
-  // --- Team-scoped issue summary (godkjenning + alerts). ---
+  // --- Team-scoped issue summary (godkjenning + alerts + endringsopphav). ---
   const teamIssueLines: string[] = []
   if (teamIssues.withoutFourEyes > 0) {
     teamIssueLines.push(`• ⚠️ ${teamIssues.withoutFourEyes} deployments uten godkjenning`)
@@ -509,6 +510,9 @@ export function buildHomeTabBlocks({
   }
   if (teamIssues.alertCount > 0) {
     teamIssueLines.push(`• 🚨 ${teamIssues.alertCount} åpne varsler`)
+  }
+  if (teamIssues.missingGoalLinks > 0) {
+    teamIssueLines.push(`• 🔗 ${teamIssues.missingGoalLinks} deployments uten endringsopphav`)
   }
 
   if (teamIssueLines.length > 0) {
@@ -537,7 +541,7 @@ export function buildHomeTabBlocks({
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: '*✅ Ingen åpne godkjennings- eller varselmangler i mine team*',
+        text: '*✅ Ingen åpne mangler i mine team*',
       },
     })
   }

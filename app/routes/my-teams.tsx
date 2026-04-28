@@ -8,9 +8,12 @@ import { getGroupNamesByIds } from '~/db/application-groups.server'
 import { getAllActiveRepositories } from '~/db/application-repositories.server'
 import { getBoardsByDevTeam } from '~/db/boards.server'
 import { getBoardObjectiveProgress, getDevTeamSummaryStats } from '~/db/dashboard-stats.server'
-import { getDevTeamAppsWithIssues, getPersonalDeploymentsMissingGoalLinks } from '~/db/deployments/home.server'
-import { getDevTeamApplications, getGroupAppIdsForDevTeams } from '~/db/dev-teams.server'
-import { getMembersGithubUsernamesForDevTeams, getUserDevTeams } from '~/db/user-dev-team-preference.server'
+import {
+  getDevTeamAppsWithIssues,
+  getPersonalDeploymentsMissingGoalLinks,
+  resolveDevTeamScope,
+} from '~/db/deployments/home.server'
+import { getUserDevTeams } from '~/db/user-dev-team-preference.server'
 import { getUserMappingByNavIdent } from '~/db/user-mappings.server'
 import { groupAppCards } from '~/lib/group-app-cards'
 import { getAppDeploymentStatsBatch } from '../db/deployments.server'
@@ -55,37 +58,15 @@ export async function loader({ request }: Route.LoaderArgs) {
     }
   }
 
-  // Combine nais_team_slugs and direct app IDs from all selected teams
-  const allNaisTeamSlugs = [...new Set(selectedDevTeams.flatMap((t) => t.nais_team_slugs))]
-  const devTeamIds = selectedDevTeams.map((t) => t.id)
-  const [directAppsResults, groupAppIds] = await Promise.all([
-    Promise.all(selectedDevTeams.map((t) => getDevTeamApplications(t.id))),
-    getGroupAppIdsForDevTeams(devTeamIds),
-  ])
-  const allDirectAppIds = [...new Set([...directAppsResults.flat().map((a) => a.monitored_app_id), ...groupAppIds])]
-  const directAppIds = allDirectAppIds.length > 0 ? allDirectAppIds : undefined
+  // Resolve scope (nais slugs, app IDs, deployer filter) — shared with Slack
+  // home tab so that both views show consistent numbers.
+  const scope = await resolveDevTeamScope(selectedDevTeams)
   const ytdStart = new Date(new Date().getFullYear(), 0, 1)
-
-  // Resolve the GitHub-username filter for "person-scope" semantics: every
-  // count on this page (summary cards, issue-app inclusion, AppCard badges)
-  // is restricted to deployments where the deployer or PR creator is a
-  // member of one of the user's selected dev teams. This matches what the
-  // deployment-list links from this page show (they preset team=mine), so
-  // badges/counts here agree with the list the user lands on.
-  let deployerUsernamesFilter: string[] | undefined
-  try {
-    deployerUsernamesFilter = await getMembersGithubUsernamesForDevTeams(selectedDevTeams.map((t) => t.id))
-  } catch {
-    // user_dev_team_preference / user_mappings may not be reachable; fall
-    // back to no filter rather than blanking out the page.
-    deployerUsernamesFilter = undefined
-  }
-  const noTeamMembersMapped = deployerUsernamesFilter !== undefined && deployerUsernamesFilter.length === 0
 
   // Fetch stats, issue apps, and boards in parallel
   const [teamStats, issueApps, alertCounts, activeReposByApp, ...boardsByTeam] = await Promise.all([
-    getDevTeamSummaryStats(allNaisTeamSlugs, directAppIds, ytdStart, deployerUsernamesFilter),
-    getDevTeamAppsWithIssues(allNaisTeamSlugs, directAppIds, deployerUsernamesFilter),
+    getDevTeamSummaryStats(scope.naisTeamSlugs, scope.directAppIds, ytdStart, scope.deployerUsernames),
+    getDevTeamAppsWithIssues(scope.naisTeamSlugs, scope.directAppIds, scope.deployerUsernames),
     getAllAlertCounts(),
     getAllActiveRepositories(),
     ...selectedDevTeams.map((t) => getBoardsByDevTeam(t.id)),
@@ -103,7 +84,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     matchingApps.length > 0
       ? await getAppDeploymentStatsBatch(
           matchingApps.map((a) => ({ id: a.id, audit_start_year: a.audit_start_year })),
-          deployerUsernamesFilter,
+          scope.deployerUsernames,
         )
       : new Map()
 
@@ -178,7 +159,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     teamStats,
     issueApps: issueAppCards,
     boardSummaries,
-    noTeamMembersMapped,
+    noTeamMembersMapped: scope.noMembersMapped,
     personalMissingGoalLinks,
     navIdent: identity.navIdent,
     githubUsername,

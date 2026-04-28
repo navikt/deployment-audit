@@ -1,7 +1,56 @@
 import { NOT_APPROVED_STATUSES, PENDING_STATUSES } from '~/lib/four-eyes-status'
 import { pool } from '../connection.server'
 import type { AppWithIssues, DeploymentWithApp } from '../deployments.server'
+import { getDevTeamApplications, getGroupAppIdsForDevTeams } from '../dev-teams.server'
 import { lowerUsernames, userDeploymentMatchAnySql, userDeploymentMatchSql } from '../user-deployment-match'
+import { getMembersGithubUsernamesForDevTeams } from '../user-dev-team-preference.server'
+
+// ---------------------------------------------------------------------------
+// Shared dev-team scope resolution
+// ---------------------------------------------------------------------------
+
+interface DevTeamScope {
+  naisTeamSlugs: string[]
+  directAppIds: number[] | undefined
+  deployerUsernames: string[] | undefined
+  noMembersMapped: boolean
+}
+
+/**
+ * Resolve the full query scope for a set of dev teams.
+ *
+ * Combines:
+ * - Nais team slugs (deduped)
+ * - Direct app IDs + application-group app IDs (merged, deduped)
+ * - Deployer usernames (person-scope filter)
+ *
+ * Both the `/my-teams` page and the Slack Home Tab call this so that they
+ * operate on the same scope and produce consistent numbers.
+ */
+export async function resolveDevTeamScope(
+  devTeams: { id: number; nais_team_slugs: string[] }[],
+): Promise<DevTeamScope> {
+  const naisTeamSlugs = [...new Set(devTeams.flatMap((t) => t.nais_team_slugs))]
+  const devTeamIds = devTeams.map((t) => t.id)
+
+  const [directAppsResults, groupAppIds] = await Promise.all([
+    Promise.all(devTeams.map((t) => getDevTeamApplications(t.id))),
+    getGroupAppIdsForDevTeams(devTeamIds),
+  ])
+  const allDirectAppIds = [...new Set([...directAppsResults.flat().map((a) => a.monitored_app_id), ...groupAppIds])]
+  const directAppIds = allDirectAppIds.length > 0 ? allDirectAppIds : undefined
+
+  let deployerUsernames: string[] | undefined
+  try {
+    deployerUsernames = await getMembersGithubUsernamesForDevTeams(devTeamIds)
+  } catch {
+    deployerUsernames = undefined
+  }
+
+  const noMembersMapped = deployerUsernames !== undefined && deployerUsernames.length === 0
+
+  return { naisTeamSlugs, directAppIds, deployerUsernames, noMembersMapped }
+}
 
 /**
  * Get apps with issues filtered to a dev team's scope.
@@ -18,8 +67,10 @@ import { lowerUsernames, userDeploymentMatchAnySql, userDeploymentMatchSql } fro
  * track Dependabot/CodeQL events which aren't tied to a deployer). When the
  * filter is provided as an empty array the deployment counts are 0 — callers
  * should surface a hint to the user that no team members are GitHub-mapped.
- * When the parameter is `undefined` no deployer filter is applied (callers
- * that want app-scope semantics, e.g. the Slack home tab, omit it).
+ * When the parameter is `undefined` no deployer filter is applied.
+ *
+ * Both `/my-teams` and the Slack Home Tab use {@link resolveDevTeamScope} to
+ * obtain the same `deployerUsernames` filter so that their numbers agree.
  */
 export async function getDevTeamAppsWithIssues(
   naisTeamSlugs: string[],

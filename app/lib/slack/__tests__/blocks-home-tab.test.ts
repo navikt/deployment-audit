@@ -13,6 +13,15 @@ describe('buildHomeTabBlocks (personalized)', () => {
     expect(text).toContain('endringsopphav')
   })
 
+  it('shows team-scoped issue breakdown including missing goal links', () => {
+    const blocks = buildHomeTabBlocks(homeTabFixtures.withIssues)
+    const text = JSON.stringify(blocks)
+    expect(text).toContain('3 applikasjoner som trenger oppfølging')
+    expect(text).toContain('15 deployments uten godkjenning')
+    expect(text).toContain('3 deployments venter verifisering')
+    expect(text).toContain('8 deployments uten endringsopphav')
+  })
+
   it('shows "ingen mangler" when there are no issues', () => {
     const blocks = buildHomeTabBlocks(homeTabFixtures.noIssues)
     const text = JSON.stringify(blocks)
