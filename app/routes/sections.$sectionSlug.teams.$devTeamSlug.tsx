@@ -581,10 +581,23 @@ function ActiveBoardSection({
                 {formatBoardLabel({ teamName, periodLabel: board.period_label })}
               </Link>
             </Heading>
-            <HStack gap="space-8">
+            <HStack gap="space-8" align="center">
               <Tag variant="success" size="xsmall">
                 Aktiv
               </Tag>
+              <Detail textColor="subtle">
+                {new Date(board.period_start).toLocaleDateString('nb-NO', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                })}
+                {' – '}
+                {new Date(board.period_end).toLocaleDateString('nb-NO', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                })}
+              </Detail>
             </HStack>
           </VStack>
           <Button as={Link} to={`${teamBasePath}/${board.id}`} variant="tertiary" size="small">
