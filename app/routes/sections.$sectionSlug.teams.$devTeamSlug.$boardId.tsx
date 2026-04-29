@@ -1,4 +1,4 @@
-import { MinusCircleIcon, PlusCircleIcon, PlusIcon, TrashIcon } from '@navikt/aksel-icons'
+import { MinusCircleIcon, PencilIcon, PlusCircleIcon, PlusIcon, TrashIcon } from '@navikt/aksel-icons'
 import {
   Alert,
   BodyShort,
@@ -29,6 +29,7 @@ import {
   type ObjectiveWithKeyResults,
   reactivateKeyResult,
   reactivateObjective,
+  updateBoardDates,
   updateKeyResult,
   updateKeyResultKeywords,
   updateObjective,
@@ -153,6 +154,14 @@ export async function action({ request, params }: Route.ActionArgs) {
         await updateKeyResultKeywords(id, keywords)
         return { success: true }
       }
+      case 'update-dates': {
+        const periodStart = (formData.get('period_start') as string)?.trim()
+        const periodEnd = (formData.get('period_end') as string)?.trim()
+        if (!periodStart || !periodEnd) return { error: 'Begge datoer er påkrevd.' }
+        if (periodStart > periodEnd) return { error: 'Startdato kan ikke være etter sluttdato.' }
+        await updateBoardDates(Number(params.boardId), periodStart, periodEnd)
+        return { success: true }
+      }
       default:
         return { error: 'Ukjent handling.' }
     }
@@ -164,6 +173,10 @@ export async function action({ request, params }: Route.ActionArgs) {
 export default function BoardDetail() {
   const { devTeam, board } = useLoaderData<typeof loader>()
   const [showAddObjective, setShowAddObjective] = useState(false)
+  const [editingDates, setEditingDates] = useState(false)
+
+  const periodStartDate = board.period_start.split('T')[0]
+  const periodEndDate = board.period_end.split('T')[0]
 
   return (
     <VStack gap="space-24">
@@ -171,26 +184,43 @@ export default function BoardDetail() {
         <Heading level="1" size="large" spacing>
           {formatBoardLabel({ teamName: devTeam.name, periodLabel: board.period_label })}
         </Heading>
-        <HStack gap="space-8">
+        <HStack gap="space-8" align="center">
           <Tag variant="neutral" size="small">
             {board.period_type === 'tertiary' ? 'Tertial' : 'Kvartal'}
           </Tag>
           <Tag variant={board.is_active ? 'success' : 'neutral'} size="small">
             {board.is_active ? 'Aktiv' : 'Avsluttet'}
           </Tag>
-          <Detail textColor="subtle">
-            {new Date(board.period_start).toLocaleDateString('nb-NO', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            })}
-            {' – '}
-            {new Date(board.period_end).toLocaleDateString('nb-NO', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            })}
-          </Detail>
+          {!editingDates ? (
+            <>
+              <Detail textColor="subtle">
+                {new Date(board.period_start).toLocaleDateString('nb-NO', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                })}
+                {' – '}
+                {new Date(board.period_end).toLocaleDateString('nb-NO', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                })}
+              </Detail>
+              <Button
+                variant="tertiary"
+                size="xsmall"
+                icon={<PencilIcon aria-hidden />}
+                onClick={() => setEditingDates(true)}
+                aria-label="Endre periodestart og -slutt"
+              />
+            </>
+          ) : (
+            <EditDatesForm
+              periodStart={periodStartDate}
+              periodEnd={periodEndDate}
+              onCancel={() => setEditingDates(false)}
+            />
+          )}
         </HStack>
       </div>
 
@@ -629,5 +659,68 @@ function KeywordEditor({
         </HStack>
       )}
     </VStack>
+  )
+}
+
+function EditDatesForm({
+  periodStart,
+  periodEnd,
+  onCancel,
+}: {
+  periodStart: string
+  periodEnd: string
+  onCancel: () => void
+}) {
+  const [start, setStart] = useState(periodStart)
+  const [end, setEnd] = useState(periodEnd)
+  const submit = useSubmit()
+
+  return (
+    <Form
+      method="post"
+      onSubmit={(e) => {
+        e.preventDefault()
+        submit(e.currentTarget)
+        onCancel()
+      }}
+    >
+      <input type="hidden" name="intent" value="update-dates" />
+      <HStack gap="space-8" align="end">
+        <VStack gap="space-4">
+          <Detail as="label" htmlFor="edit-period-start">
+            Fra
+          </Detail>
+          <input
+            id="edit-period-start"
+            type="date"
+            name="period_start"
+            value={start}
+            onChange={(e) => setStart(e.target.value)}
+            className="navds-text-field__input navds-body-short navds-body-short--small"
+            style={{ width: '155px', padding: '0.25rem 0.5rem' }}
+          />
+        </VStack>
+        <VStack gap="space-4">
+          <Detail as="label" htmlFor="edit-period-end">
+            Til
+          </Detail>
+          <input
+            id="edit-period-end"
+            type="date"
+            name="period_end"
+            value={end}
+            onChange={(e) => setEnd(e.target.value)}
+            className="navds-text-field__input navds-body-short navds-body-short--small"
+            style={{ width: '155px', padding: '0.25rem 0.5rem' }}
+          />
+        </VStack>
+        <Button type="submit" size="small">
+          Lagre
+        </Button>
+        <Button variant="tertiary" size="small" onClick={onCancel}>
+          Avbryt
+        </Button>
+      </HStack>
+    </Form>
   )
 }
