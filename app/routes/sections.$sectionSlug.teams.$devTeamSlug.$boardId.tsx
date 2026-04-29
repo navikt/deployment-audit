@@ -178,6 +178,19 @@ export default function BoardDetail() {
           <Tag variant={board.is_active ? 'success' : 'neutral'} size="small">
             {board.is_active ? 'Aktiv' : 'Avsluttet'}
           </Tag>
+          <Detail textColor="subtle">
+            {new Date(board.period_start).toLocaleDateString('nb-NO', {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+            })}
+            {' – '}
+            {new Date(board.period_end).toLocaleDateString('nb-NO', {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+            })}
+          </Detail>
         </HStack>
       </div>
 
