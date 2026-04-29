@@ -114,21 +114,23 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     // If the slug doesn't match an owning team, silently ignore (treat as "Alle")
   }
 
+  const isUnmappedFilter = deployer === '__unmapped__'
+
   const filters: DeploymentFilters = {
     ...(showGroup && hasGroup
-      ? { monitored_app_ids: [app.id, ...siblings.map((s) => s.id)] }
-      : { monitored_app_id: app.id }),
+      ? { monitored_app_ids: [app.id, ...siblings.map((s) => s.id)], per_app_audit_start_year: true }
+      : { monitored_app_id: app.id, audit_start_year: app.audit_start_year }),
     page,
     per_page: 20,
     four_eyes_status: status,
     method: method && ['pr', 'direct_push', 'legacy'].includes(method) ? method : undefined,
     goal_filter: goal && ['missing', 'linked'].includes(goal) ? goal : undefined,
-    deployer_username: deployer,
+    deployer_username: isUnmappedFilter ? undefined : deployer,
+    unmapped_deployers: isUnmappedFilter || undefined,
     deployer_usernames: deployerUsernamesFilter,
     commit_sha: sha,
     start_date: range?.startDate,
     end_date: range?.endDate,
-    audit_start_year: app.audit_start_year,
   }
 
   const result = await getDeploymentsPaginated(filters)
@@ -161,11 +163,18 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   // Get display names for deployers (current page + all distinct deployers for filter)
   const deployerUsernames = [...new Set(result.deployments.map((d) => d.deployer_username).filter(Boolean))] as string[]
 
+  // Deployer dropdown: only deployers within the audit window (and group if active)
+  const appIds = showGroup && hasGroup ? [app.id, ...siblings.map((s) => s.id)] : [app.id]
   const allDeployersResult = await pool.query(
-    `SELECT DISTINCT deployer_username FROM deployments
-     WHERE monitored_app_id = $1 AND deployer_username IS NOT NULL
-     ORDER BY deployer_username`,
-    [app.id],
+    `SELECT DISTINCT d.deployer_username
+     FROM deployments d
+     INNER JOIN monitored_applications ma ON d.monitored_app_id = ma.id
+     WHERE d.monitored_app_id = ANY($1)
+       AND d.deployer_username IS NOT NULL
+       AND d.deployer_username != ''
+       AND (ma.audit_start_year IS NULL OR d.created_at >= make_date(ma.audit_start_year, 1, 1))
+     ORDER BY d.deployer_username`,
+    [appIds],
   )
   const allDeployers = allDeployersResult.rows.map((r) => r.deployer_username as string)
 
@@ -178,6 +187,12 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     return { value: username, label: mapping?.display_name || username }
   })
   deployerOptions.sort((a, b) => a.label.localeCompare(b.label, 'no'))
+
+  // Check if any deployer in the audit window lacks an active mapping
+  const hasUnmappedDeployers = allDeployers.some((u) => {
+    const m = userMappings.get(u)
+    return !m || m.deleted_at !== null
+  })
 
   // Find current user's GitHub username for "Meg" shortcut
   let currentUserGithub: string | null = null
@@ -210,6 +225,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     errorReasons,
     teamOptions,
     teamFilterEmptyReason,
+    hasUnmappedDeployers,
     ...result,
   }
 }
@@ -231,6 +247,7 @@ export default function AppDeployments() {
     errorReasons,
     teamOptions,
     teamFilterEmptyReason,
+    hasUnmappedDeployers,
   } = useLoaderData<typeof loader>()
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -356,6 +373,9 @@ export default function AppDeployments() {
               >
                 <option value="">Alle</option>
                 {currentUserGithub && <option value={currentUserGithub}>Meg</option>}
+                {(hasUnmappedDeployers || currentDeployer === '__unmapped__') && (
+                  <option value="__unmapped__">Manglende mapping</option>
+                )}
                 {deployerOptions
                   .filter((opt) => opt.value !== currentUserGithub)
                   .map((opt) => (

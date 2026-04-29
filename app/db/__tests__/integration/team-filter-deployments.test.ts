@@ -170,3 +170,78 @@ describe('getDeploymentsPaginated with deployer_usernames filter', () => {
     expect(conflict.total).toBe(0)
   })
 })
+
+describe('unmapped_deployers filter', () => {
+  it('returns only deployments where deployer has no active user_mapping', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'team', appName: 'app', environment: 'prod' })
+
+    // mapped deployer
+    await seedUser('A111111', 'mapped-user')
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team',
+      environment: 'prod',
+      deployerUsername: 'mapped-user',
+    })
+
+    // unmapped deployer
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team',
+      environment: 'prod',
+      deployerUsername: 'unmapped-user',
+    })
+
+    const result = await getDeploymentsPaginated({
+      monitored_app_id: appId,
+      unmapped_deployers: true,
+    })
+    expect(result.total).toBe(1)
+    expect(result.deployments[0].deployer_username).toBe('unmapped-user')
+  })
+
+  it('treats soft-deleted mapping as unmapped', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'team', appName: 'app', environment: 'prod' })
+
+    await seedUser('B222222', 'soft-deleted-user')
+    await pool.query("UPDATE user_mappings SET deleted_at = NOW() WHERE github_username = 'soft-deleted-user'")
+
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team',
+      environment: 'prod',
+      deployerUsername: 'soft-deleted-user',
+    })
+
+    const result = await getDeploymentsPaginated({
+      monitored_app_id: appId,
+      unmapped_deployers: true,
+    })
+    expect(result.total).toBe(1)
+    expect(result.deployments[0].deployer_username).toBe('soft-deleted-user')
+  })
+
+  it('excludes deployments with null/empty deployer_username', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'team', appName: 'app', environment: 'prod' })
+
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team',
+      environment: 'prod',
+      deployerUsername: null,
+    })
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team',
+      environment: 'prod',
+      deployerUsername: 'unmapped-deployer',
+    })
+
+    const result = await getDeploymentsPaginated({
+      monitored_app_id: appId,
+      unmapped_deployers: true,
+    })
+    expect(result.total).toBe(1)
+    expect(result.deployments[0].deployer_username).toBe('unmapped-deployer')
+  })
+})

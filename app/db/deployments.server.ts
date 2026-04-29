@@ -214,12 +214,20 @@ export interface DeploymentFilters {
    * (selected team has no GitHub-mapped members).
    */
   deployer_usernames?: string[]
+  /** Show only deployments where the deployer has no active user_mapping. */
+  unmapped_deployers?: boolean
   commit_sha?: string
   method?: 'pr' | 'direct_push' | 'legacy'
   goal_filter?: 'missing' | 'linked'
   page?: number
   per_page?: number
   audit_start_year?: number | null
+  /**
+   * Apply audit_start_year per-row from `monitored_applications.audit_start_year`.
+   * Use for group views where sibling apps may have different audit years.
+   * Takes precedence over `audit_start_year`.
+   */
+  per_app_audit_start_year?: boolean
 }
 
 interface PaginatedDeployments {
@@ -264,9 +272,11 @@ export async function getDeploymentsPaginated(filters?: DeploymentFilters): Prom
     paramIndex++
   }
 
-  // Filter by audit start year
-  if (filters?.audit_start_year) {
-    whereSql += ` AND EXTRACT(YEAR FROM d.created_at) >= $${paramIndex}`
+  // Filter by audit start year — per-row (group view) or single value
+  if (filters?.per_app_audit_start_year) {
+    whereSql += ` AND (ma.audit_start_year IS NULL OR d.created_at >= make_date(ma.audit_start_year, 1, 1))`
+  } else if (filters?.audit_start_year) {
+    whereSql += ` AND d.created_at >= make_date($${paramIndex}, 1, 1)`
     params.push(filters.audit_start_year)
     paramIndex++
   }
@@ -321,6 +331,14 @@ export async function getDeploymentsPaginated(filters?: DeploymentFilters): Prom
       params.push(lowerUsernames(filters.deployer_usernames))
       paramIndex++
     }
+  }
+
+  if (filters?.unmapped_deployers) {
+    whereSql += ` AND d.deployer_username IS NOT NULL AND d.deployer_username != ''
+      AND NOT EXISTS (
+        SELECT 1 FROM user_mappings um
+        WHERE LOWER(um.github_username) = LOWER(d.deployer_username) AND um.deleted_at IS NULL
+      )`
   }
 
   if (filters?.commit_sha) {
