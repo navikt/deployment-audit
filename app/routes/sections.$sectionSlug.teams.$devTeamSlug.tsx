@@ -1,4 +1,4 @@
-import { BarChartIcon, ClockIcon, PlusIcon } from '@navikt/aksel-icons'
+import { BarChartIcon, ClockIcon, CogIcon, PlusIcon } from '@navikt/aksel-icons'
 import {
   Alert,
   BodyShort,
@@ -415,6 +415,17 @@ export default function DevTeamPage() {
               icon={<ClockIcon aria-hidden />}
             >
               Tidligere tavler ({inactiveBoards.length})
+            </Button>
+          )}
+          {isAdmin && (
+            <Button
+              as={Link}
+              to={`${teamBasePath}/admin`}
+              variant="tertiary"
+              size="small"
+              icon={<CogIcon aria-hidden />}
+            >
+              Administrer
             </Button>
           )}
         </HStack>

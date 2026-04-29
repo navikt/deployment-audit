@@ -12,7 +12,7 @@
 import { Pool } from 'pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { getSectionDashboardStats, getSectionOverallStats } from '../../dashboard-stats.server'
-import { setDevTeamNaisTeams } from '../../dev-teams.server'
+import { removeNaisTeamFromDevTeam, setDevTeamNaisTeams } from '../../dev-teams.server'
 import { getSectionWithTeams, setSectionTeams } from '../../sections.server'
 import { seedApp, seedDeployment, seedDevTeam, seedSection, truncateAllTables } from './helpers'
 
@@ -254,5 +254,52 @@ describe('dev_team_nais_teams soft delete', () => {
     const after = await getSectionDashboardStats(sectionId)
     const afterRow = after.find((r) => r.dev_team_id === devTeamId)
     expect(afterRow?.total_deployments).toBe(0)
+  })
+})
+
+describe('removeNaisTeamFromDevTeam', () => {
+  it('soft-deletes a single nais-team link and records deleted_by', async () => {
+    const sectionId = await seedSection(pool, 'sec', 'Sec')
+    const devTeamId = await seedDevTeam(pool, 'dt', 'DT', sectionId)
+
+    await setDevTeamNaisTeams(devTeamId, ['nais-a', 'nais-b'], 'A111111')
+    await removeNaisTeamFromDevTeam(devTeamId, 'nais-b', 'A999999')
+
+    const { rows } = await pool.query(
+      `SELECT nais_team_slug, deleted_at, deleted_by FROM dev_team_nais_teams
+       WHERE dev_team_id = $1 ORDER BY nais_team_slug`,
+      [devTeamId],
+    )
+    expect(rows).toHaveLength(2)
+    const bySlug = new Map(rows.map((r) => [r.nais_team_slug, r]))
+    expect(bySlug.get('nais-a').deleted_at).toBeNull()
+    expect(bySlug.get('nais-b').deleted_at).not.toBeNull()
+    expect(bySlug.get('nais-b').deleted_by).toBe('A999999')
+  })
+
+  it('is a no-op when called on an already-deleted link', async () => {
+    const sectionId = await seedSection(pool, 'sec', 'Sec')
+    const devTeamId = await seedDevTeam(pool, 'dt', 'DT', sectionId)
+
+    await setDevTeamNaisTeams(devTeamId, ['nais-a'], 'A111111')
+    await removeNaisTeamFromDevTeam(devTeamId, 'nais-a', 'A222222')
+
+    const { rows: before } = await pool.query(
+      `SELECT deleted_at, deleted_by FROM dev_team_nais_teams
+       WHERE dev_team_id = $1 AND nais_team_slug = 'nais-a'`,
+      [devTeamId],
+    )
+    expect(before[0].deleted_by).toBe('A222222')
+
+    // Second call should be a no-op
+    await removeNaisTeamFromDevTeam(devTeamId, 'nais-a', 'A333333')
+
+    const { rows: after } = await pool.query(
+      `SELECT deleted_at, deleted_by FROM dev_team_nais_teams
+       WHERE dev_team_id = $1 AND nais_team_slug = 'nais-a'`,
+      [devTeamId],
+    )
+    // deleted_by should still be original remover, not updated
+    expect(after[0].deleted_by).toBe('A222222')
   })
 })

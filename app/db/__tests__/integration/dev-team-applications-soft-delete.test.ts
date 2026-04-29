@@ -12,6 +12,7 @@ import {
   getAvailableAppsForDevTeam,
   getDevTeamApplications,
   getDevTeamsForApp,
+  removeAppFromDevTeam,
   setDevTeamApplications,
 } from '../../dev-teams.server'
 import { seedApp, seedDevTeam, seedSection, truncateAllTables } from './helpers'
@@ -237,5 +238,63 @@ describe('dev_team_applications soft delete', () => {
     // Exactly one of the two "replace all" calls won — never both, never neither.
     expect(active).toHaveLength(1)
     expect([app1, app2]).toContain(active[0].monitored_app_id)
+  })
+})
+
+describe('removeAppFromDevTeam', () => {
+  it('soft-deletes a single link with correct deleted_by', async () => {
+    const { teamId, app1, app2 } = await setup()
+
+    await setDevTeamApplications(teamId, [app1, app2], 'A111111')
+    await removeAppFromDevTeam(teamId, app2, 'A999999')
+
+    const active = await getDevTeamApplications(teamId)
+    expect(active.map((a) => a.monitored_app_id)).toEqual([app1])
+
+    const { rows } = await pool.query(
+      `SELECT monitored_app_id, deleted_at, deleted_by
+       FROM dev_team_applications
+       WHERE dev_team_id = $1 ORDER BY monitored_app_id`,
+      [teamId],
+    )
+    expect(rows).toHaveLength(2)
+    const byApp = new Map(rows.map((r) => [r.monitored_app_id, r]))
+    expect(byApp.get(app1).deleted_at).toBeNull()
+    expect(byApp.get(app2).deleted_at).not.toBeNull()
+    expect(byApp.get(app2).deleted_by).toBe('A999999')
+  })
+
+  it('is a no-op when called on an already-deleted link', async () => {
+    const { teamId, app1 } = await setup()
+
+    await setDevTeamApplications(teamId, [app1], 'A111111')
+    await removeAppFromDevTeam(teamId, app1, 'A222222')
+
+    const { rows: before } = await pool.query(
+      `SELECT deleted_by FROM dev_team_applications
+       WHERE dev_team_id = $1 AND monitored_app_id = $2`,
+      [teamId, app1],
+    )
+    expect(before[0].deleted_by).toBe('A222222')
+
+    // Second call should be a no-op (deleted_by unchanged)
+    await removeAppFromDevTeam(teamId, app1, 'A333333')
+
+    const { rows: after } = await pool.query(
+      `SELECT deleted_by FROM dev_team_applications
+       WHERE dev_team_id = $1 AND monitored_app_id = $2`,
+      [teamId, app1],
+    )
+    expect(after[0].deleted_by).toBe('A222222')
+  })
+
+  it('does not affect other links on the same team', async () => {
+    const { teamId, app1, app2 } = await setup()
+
+    await setDevTeamApplications(teamId, [app1, app2], 'A111111')
+    await removeAppFromDevTeam(teamId, app1, 'A999999')
+
+    const active = await getDevTeamApplications(teamId)
+    expect(active.map((a) => a.monitored_app_id)).toEqual([app2])
   })
 })
