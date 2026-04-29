@@ -347,6 +347,15 @@ async function _updateBoard(id: number, data: { title?: string; is_active?: bool
   return result.rows[0] ?? null
 }
 
+export async function updateBoardDates(id: number, periodStart: string, periodEnd: string): Promise<Board | null> {
+  const result = await pool.query('UPDATE boards SET period_start = $1, period_end = $2 WHERE id = $3 RETURNING *', [
+    periodStart,
+    periodEnd,
+    id,
+  ])
+  return result.rows[0] ?? null
+}
+
 // --- Objective queries ---
 
 export async function createObjective(boardId: number, title: string, description?: string): Promise<BoardObjective> {
