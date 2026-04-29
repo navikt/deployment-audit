@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatBoardLabel, getCurrentPeriod, getPeriodsForYear } from '../board-periods'
+import { formatBoardLabel, getCurrentPeriod, getPeriodsForYear, toDateInputValue } from '../board-periods'
 
 describe('formatBoardLabel', () => {
   it('combines team name and period label with " - " separator', () => {
@@ -108,5 +108,22 @@ describe('getPeriodsForYear', () => {
     const periods = getPeriodsForYear('quarterly', 2026)
     expect(periods[0].start).toBe('2026-01-01')
     expect(periods[3].end).toBe('2026-12-31')
+  })
+})
+
+describe('toDateInputValue', () => {
+  it('converts a Date object to YYYY-MM-DD (reproduces pg DATE column behavior)', () => {
+    // PostgreSQL DATE columns are returned as JS Date objects by the pg driver.
+    // Calling .split('T') on a Date crashes with "split is not a function".
+    const dateObj = new Date('2026-04-30T00:00:00')
+    expect(toDateInputValue(dateObj)).toBe('2026-04-30')
+  })
+
+  it('extracts date from ISO string with time component', () => {
+    expect(toDateInputValue('2026-04-30T00:00:00.000Z')).toBe('2026-04-30')
+  })
+
+  it('returns plain YYYY-MM-DD string as-is', () => {
+    expect(toDateInputValue('2026-04-30')).toBe('2026-04-30')
   })
 })

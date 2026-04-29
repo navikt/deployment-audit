@@ -28,6 +28,16 @@ function formatLocalDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+/**
+ * Convert a Date or ISO string to a `YYYY-MM-DD` string suitable for `<input type="date">`.
+ * Handles PostgreSQL DATE columns which the `pg` driver returns as JS Date objects.
+ */
+export function toDateInputValue(value: string | Date): string {
+  if (value instanceof Date) return formatLocalDate(value)
+  if (typeof value === 'string' && value.includes('T')) return value.split('T')[0]
+  return value
+}
+
 export function getCurrentPeriod(type: BoardPeriodType, date = new Date()): BoardPeriod {
   const year = date.getFullYear()
   const month = date.getMonth()

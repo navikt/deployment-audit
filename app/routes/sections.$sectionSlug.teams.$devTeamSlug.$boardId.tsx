@@ -38,7 +38,7 @@ import {
 import { getDevTeamBySlug } from '~/db/dev-teams.server'
 import { getSectionBySlug } from '~/db/sections.server'
 import { requireUser } from '~/lib/auth.server'
-import { formatBoardLabel } from '~/lib/board-periods'
+import { formatBoardLabel, toDateInputValue } from '~/lib/board-periods'
 import type { Route } from './+types/sections.$sectionSlug.teams.$devTeamSlug.$boardId'
 
 export function meta({ data }: Route.MetaArgs) {
@@ -175,8 +175,8 @@ export default function BoardDetail() {
   const [showAddObjective, setShowAddObjective] = useState(false)
   const [editingDates, setEditingDates] = useState(false)
 
-  const periodStartDate = board.period_start.split('T')[0]
-  const periodEndDate = board.period_end.split('T')[0]
+  const periodStartDate = toDateInputValue(board.period_start)
+  const periodEndDate = toDateInputValue(board.period_end)
 
   return (
     <VStack gap="space-24">
