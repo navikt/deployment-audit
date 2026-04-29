@@ -36,7 +36,7 @@ import {
   getMembersGithubUsernamesForDevTeams,
 } from '~/db/user-dev-team-preference.server'
 import { requireUser } from '~/lib/auth.server'
-import { type BoardPeriodType, formatBoardLabel, getPeriodsForYear } from '~/lib/board-periods'
+import { type BoardPeriodType, computePeriodDates, formatBoardLabel, getPeriodsForYear } from '~/lib/board-periods'
 import { groupAppCards } from '~/lib/group-app-cards'
 import { logger } from '~/lib/logger.server'
 import { fetchAllTeamsAndApplications, getApplicationInfo } from '~/lib/nais.server'
@@ -310,11 +310,15 @@ export async function action({ request, params }: Route.ActionArgs) {
   if (intent === 'create') {
     const periodType = formData.get('period_type') as BoardPeriodType
     const periodLabel = formData.get('period_label') as string
-    const periodStart = formData.get('period_start') as string
-    const periodEnd = formData.get('period_end') as string
 
-    if (!periodType || !periodStart || !periodEnd || !periodLabel) {
+    if (!periodType || !periodLabel) {
       return { error: 'Alle felt er påkrevd.' }
+    }
+
+    try {
+      computePeriodDates(periodType, periodLabel)
+    } catch {
+      return { error: `Ugyldig periode: "${periodLabel}" for type "${periodType}"` }
     }
 
     try {
@@ -322,8 +326,6 @@ export async function action({ request, params }: Route.ActionArgs) {
         dev_team_id: devTeam.id,
         title: formatBoardLabel({ teamName: devTeam.name, periodLabel }),
         period_type: periodType,
-        period_start: periodStart,
-        period_end: periodEnd,
         period_label: periodLabel,
         created_by: user.navIdent,
       })
@@ -586,17 +588,10 @@ function ActiveBoardSection({
                 Aktiv
               </Tag>
               <Detail textColor="subtle">
-                {new Date(board.period_start).toLocaleDateString('nb-NO', {
-                  day: 'numeric',
-                  month: 'short',
-                  year: 'numeric',
-                })}
-                {' – '}
-                {new Date(board.period_end).toLocaleDateString('nb-NO', {
-                  day: 'numeric',
-                  month: 'short',
-                  year: 'numeric',
-                })}
+                {(() => {
+                  const { start, end } = computePeriodDates(board.period_type, board.period_label)
+                  return `${new Date(`${start}T00:00:00`).toLocaleDateString('nb-NO', { day: 'numeric', month: 'short', year: 'numeric' })} – ${new Date(`${end}T00:00:00`).toLocaleDateString('nb-NO', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                })()}
               </Detail>
             </HStack>
           </VStack>
@@ -781,8 +776,6 @@ function CreateBoardForm({ onCancel }: { onCancel: () => void }) {
     <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
       <Form method="post" onSubmit={onCancel}>
         <input type="hidden" name="intent" value="create" />
-        <input type="hidden" name="period_start" value={selectedPeriod?.start ?? ''} />
-        <input type="hidden" name="period_end" value={selectedPeriod?.end ?? ''} />
         <input type="hidden" name="period_label" value={selectedPeriod?.label ?? ''} />
         <VStack gap="space-16">
           <Heading level="2" size="small">

@@ -86,9 +86,9 @@ describe('getSectionOverallStats SQL', () => {
     const {
       rows: [board],
     } = await pool.query(
-      `INSERT INTO boards (dev_team_id, title, period_type, period_start, period_end, period_label)
-       VALUES ($1, $2, 'quarterly', $3, $4, 'Q1') RETURNING id`,
-      [devTeam.id, 'Board 1', startDate, endDate],
+      `INSERT INTO boards (dev_team_id, title, period_type, period_label)
+       VALUES ($1, $2, 'quarterly', 'Q1 2026') RETURNING id`,
+      [devTeam.id, 'Board 1'],
     )
     const {
       rows: [objective],
@@ -245,8 +245,8 @@ describe('getBoardObjectiveProgress', () => {
     const sectionId = await seedSection(pool, 'sec-bop-empty')
     const devTeamId = await seedDevTeam(pool, 'team-bop-empty', 'BOP', sectionId)
     const { rows } = await pool.query(
-      `INSERT INTO boards (dev_team_id, title, period_type, period_start, period_end, period_label)
-       VALUES ($1, 'B', 'tertiary', '2026-01-01', '2026-04-30', 'T1') RETURNING id`,
+      `INSERT INTO boards (dev_team_id, title, period_type, period_label)
+       VALUES ($1, 'B', 'tertiary', 'T1 2026') RETURNING id`,
       [devTeamId],
     )
     expect(await getBoardObjectiveProgress(rows[0].id)).toEqual([])
@@ -256,8 +256,8 @@ describe('getBoardObjectiveProgress', () => {
     const sectionId = await seedSection(pool, 'sec-bop')
     const devTeamId = await seedDevTeam(pool, 'team-bop', 'BOP', sectionId)
     const { rows: br } = await pool.query(
-      `INSERT INTO boards (dev_team_id, title, period_type, period_start, period_end, period_label)
-       VALUES ($1, 'B', 'tertiary', '2026-01-01', '2026-04-30', 'T1') RETURNING id`,
+      `INSERT INTO boards (dev_team_id, title, period_type, period_label)
+       VALUES ($1, 'B', 'tertiary', 'T1 2026') RETURNING id`,
       [devTeamId],
     )
     const boardId = br[0].id

@@ -20,8 +20,8 @@ async function seedGoalLinkStack(pool: Pool) {
   const appId = await seedApp(pool, { teamSlug: 'team', appName: 'app1', environment: 'prod' })
 
   const { rows: boardRows } = await pool.query(
-    `INSERT INTO boards (dev_team_id, title, period_type, period_start, period_end, period_label)
-     VALUES ($1, 'Board', 'tertiary', '2026-01-01', '2026-04-30', 'T1 2026') RETURNING *`,
+    `INSERT INTO boards (dev_team_id, title, period_type, period_label)
+     VALUES ($1, 'Board', 'tertiary', 'T1 2026') RETURNING *`,
     [devTeamId],
   )
   const board = boardRows[0]

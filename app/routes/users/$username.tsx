@@ -40,7 +40,7 @@ import { addUserDevTeam, getUserDevTeams, removeUserDevTeam } from '~/db/user-de
 import { getUserMapping, upsertUserMapping } from '~/db/user-mappings.server'
 import { getUserLandingPage, setUserLandingPage } from '~/db/user-settings.server'
 import { requireUser } from '~/lib/auth.server'
-import { formatBoardLabel } from '~/lib/board-periods'
+import { computePeriodDates, formatBoardLabel } from '~/lib/board-periods'
 import { isValidEmail, isValidGitHubUsername, isValidNavIdent } from '~/lib/form-validators'
 import type { FourEyesStatus } from '~/lib/four-eyes-status'
 import { getBotDescription, getBotDisplayName, isGitHubBot } from '~/lib/github-bots'
@@ -911,8 +911,7 @@ import { forwardRef } from 'react'
 type AvailableBoard = {
   id: number
   period_label: string
-  period_start: string
-  period_end: string
+  period_type: 'tertiary' | 'quarterly'
   dev_team_name: string
   objectives: Array<{ id: number; title: string; key_results: Array<{ id: number; title: string }> }>
 }
@@ -1044,42 +1043,42 @@ const SelectLinkGoalModal = forwardRef<
   const [selectedObjectiveId, setSelectedObjectiveId] = useState<string>('')
   const [selectedKeyResultId, setSelectedKeyResultId] = useState<string>('')
 
+  // Precompute period date ranges for available boards
+  const boardDateRanges = useMemo(
+    () =>
+      new Map(
+        availableBoards.map((board) => {
+          const { start, end } = computePeriodDates(board.period_type, board.period_label)
+          return [board.id, { start: new Date(`${start}T00:00:00`), end: new Date(`${end}T23:59:59.999`) }]
+        }),
+      ),
+    [availableBoards],
+  )
+
   // Filter boards to those covering any of the selected deployment dates
   const relevantBoards = useMemo(() => {
     if (selectedDates.length === 0) return availableBoards
     return availableBoards.filter((board) => {
-      const boardStart = new Date(board.period_start)
-      const boardEnd = new Date(board.period_end)
+      const range = boardDateRanges.get(board.id)!
       return selectedDates.some((date) => {
         const d = new Date(date)
-        return d >= boardStart && d <= boardEnd
+        return d >= range.start && d <= range.end
       })
     })
-  }, [availableBoards, selectedDates])
+  }, [availableBoards, selectedDates, boardDateRanges])
 
   // Check if selected deployments span multiple board periods
   const spansMultiplePeriods = useMemo(() => {
     if (selectedDates.length <= 1 || relevantBoards.length === 0) return false
-    const matchingBoardIds = new Set<number>()
-    for (const date of selectedDates) {
-      const d = new Date(date)
-      for (const board of relevantBoards) {
-        if (d >= new Date(board.period_start) && d <= new Date(board.period_end)) {
-          matchingBoardIds.add(board.id)
-        }
-      }
-    }
-    // If each date matches a different board, it spans multiple periods
-    // More precisely: check if all dates fit within a single board
+    // Check if all dates fit within a single board
     return !relevantBoards.some((board) => {
-      const boardStart = new Date(board.period_start)
-      const boardEnd = new Date(board.period_end)
+      const range = boardDateRanges.get(board.id)!
       return selectedDates.every((date) => {
         const d = new Date(date)
-        return d >= boardStart && d <= boardEnd
+        return d >= range.start && d <= range.end
       })
     })
-  }, [relevantBoards, selectedDates])
+  }, [relevantBoards, selectedDates, boardDateRanges])
 
   const selectedBoard = relevantBoards.find((b) => String(b.id) === selectedBoardId)
   const selectedObjective = selectedBoard?.objectives.find((o) => String(o.id) === selectedObjectiveId)

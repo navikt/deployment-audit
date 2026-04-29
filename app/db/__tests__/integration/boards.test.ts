@@ -19,8 +19,8 @@ async function seedBoardStack(pool: Pool) {
   const sectionId = await seedSection(pool, 'sec')
   const devTeamId = await seedDevTeam(pool, 'team', 'Team', sectionId)
   const { rows: boardRows } = await pool.query(
-    `INSERT INTO boards (dev_team_id, title, period_type, period_start, period_end, period_label, created_by)
-     VALUES ($1, 'Sprint 1', 'tertiary', '2026-01-01', '2026-04-30', 'T1 2026', 'alice') RETURNING *`,
+    `INSERT INTO boards (dev_team_id, title, period_type, period_label, created_by)
+     VALUES ($1, 'Sprint 1', 'tertiary', 'T1 2026', 'alice') RETURNING *`,
     [devTeamId],
   )
   return { sectionId, devTeamId, board: boardRows[0] }
@@ -262,13 +262,13 @@ describe('getBoardsWithGoalsForDevTeam', () => {
     const sectionId = await seedSection(pool, 'sec-multi')
     const devTeamId = await seedDevTeam(pool, 'team-multi', 'Multi', sectionId)
     const { rows: b1 } = await pool.query(
-      `INSERT INTO boards (dev_team_id, title, period_type, period_start, period_end, period_label)
-       VALUES ($1, 'B1', 'tertiary', '2026-01-01', '2026-04-30', 'T1') RETURNING id`,
+      `INSERT INTO boards (dev_team_id, title, period_type, period_label)
+       VALUES ($1, 'B1', 'tertiary', 'T1 2026') RETURNING id`,
       [devTeamId],
     )
     const { rows: b2 } = await pool.query(
-      `INSERT INTO boards (dev_team_id, title, period_type, period_start, period_end, period_label)
-       VALUES ($1, 'B2', 'tertiary', '2026-05-01', '2026-08-31', 'T2') RETURNING id`,
+      `INSERT INTO boards (dev_team_id, title, period_type, period_label)
+       VALUES ($1, 'B2', 'tertiary', 'T2 2026') RETURNING id`,
       [devTeamId],
     )
 
@@ -306,7 +306,7 @@ describe('getBoardsWithGoalsForDevTeam', () => {
     )
 
     const result = await getBoardsWithGoalsForDevTeam(devTeamId)
-    expect(result.map((b) => b.id)).toEqual([b2[0].id, b1[0].id]) // sorted by period_start DESC
+    expect(result.map((b) => b.id)).toEqual([b2[0].id, b1[0].id]) // sorted by period_label DESC
 
     const board2 = result[0]
     const board1 = result[1]

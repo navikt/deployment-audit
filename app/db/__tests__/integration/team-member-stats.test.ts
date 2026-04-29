@@ -67,8 +67,8 @@ async function seedBoardObjective(): Promise<number> {
   ).rows[0].id
   const boardId = (
     await pool.query<{ id: number }>(
-      `INSERT INTO boards (dev_team_id, title, period_type, period_start, period_end, period_label, is_active)
-       VALUES ($1, 'B', 'quarterly', '2025-01-01', '2025-03-31', 'Q1', true) RETURNING id`,
+      `INSERT INTO boards (dev_team_id, title, period_type, period_label, is_active)
+       VALUES ($1, 'B', 'quarterly', 'Q1 2025', true) RETURNING id`,
       [teamId],
     )
   ).rows[0].id

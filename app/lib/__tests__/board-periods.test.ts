@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatBoardLabel, getCurrentPeriod, getPeriodsForYear } from '../board-periods'
+import { computePeriodDates, formatBoardLabel, getCurrentPeriod, getPeriodsForYear } from '../board-periods'
 
 describe('formatBoardLabel', () => {
   it('combines team name and period label with " - " separator', () => {
@@ -108,5 +108,54 @@ describe('getPeriodsForYear', () => {
     const periods = getPeriodsForYear('quarterly', 2026)
     expect(periods[0].start).toBe('2026-01-01')
     expect(periods[3].end).toBe('2026-12-31')
+  })
+})
+
+describe('computePeriodDates', () => {
+  it.each([
+    { type: 'tertiary' as const, label: 'T1 2026', start: '2026-01-01', end: '2026-04-30' },
+    { type: 'tertiary' as const, label: 'T2 2026', start: '2026-05-01', end: '2026-08-31' },
+    { type: 'tertiary' as const, label: 'T3 2026', start: '2026-09-01', end: '2026-12-31' },
+    { type: 'quarterly' as const, label: 'Q1 2026', start: '2026-01-01', end: '2026-03-31' },
+    { type: 'quarterly' as const, label: 'Q2 2026', start: '2026-04-01', end: '2026-06-30' },
+    { type: 'quarterly' as const, label: 'Q3 2026', start: '2026-07-01', end: '2026-09-30' },
+    { type: 'quarterly' as const, label: 'Q4 2026', start: '2026-10-01', end: '2026-12-31' },
+  ])('computes $label as $start – $end', ({ type, label, start, end }) => {
+    expect(computePeriodDates(type, label)).toEqual({ start, end })
+  })
+
+  it('matches getCurrentPeriod output for all periods', () => {
+    for (const type of ['tertiary', 'quarterly'] as const) {
+      const periods = getPeriodsForYear(type, 2026)
+      for (const period of periods) {
+        const computed = computePeriodDates(type, period.label)
+        expect(computed.start).toBe(period.start)
+        expect(computed.end).toBe(period.end)
+      }
+    }
+  })
+
+  it('throws on invalid label', () => {
+    expect(() => computePeriodDates('tertiary', 'invalid')).toThrow('Invalid period label')
+  })
+
+  it('throws on invalid tertial number', () => {
+    expect(() => computePeriodDates('tertiary', 'T4 2026')).toThrow('Invalid tertial number')
+  })
+
+  it('throws on invalid quarter number', () => {
+    expect(() => computePeriodDates('quarterly', 'Q5 2026')).toThrow('Invalid quarter number')
+  })
+
+  it('throws on type/label mismatch (tertiary with Q label)', () => {
+    expect(() => computePeriodDates('tertiary', 'Q1 2026')).toThrow('does not match period type')
+  })
+
+  it('throws on type/label mismatch (quarterly with T label)', () => {
+    expect(() => computePeriodDates('quarterly', 'T1 2026')).toThrow('does not match period type')
+  })
+
+  it('trims whitespace from label', () => {
+    expect(computePeriodDates('tertiary', ' T1 2026 ')).toEqual({ start: '2026-01-01', end: '2026-04-30' })
   })
 })

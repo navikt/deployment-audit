@@ -29,8 +29,8 @@ async function seedBoardWithObjectiveAndKr(prefix = 'b') {
   const sectionId = await seedSection(pool, `${prefix}-sec`)
   const devTeamId = await seedDevTeam(pool, `${prefix}-team`, 'Team', sectionId)
   const { rows: boardRows } = await pool.query(
-    `INSERT INTO boards (dev_team_id, title, period_type, period_start, period_end, period_label, created_by)
-     VALUES ($1, 'Sprint', 'tertiary', '2026-01-01', '2026-04-30', 'T1 2026', 'alice') RETURNING id`,
+    `INSERT INTO boards (dev_team_id, title, period_type, period_label, created_by)
+     VALUES ($1, 'Sprint', 'tertiary', 'T1 2026', 'alice') RETURNING id`,
     [devTeamId],
   )
   const boardId = boardRows[0].id as number

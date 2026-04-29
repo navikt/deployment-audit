@@ -1,3 +1,4 @@
+import { computePeriodDates } from '~/lib/board-periods'
 import { pool } from './connection.server'
 
 export interface Board {
@@ -5,8 +6,6 @@ export interface Board {
   dev_team_id: number
   title: string
   period_type: 'tertiary' | 'quarterly'
-  period_start: string
-  period_end: string
   period_label: string
   is_active: boolean
   created_at: string
@@ -60,8 +59,16 @@ interface BoardWithObjectives extends Board {
 
 // --- Board queries ---
 
+/** SQL ORDER BY expression for chronological board ordering (newest first). */
+function boardPeriodOrderBy(prefix = '') {
+  const col = prefix ? `${prefix}.period_label` : 'period_label'
+  return `CAST(split_part(${col}, ' ', 2) AS INTEGER) DESC, CAST(regexp_replace(split_part(${col}, ' ', 1), '\\D', '', 'g') AS INTEGER) DESC`
+}
+
 export async function getBoardsByDevTeam(devTeamId: number): Promise<Board[]> {
-  const result = await pool.query('SELECT * FROM boards WHERE dev_team_id = $1 ORDER BY period_start DESC', [devTeamId])
+  const result = await pool.query(`SELECT * FROM boards WHERE dev_team_id = $1 ORDER BY ${boardPeriodOrderBy()}`, [
+    devTeamId,
+  ])
   return result.rows
 }
 
@@ -79,21 +86,27 @@ export async function getBoardsWithGoalsForDevTeam(
 ): Promise<
   Array<{
     id: number
+    period_type: 'tertiary' | 'quarterly'
     period_label: string
-    period_start: string
-    period_end: string
     objectives: Array<{ id: number; title: string; key_results: Array<{ id: number; title: string }> }>
   }>
 > {
-  const dateFilter = asOfDate ? ' AND period_start <= $2 AND period_end >= $2' : ''
-  const params: unknown[] = [devTeamId]
-  if (asOfDate) params.push(asOfDate)
-
   const boardsResult = await pool.query(
-    `SELECT id, period_label, period_start, period_end FROM boards WHERE dev_team_id = $1 AND is_active = true${dateFilter} ORDER BY period_start DESC`,
-    params,
+    `SELECT id, period_type, period_label FROM boards WHERE dev_team_id = $1 AND is_active = true ORDER BY ${boardPeriodOrderBy()}`,
+    [devTeamId],
   )
-  const boardIds = boardsResult.rows.map((b) => b.id as number)
+
+  // Filter by date range in app code using computed period dates
+  let filteredBoards = boardsResult.rows
+  if (asOfDate) {
+    const asOf = asOfDate
+    filteredBoards = filteredBoards.filter((b) => {
+      const { start, end } = computePeriodDates(b.period_type, b.period_label)
+      return start <= asOf && end >= asOf
+    })
+  }
+
+  const boardIds = filteredBoards.map((b) => b.id as number)
   if (boardIds.length === 0) return []
 
   const objectivesResult = await pool.query(
@@ -133,7 +146,7 @@ export async function getBoardsWithGoalsForDevTeam(
     objectivesByBoard.set(obj.board_id, list)
   }
 
-  return boardsResult.rows.map((board) => ({ ...board, objectives: objectivesByBoard.get(board.id) ?? [] }))
+  return filteredBoards.map((board) => ({ ...board, objectives: objectivesByBoard.get(board.id) ?? [] }))
 }
 
 interface BoardKeywordsKeyResult {
@@ -163,7 +176,7 @@ interface BoardKeywordsBoard {
  * keywords used by the auto-link pipeline. Used by the personalised Slack
  * home tab to render mål/nøkkelresultater/kodeord.
  *
- * Returns boards sorted by `period_start DESC`. Inactive objectives and key
+ * Returns boards sorted by `period_label DESC`. Inactive objectives and key
  * results are excluded.
  *
  * Implementation: 3 queries total (boards, objectives across all boards, key
@@ -177,7 +190,7 @@ export async function getActiveBoardsWithKeywordsForDevTeam(devTeamId: number): 
      JOIN dev_teams dt ON dt.id = b.dev_team_id
      JOIN sections s ON s.id = dt.section_id
      WHERE b.dev_team_id = $1 AND b.is_active = true
-     ORDER BY b.period_start DESC`,
+     ORDER BY ${boardPeriodOrderBy('b')}`,
     [devTeamId],
   )
 
@@ -305,23 +318,13 @@ export async function createBoard(data: {
   dev_team_id: number
   title: string
   period_type: 'tertiary' | 'quarterly'
-  period_start: string
-  period_end: string
   period_label: string
   created_by?: string
 }): Promise<Board> {
   const result = await pool.query(
-    `INSERT INTO boards (dev_team_id, title, period_type, period_start, period_end, period_label, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-    [
-      data.dev_team_id,
-      data.title,
-      data.period_type,
-      data.period_start,
-      data.period_end,
-      data.period_label,
-      data.created_by ?? null,
-    ],
+    `INSERT INTO boards (dev_team_id, title, period_type, period_label, created_by)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [data.dev_team_id, data.title, data.period_type, data.period_label, data.created_by ?? null],
   )
   return result.rows[0]
 }

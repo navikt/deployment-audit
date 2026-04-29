@@ -143,13 +143,12 @@ export async function loader({ request }: Route.LoaderArgs) {
   })
 
   // Build board summaries from active boards
-  const now = new Date()
   const activeBoards: { board: (typeof boardsByTeam)[0][0]; team: (typeof selectedDevTeams)[0] }[] = []
   for (let i = 0; i < selectedDevTeams.length; i++) {
     const team = selectedDevTeams[i]
     const boards = boardsByTeam[i] ?? []
     for (const board of boards) {
-      if (board.is_active && new Date(board.period_end) >= now) {
+      if (board.is_active) {
         activeBoards.push({ board, team })
       }
     }

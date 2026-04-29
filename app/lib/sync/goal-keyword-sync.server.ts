@@ -1,5 +1,6 @@
 import { pool } from '~/db/connection.server'
 import { addDeploymentGoalLink } from '~/db/deployment-goal-links.server'
+import { computePeriodDates } from '~/lib/board-periods'
 import { type BoardKeywordSource, type CommitInfo, matchCommitKeywords } from '~/lib/goal-keyword-matcher'
 import { logger } from '~/lib/logger.server'
 
@@ -46,8 +47,8 @@ export async function autoLinkGoalKeywords(
   const keywordsResult = await pool.query(
     `SELECT
        b.id AS board_id,
-       b.period_start,
-       b.period_end,
+       b.period_type,
+       b.period_label,
        bo.id AS objective_id,
        NULL::int AS key_result_id,
        unnest(bo.keywords) AS keyword
@@ -57,8 +58,8 @@ export async function autoLinkGoalKeywords(
      UNION ALL
      SELECT
        b.id AS board_id,
-       b.period_start,
-       b.period_end,
+       b.period_type,
+       b.period_label,
        bo.id AS objective_id,
        bkr.id AS key_result_id,
        unnest(bkr.keywords) AS keyword
@@ -74,19 +75,22 @@ export async function autoLinkGoalKeywords(
   const boardKeywords: BoardKeywordSource[] = keywordsResult.rows.map(
     (r: {
       board_id: number
-      period_start: string
-      period_end: string
+      period_type: 'tertiary' | 'quarterly'
+      period_label: string
       objective_id: number
       key_result_id: number | null
       keyword: string
-    }) => ({
-      boardId: r.board_id,
-      periodStart: new Date(r.period_start),
-      periodEnd: new Date(r.period_end),
-      objectiveId: r.objective_id,
-      keyResultId: r.key_result_id,
-      keyword: r.keyword,
-    }),
+    }) => {
+      const { start, end } = computePeriodDates(r.period_type, r.period_label)
+      return {
+        boardId: r.board_id,
+        periodStart: new Date(`${start}T00:00:00`),
+        periodEnd: new Date(`${end}T23:59:59.999`),
+        objectiveId: r.objective_id,
+        keyResultId: r.key_result_id,
+        keyword: r.keyword,
+      }
+    },
   )
 
   // Run pure matching logic

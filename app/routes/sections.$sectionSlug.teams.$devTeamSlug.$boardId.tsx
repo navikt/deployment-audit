@@ -37,7 +37,7 @@ import {
 import { getDevTeamBySlug } from '~/db/dev-teams.server'
 import { getSectionBySlug } from '~/db/sections.server'
 import { requireUser } from '~/lib/auth.server'
-import { formatBoardLabel } from '~/lib/board-periods'
+import { computePeriodDates, formatBoardLabel } from '~/lib/board-periods'
 import type { Route } from './+types/sections.$sectionSlug.teams.$devTeamSlug.$boardId'
 
 export function meta({ data }: Route.MetaArgs) {
@@ -179,17 +179,10 @@ export default function BoardDetail() {
             {board.is_active ? 'Aktiv' : 'Avsluttet'}
           </Tag>
           <Detail textColor="subtle">
-            {new Date(board.period_start).toLocaleDateString('nb-NO', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            })}
-            {' – '}
-            {new Date(board.period_end).toLocaleDateString('nb-NO', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            })}
+            {(() => {
+              const { start, end } = computePeriodDates(board.period_type, board.period_label)
+              return `${new Date(`${start}T00:00:00`).toLocaleDateString('nb-NO', { day: 'numeric', month: 'short', year: 'numeric' })} – ${new Date(`${end}T00:00:00`).toLocaleDateString('nb-NO', { day: 'numeric', month: 'short', year: 'numeric' })}`
+            })()}
           </Detail>
         </HStack>
       </div>

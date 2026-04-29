@@ -75,3 +75,44 @@ export function getPeriodsForYear(type: BoardPeriodType, year: number): BoardPer
     return getCurrentPeriod(type, new Date(year, month, 15))
   })
 }
+
+/**
+ * Compute period start/end dates from a board's `period_type` and `period_label`.
+ * This is the authoritative way to derive dates — no stored dates needed.
+ *
+ * Supports labels like "T1 2026", "T2 2026", "Q3 2025", etc.
+ */
+export function computePeriodDates(periodType: BoardPeriodType, periodLabel: string): { start: string; end: string } {
+  const trimmedLabel = periodLabel.trim()
+  const match = trimmedLabel.match(/^([TQ])(\d)\s+(\d{4})$/)
+  if (!match) {
+    throw new Error(`Invalid period label: "${periodLabel}"`)
+  }
+
+  const labelPrefix = match[1]
+  const expectedPrefix = periodType === 'tertiary' ? 'T' : 'Q'
+  if (labelPrefix !== expectedPrefix) {
+    throw new Error(`Period label "${trimmedLabel}" does not match period type "${periodType}"`)
+  }
+
+  const periodNumber = Number.parseInt(match[2], 10)
+  const year = Number.parseInt(match[3], 10)
+
+  if (periodType === 'tertiary') {
+    if (periodNumber < 1 || periodNumber > 3) throw new Error(`Invalid tertial number: ${periodNumber}`)
+    const startMonth = (periodNumber - 1) * 4
+    const endMonth = startMonth + 3
+    return {
+      start: `${year}-${String(startMonth + 1).padStart(2, '0')}-01`,
+      end: formatLocalDate(new Date(year, endMonth + 1, 0)),
+    }
+  }
+
+  if (periodNumber < 1 || periodNumber > 4) throw new Error(`Invalid quarter number: ${periodNumber}`)
+  const startMonth = (periodNumber - 1) * 3
+  const endMonth = startMonth + 2
+  return {
+    start: `${year}-${String(startMonth + 1).padStart(2, '0')}-01`,
+    end: formatLocalDate(new Date(year, endMonth + 1, 0)),
+  }
+}
