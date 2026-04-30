@@ -365,9 +365,22 @@ export default function DevTeamPage() {
   return (
     <VStack gap="space-24">
       <div>
-        <Heading level="1" size="large" spacing>
-          {devTeam.name}
-        </Heading>
+        <HStack align="center" justify="space-between">
+          <Heading level="1" size="large">
+            {devTeam.name}
+          </Heading>
+          {isAdmin && (
+            <Button
+              as={Link}
+              to={`${teamBasePath}/admin`}
+              variant="tertiary"
+              size="small"
+              icon={<CogIcon aria-hidden />}
+            >
+              Administrer
+            </Button>
+          )}
+        </HStack>
         <BodyShort textColor="subtle">Teamside med mål- og commitmentstavler.</BodyShort>
       </div>
 
@@ -415,17 +428,6 @@ export default function DevTeamPage() {
               icon={<ClockIcon aria-hidden />}
             >
               Tidligere tavler ({inactiveBoards.length})
-            </Button>
-          )}
-          {isAdmin && (
-            <Button
-              as={Link}
-              to={`${teamBasePath}/admin`}
-              variant="tertiary"
-              size="small"
-              icon={<CogIcon aria-hidden />}
-            >
-              Administrer
             </Button>
           )}
         </HStack>
