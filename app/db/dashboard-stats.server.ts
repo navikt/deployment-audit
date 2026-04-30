@@ -3,7 +3,7 @@ import { AUDIT_START_YEAR_FILTER } from './audit-start-year'
 import { pool } from './connection.server'
 import { lowerUsernames, userDeploymentMatchAnySql } from './user-deployment-match'
 
-export interface SectionOverallStats {
+interface SectionOverallStats {
   total_deployments: number
   with_four_eyes: number
   without_four_eyes: number
@@ -13,7 +13,7 @@ export interface SectionOverallStats {
   goal_coverage: number
 }
 
-export interface DevTeamDashboardStats {
+interface DevTeamDashboardStats {
   dev_team_id: number
   dev_team_name: string
   dev_team_slug: string
@@ -309,4 +309,111 @@ export async function getBoardObjectiveProgress(boardId: number): Promise<BoardO
     key_results: krsByObjective.get(obj.id) ?? [],
     total_linked_deployments: (objLinksByObjective.get(obj.id) ?? 0) + (krLinkedTotalByObjective.get(obj.id) ?? 0),
   }))
+}
+
+export interface DevTeamBatchStats {
+  dev_team_id: number
+  dev_team_name: string
+  dev_team_slug: string
+  total_deployments: number
+  with_four_eyes: number
+  without_four_eyes: number
+  pending_verification: number
+  linked_to_goal: number
+  four_eyes_coverage: number
+  goal_coverage: number
+}
+
+/**
+ * Batch-compute per-team deployment stats with team-member deployer filtering.
+ *
+ * This is the single source of truth for team-level stats across all pages
+ * (sections list, section detail, and team page). Stats are scoped to:
+ * - Apps owned by the team (via nais team slugs OR direct app links)
+ * - Deployments made by team members (deployer_username or PR creator)
+ * - Date range (typically YTD)
+ *
+ * Returns a Map keyed by dev_team_id. Teams with no mapped members show 0 deployments.
+ */
+export async function getDevTeamStatsBatch(
+  devTeamIds: number[],
+  startDate: Date,
+  endDate?: Date,
+): Promise<Map<number, DevTeamBatchStats>> {
+  if (devTeamIds.length === 0) return new Map()
+
+  const result = await pool.query<{
+    dev_team_id: number
+    dev_team_name: string
+    dev_team_slug: string
+    total_deployments: number
+    with_four_eyes: number
+    without_four_eyes: number
+    pending_verification: number
+    linked_to_goal: number
+  }>(
+    `WITH team_members AS (
+       SELECT p.dev_team_id, LOWER(um.github_username) AS github_username
+       FROM user_dev_team_preference p
+       JOIN user_mappings um
+         ON UPPER(um.nav_ident) = UPPER(p.nav_ident) AND um.deleted_at IS NULL
+       WHERE p.dev_team_id = ANY($1::int[])
+         AND um.github_username IS NOT NULL
+     ),
+     team_apps AS (
+       SELECT dt.id AS dev_team_id, dt.name AS dev_team_name, dt.slug AS dev_team_slug,
+              ma.id AS app_id, ma.audit_start_year
+       FROM dev_teams dt
+       LEFT JOIN dev_team_nais_teams dtn ON dtn.dev_team_id = dt.id AND dtn.deleted_at IS NULL
+       LEFT JOIN dev_team_applications dta ON dta.dev_team_id = dt.id AND dta.deleted_at IS NULL
+       JOIN monitored_applications ma ON ma.is_active = true
+         AND (ma.team_slug = dtn.nais_team_slug OR ma.id = dta.monitored_app_id)
+       WHERE dt.id = ANY($1::int[]) AND dt.is_active = true
+       GROUP BY dt.id, dt.name, dt.slug, ma.id, ma.audit_start_year
+     ),
+     deployment_stats AS (
+       SELECT ta.dev_team_id,
+              COUNT(d.id)::int AS total_deployments,
+              COUNT(d.id) FILTER (WHERE d.four_eyes_status IN (${APPROVED_STATUSES_SQL}))::int AS with_four_eyes,
+              COUNT(d.id) FILTER (WHERE d.four_eyes_status IN ('direct_push', 'unverified_commits', 'approved_pr_with_unreviewed', 'unauthorized_repository', 'unauthorized_branch'))::int AS without_four_eyes,
+              COUNT(d.id) FILTER (WHERE d.four_eyes_status IN ('pending', 'pending_baseline', 'pending_approval', 'unknown'))::int AS pending_verification,
+              COUNT(DISTINCT dgl.deployment_id)::int AS linked_to_goal
+       FROM team_apps ta
+       JOIN team_members tm ON tm.dev_team_id = ta.dev_team_id
+       JOIN deployments d ON d.monitored_app_id = ta.app_id
+         AND d.created_at >= $2
+         AND ($3::timestamptz IS NULL OR d.created_at < $3)
+         AND (ta.audit_start_year IS NULL OR d.created_at >= make_date(ta.audit_start_year, 1, 1))
+         AND (LOWER(d.deployer_username) = tm.github_username
+              OR LOWER(d.github_pr_data->'creator'->>'username') = tm.github_username)
+       LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id AND dgl.is_active = true
+       GROUP BY ta.dev_team_id
+     )
+     SELECT ta_distinct.dev_team_id, ta_distinct.dev_team_name, ta_distinct.dev_team_slug,
+            COALESCE(ds.total_deployments, 0)::int AS total_deployments,
+            COALESCE(ds.with_four_eyes, 0)::int AS with_four_eyes,
+            COALESCE(ds.without_four_eyes, 0)::int AS without_four_eyes,
+            COALESCE(ds.pending_verification, 0)::int AS pending_verification,
+            COALESCE(ds.linked_to_goal, 0)::int AS linked_to_goal
+     FROM (SELECT DISTINCT dev_team_id, dev_team_name, dev_team_slug FROM team_apps
+           UNION
+           SELECT dt.id, dt.name, dt.slug FROM dev_teams dt WHERE dt.id = ANY($1::int[]) AND dt.is_active = true
+     ) ta_distinct
+     LEFT JOIN deployment_stats ds ON ds.dev_team_id = ta_distinct.dev_team_id
+     ORDER BY ta_distinct.dev_team_name`,
+    [devTeamIds, startDate, endDate ?? null],
+  )
+
+  const map = new Map<number, DevTeamBatchStats>()
+  for (const row of result.rows) {
+    const total = row.total_deployments
+    const withFourEyes = row.with_four_eyes
+    const linked = row.linked_to_goal
+    map.set(row.dev_team_id, {
+      ...row,
+      four_eyes_coverage: total > 0 ? withFourEyes / total : 0,
+      goal_coverage: total > 0 ? linked / total : 0,
+    })
+  }
+  return map
 }

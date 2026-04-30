@@ -24,8 +24,11 @@ import { getGroupNamesByIds } from '~/db/application-groups.server'
 import { getAllActiveRepositories } from '~/db/application-repositories.server'
 import { type Board, createBoard, getBoardsByDevTeam } from '~/db/boards.server'
 import { pool } from '~/db/connection.server'
-import { type BoardObjectiveProgress, getBoardObjectiveProgress } from '~/db/dashboard-stats.server'
-import { getDevTeamCoverageStats } from '~/db/deployment-goal-links.server'
+import {
+  type BoardObjectiveProgress,
+  getBoardObjectiveProgress,
+  getDevTeamStatsBatch,
+} from '~/db/dashboard-stats.server'
 import { getAppDeploymentStatsBatch } from '~/db/deployments.server'
 import { getDevTeamApplications, getDevTeamBySlug, getGroupAppIdsForDevTeams } from '~/db/dev-teams.server'
 import { getAllAlertCounts, getAllMonitoredApplications } from '~/db/monitored-applications.server'
@@ -104,24 +107,27 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // (not from deployerUsernames which is deduplicated and may not reflect 1:1 mapping).
   const hasMappedMembers = members.some((m) => Boolean(m.github_username))
 
-  // Top-of-page coverage stats: last 90 days, filtered to team members' deploys.
-  const coverageEnd = new Date()
-  const coverageStart = new Date(coverageEnd.getTime() - 90 * 24 * 60 * 60 * 1000)
+  // Top-of-page coverage stats: YTD, filtered to team members' deploys.
+  const ytdStart = new Date(new Date().getFullYear(), 0, 1)
 
-  const [statsByApp, teamCoverage] = await Promise.all([
+  const [statsByApp, teamStatsMap] = await Promise.all([
     teamApps.length > 0
       ? getAppDeploymentStatsBatch(
           teamApps.map((a) => ({ id: a.id, audit_start_year: a.audit_start_year })),
           deployerUsernames,
         )
       : Promise.resolve(new Map()),
-    getDevTeamCoverageStats(
-      teamApps.map((a) => a.id),
-      deployerUsernames,
-      coverageStart,
-      coverageEnd,
-    ),
+    getDevTeamStatsBatch([devTeam.id], ytdStart),
   ])
+
+  const teamStats = teamStatsMap.get(devTeam.id)
+  const teamCoverage = {
+    total: teamStats?.total_deployments ?? 0,
+    with_four_eyes: teamStats?.with_four_eyes ?? 0,
+    four_eyes_percentage: teamStats ? Math.round(teamStats.four_eyes_coverage * 100) : 0,
+    with_origin: teamStats?.linked_to_goal ?? 0,
+    origin_percentage: teamStats ? Math.round(teamStats.goal_coverage * 100) : 0,
+  }
 
   // Resolve group names for grouped app cards
   const teamGroupIds = [
@@ -542,7 +548,7 @@ function TeamCoverageCards({
         </Alert>
       )}
       <HGrid gap="space-12" columns={{ xs: 1, sm: 3 }}>
-        <CoverageCard label="Deploys siste 90 dager" value={coverage.total.toString()} />
+        <CoverageCard label="Deployments i år" value={coverage.total.toString()} />
         <CoverageCard
           label="4-øyne-dekning"
           value={`${coverage.four_eyes_percentage}%`}
@@ -554,7 +560,7 @@ function TeamCoverageCards({
           sub={`${coverage.with_origin} av ${coverage.total}`}
         />
       </HGrid>
-      <Detail textColor="subtle">Basert på deploys utført av team-medlemmer (siste 90 dager).</Detail>
+      <Detail textColor="subtle">Basert på deploys utført av team-medlemmer (år til dato).</Detail>
     </VStack>
   )
 }

@@ -19,8 +19,7 @@ import {
   VStack,
 } from '@navikt/ds-react'
 import { Link, useLoaderData } from 'react-router'
-import type { DevTeamDashboardStats } from '~/db/dashboard-stats.server'
-import { getSectionDashboardStats, getSectionOverallStats } from '~/db/dashboard-stats.server'
+import { type DevTeamBatchStats, getDevTeamStatsBatch } from '~/db/dashboard-stats.server'
 import { getDevTeamsBySection } from '~/db/dev-teams.server'
 import { getSectionBySlug } from '~/db/sections.server'
 import { requireUser } from '~/lib/auth.server'
@@ -38,11 +37,45 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const ytdStart = new Date(new Date().getFullYear(), 0, 1)
 
-  const [ytdStats, ytdTeamStats, devTeams] = await Promise.all([
-    getSectionOverallStats(section.id, ytdStart),
-    getSectionDashboardStats(section.id, ytdStart),
-    getDevTeamsBySection(section.id),
-  ])
+  const devTeams = await getDevTeamsBySection(section.id)
+  const devTeamIds = devTeams.map((t) => t.id)
+
+  const teamStatsMap = await getDevTeamStatsBatch(devTeamIds, ytdStart)
+
+  // Aggregate across all teams for the header
+  let totalDeployments = 0
+  let withFourEyes = 0
+  let linkedToGoal = 0
+  const ytdTeamStats: DevTeamBatchStats[] = []
+
+  for (const team of devTeams) {
+    const stats = teamStatsMap.get(team.id)
+    if (stats) {
+      totalDeployments += stats.total_deployments
+      withFourEyes += stats.with_four_eyes
+      linkedToGoal += stats.linked_to_goal
+      ytdTeamStats.push(stats)
+    } else {
+      ytdTeamStats.push({
+        dev_team_id: team.id,
+        dev_team_name: team.name,
+        dev_team_slug: team.slug,
+        total_deployments: 0,
+        with_four_eyes: 0,
+        without_four_eyes: 0,
+        pending_verification: 0,
+        linked_to_goal: 0,
+        four_eyes_coverage: 0,
+        goal_coverage: 0,
+      })
+    }
+  }
+
+  const ytdStats = {
+    total_deployments: totalDeployments,
+    four_eyes_coverage: totalDeployments > 0 ? withFourEyes / totalDeployments : 0,
+    goal_coverage: totalDeployments > 0 ? linkedToGoal / totalDeployments : 0,
+  }
 
   return {
     section,
@@ -169,7 +202,7 @@ function SummaryCard({
   )
 }
 
-function DevTeamCard({ stats, sectionSlug }: { stats: DevTeamDashboardStats; sectionSlug: string }) {
+function DevTeamCard({ stats, sectionSlug }: { stats: DevTeamBatchStats; sectionSlug: string }) {
   const fourEyesPct = formatCoverage(stats.four_eyes_coverage)
   const goalPct = formatCoverage(stats.goal_coverage)
 

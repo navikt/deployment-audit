@@ -2,7 +2,7 @@ import { BarChartIcon, CheckmarkCircleIcon, ExclamationmarkTriangleIcon, LinkIco
 import { Alert, BodyShort, Box, Button, Detail, Heading, HGrid, HStack, Tag, TextField, VStack } from '@navikt/ds-react'
 import { type ReactNode, useState } from 'react'
 import { Form, Link, useLoaderData } from 'react-router'
-import { getSectionOverallStats, type SectionOverallStats } from '~/db/dashboard-stats.server'
+import { getDevTeamStatsBatch } from '~/db/dashboard-stats.server'
 import { createSection, getAllSectionsWithTeams, type SectionWithTeams } from '~/db/sections.server'
 import { requireAdmin, requireUser } from '~/lib/auth.server'
 import styles from '~/styles/common.module.css'
@@ -17,23 +17,54 @@ export async function loader({ request }: Route.LoaderArgs) {
   const allSections = await getAllSectionsWithTeams()
   const ytdStart = new Date(new Date().getFullYear(), 0, 1)
 
-  const ytdStatsList = await Promise.all(allSections.map((s) => getSectionOverallStats(s.id, ytdStart)))
+  // Get all dev teams and batch-compute stats with team-member filtering
+  const { getAllDevTeams } = await import('~/db/dev-teams.server')
+  const allDevTeams = await getAllDevTeams()
+  const allDevTeamIds = allDevTeams.map((t) => t.id)
+  const teamStatsMap = await getDevTeamStatsBatch(allDevTeamIds, ytdStart)
 
-  const sections = allSections.map((s, i) => ({
-    ...s,
-    stats: ytdStatsList[i],
-  }))
+  // Group dev teams by section_id
+  const teamsBySection = new Map<number, typeof allDevTeams>()
+  for (const team of allDevTeams) {
+    const list = teamsBySection.get(team.section_id) ?? []
+    list.push(team)
+    teamsBySection.set(team.section_id, list)
+  }
 
-  // Aggregate YTD stats across all sections (consistent with section cards)
-  const aggregate = ytdStatsList.reduce(
+  // Compute per-section stats by aggregating team stats
+  const sections = allSections.map((s) => {
+    const sectionTeams = teamsBySection.get(s.id) ?? []
+    let totalDeployments = 0
+    let withFourEyes = 0
+    let linkedToGoal = 0
+    for (const team of sectionTeams) {
+      const stats = teamStatsMap.get(team.id)
+      if (stats) {
+        totalDeployments += stats.total_deployments
+        withFourEyes += stats.with_four_eyes
+        linkedToGoal += stats.linked_to_goal
+      }
+    }
+    return {
+      ...s,
+      stats: {
+        total_deployments: totalDeployments,
+        with_four_eyes: withFourEyes,
+        linked_to_goal: linkedToGoal,
+        four_eyes_coverage: totalDeployments > 0 ? withFourEyes / totalDeployments : 0,
+        goal_coverage: totalDeployments > 0 ? linkedToGoal / totalDeployments : 0,
+      },
+    }
+  })
+
+  // Aggregate across all sections
+  const aggregate = sections.reduce(
     (acc, s) => ({
-      total_deployments: acc.total_deployments + s.total_deployments,
-      with_four_eyes: acc.with_four_eyes + s.with_four_eyes,
-      without_four_eyes: acc.without_four_eyes + s.without_four_eyes,
-      pending_verification: acc.pending_verification + s.pending_verification,
-      linked_to_goal: acc.linked_to_goal + s.linked_to_goal,
+      total_deployments: acc.total_deployments + s.stats.total_deployments,
+      with_four_eyes: acc.with_four_eyes + s.stats.with_four_eyes,
+      linked_to_goal: acc.linked_to_goal + s.stats.linked_to_goal,
     }),
-    { total_deployments: 0, with_four_eyes: 0, without_four_eyes: 0, pending_verification: 0, linked_to_goal: 0 },
+    { total_deployments: 0, with_four_eyes: 0, linked_to_goal: 0 },
   )
 
   const fourEyesCoverage = aggregate.total_deployments > 0 ? aggregate.with_four_eyes / aggregate.total_deployments : 0
@@ -182,7 +213,13 @@ export default function AdminSections() {
   )
 }
 
-function SectionCard({ section }: { section: SectionWithTeams & { stats: SectionOverallStats } }) {
+function SectionCard({
+  section,
+}: {
+  section: SectionWithTeams & {
+    stats: { total_deployments: number; four_eyes_coverage: number; goal_coverage: number }
+  }
+}) {
   const { stats } = section
   const fourEyesPct = formatCoverage(stats.four_eyes_coverage)
   const goalPct = formatCoverage(stats.goal_coverage)
