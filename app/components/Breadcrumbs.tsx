@@ -192,6 +192,12 @@ const dynamicBreadcrumbs: Array<{
     getLabel: () => 'Dashboard',
     parent: '/sections/:slug/teams/:team',
   },
+  // Admin: /sections/:slug/teams/:team/admin
+  {
+    pattern: /^\/sections\/([^/]+)\/teams\/([^/]+)\/admin$/,
+    getLabel: () => 'Administrer',
+    parent: '/sections/:slug/teams/:team',
+  },
 ]
 
 interface Crumb {

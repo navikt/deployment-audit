@@ -1,4 +1,4 @@
-import { ArrowLeftIcon, PlusIcon, TrashIcon } from '@navikt/aksel-icons'
+import { PlusIcon, TrashIcon } from '@navikt/aksel-icons'
 import {
   Alert,
   BodyShort,
@@ -16,7 +16,7 @@ import {
   VStack,
 } from '@navikt/ds-react'
 import { useRef, useState } from 'react'
-import { Form, Link, useLoaderData } from 'react-router'
+import { Form, useLoaderData } from 'react-router'
 import { ActionAlert } from '~/components/ActionAlert'
 import {
   addNaisTeamToDevTeam,
@@ -76,10 +76,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     members,
     linkedApps,
     availableApps,
+    sectionName: section.name,
     allUsers: allUsers
       .filter((u) => u.nav_ident)
       .map((u) => ({ navIdent: u.nav_ident!, displayName: u.display_name, githubUsername: u.github_username })),
-    sectionSlug: params.sectionSlug,
   }
 }
 
@@ -202,8 +202,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function DevTeamAdmin({ actionData }: Route.ComponentProps) {
-  const { devTeam, members, linkedApps, availableApps, allUsers, sectionSlug } = useLoaderData<typeof loader>()
-  const teamBasePath = `/sections/${sectionSlug}/teams/${devTeam.slug}`
+  const { devTeam, members, linkedApps, availableApps, allUsers } = useLoaderData<typeof loader>()
 
   return (
     <VStack gap="space-24">
@@ -212,11 +211,6 @@ export default function DevTeamAdmin({ actionData }: Route.ComponentProps) {
           Administrer {devTeam.name}
         </Heading>
         <BodyShort textColor="subtle">Administrer medlemmer, applikasjoner og Nais-team.</BodyShort>
-        <HStack gap="space-8" style={{ marginTop: 'var(--ax-space-8)' }}>
-          <Button as={Link} to={teamBasePath} variant="tertiary" size="small" icon={<ArrowLeftIcon aria-hidden />}>
-            Tilbake til teamside
-          </Button>
-        </HStack>
       </div>
 
       <ActionAlert data={actionData} />
