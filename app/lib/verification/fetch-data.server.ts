@@ -77,13 +77,14 @@ export async function fetchVerificationData(
   // Check if deployed commit is on the base branch
   const commitOnBaseBranch = await isCommitOnBranch(owner, repo, commitSha, baseBranch)
 
-  // Get previous deployment
+  // Get previous deployment (with group fallback)
   const previousDeployment = await getPreviousDeployment(
     deploymentId,
     owner,
     repo,
     environmentName,
     appSettings.auditStartYear,
+    monitoredAppId,
   )
 
   // Get deployed commit's PR
@@ -297,6 +298,7 @@ async function getPreviousDeployment(
   repo: string,
   environmentName: string,
   auditStartYear: number | null,
+  monitoredAppId: number,
 ): Promise<{ id: number; commitSha: string; createdAt: string } | null> {
   // VIKTIG: Bruk created_at for å finne forrige deployment, IKKE id.
   // Deployment-IDer korrelerer ikke med kronologisk rekkefølge fordi
@@ -314,6 +316,58 @@ async function getPreviousDeployment(
       AND d.commit_sha !~ '^refs/'
   `
   const params: (number | string)[] = [currentDeploymentId, environmentName, owner, repo]
+
+  if (auditStartYear) {
+    query += ` AND d.created_at >= $5`
+    params.push(`${auditStartYear}-01-01`)
+  }
+
+  query += ` ORDER BY d.created_at DESC LIMIT 1`
+
+  const result = await pool.query(query, params)
+
+  if (result.rows.length > 0) {
+    return {
+      id: result.rows[0].id,
+      commitSha: result.rows[0].commit_sha,
+      createdAt: result.rows[0].created_at.toISOString(),
+    }
+  }
+
+  // Fallback: look for a previous deployment from the same repo in a sibling
+  // environment within the same application group. This avoids unnecessary
+  // pending_baseline when a new environment variant is added to an existing group.
+  return getPreviousDeploymentFromGroupSibling(currentDeploymentId, owner, repo, auditStartYear, monitoredAppId)
+}
+
+/**
+ * Fallback for `getPreviousDeployment`: when no prior deployment exists in the
+ * same environment, look across sibling apps in the same application group.
+ * Only applies when the monitored app belongs to a group.
+ */
+async function getPreviousDeploymentFromGroupSibling(
+  currentDeploymentId: number,
+  owner: string,
+  repo: string,
+  auditStartYear: number | null,
+  monitoredAppId: number,
+): Promise<{ id: number; commitSha: string; createdAt: string } | null> {
+  let query = `
+    SELECT d.id, d.commit_sha, d.created_at
+    FROM deployments d
+    JOIN monitored_applications ma ON d.monitored_app_id = ma.id
+    WHERE d.created_at < (SELECT created_at FROM deployments WHERE id = $1)
+      AND d.detected_github_owner = $2
+      AND d.detected_github_repo_name = $3
+      AND d.commit_sha IS NOT NULL
+      AND d.four_eyes_status NOT IN ('legacy', 'legacy_pending')
+      AND d.commit_sha !~ '^refs/'
+      AND ma.application_group_id IS NOT NULL
+      AND ma.application_group_id = (
+        SELECT application_group_id FROM monitored_applications WHERE id = $4
+      )
+  `
+  const params: (number | string)[] = [currentDeploymentId, owner, repo, monitoredAppId]
 
   if (auditStartYear) {
     query += ` AND d.created_at >= $5`
