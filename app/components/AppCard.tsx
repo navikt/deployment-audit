@@ -63,18 +63,18 @@ function IssueBadge({ to, icon, color, variant = 'outline', children }: IssueBad
   return tag
 }
 
-function getStatusBadge(appStats: AppStats, to?: string) {
+function getStatusBadge(appStats: AppStats, links: { failedTo?: string; pendingTo?: string }) {
   if (appStats.without_four_eyes > 0) {
     const label = appStats.without_four_eyes === 1 ? 'mangel' : 'mangler'
     return (
-      <IssueBadge to={to} icon={<XMarkOctagonIcon aria-hidden />} color="danger">
+      <IssueBadge to={links.failedTo} icon={<XMarkOctagonIcon aria-hidden />} color="danger">
         {appStats.without_four_eyes} {label}
       </IssueBadge>
     )
   }
   if (appStats.pending_verification > 0) {
     return (
-      <IssueBadge icon={<ExclamationmarkTriangleIcon aria-hidden />} color="warning">
+      <IssueBadge to={links.pendingTo} icon={<ExclamationmarkTriangleIcon aria-hidden />} color="warning">
         {appStats.pending_verification} venter
       </IssueBadge>
     )
@@ -172,12 +172,16 @@ export function AppCard({ app, showEnvironment = true, appendSearchParams }: App
                 {app.stats.missing_goal_links} uten opphav
               </IssueBadge>
             )}
-            {getStatusBadge(
-              app.stats,
-              app.stats.without_four_eyes > 0
-                ? `${appUrl}/deployments?status=not_approved&period=all${groupParam}${extraParams}`
-                : undefined,
-            )}
+            {getStatusBadge(app.stats, {
+              failedTo:
+                app.stats.without_four_eyes > 0
+                  ? `${appUrl}/deployments?status=not_approved&period=all${groupParam}${extraParams}`
+                  : undefined,
+              pendingTo:
+                app.stats.pending_verification > 0
+                  ? `${appUrl}/deployments?status=pending&period=all${groupParam}${extraParams}`
+                  : undefined,
+            })}
           </HStack>
         </HStack>
 
