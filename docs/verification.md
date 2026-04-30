@@ -136,6 +136,8 @@ Hvis dette er **første gang** applikasjonen deployes (ingen tidligere deploymen
 >
 > Tilsvarende filtreres deployments som ligger før appens `audit_start_year` bort. Første deployment innenfor revisjonsperioden behandles som `pending_baseline` selv om det finnes eldre pre-revisjons-deployments. Dette gjelder både live verifisering og pre-beregningen av verifiseringsavvik (`compute-diffs`).
 
+**Gruppe-fallback:** Hvis appen tilhører en *applikasjonsgruppe* og det ikke finnes en forrige deployment i **samme miljø**, leter systemet etter en forrige deployment fra **samme Git-repo i et søskenmiljø** innenfor gruppen. Dette unngår unødvendige `pending_baseline` når en ny miljøvariant (f.eks. prod-gcp) legges til for en app som allerede har historikk i et annet miljø (f.eks. prod-fss).
+
 #### Steg 2: Er det noen nye commits?
 
 Systemet henter listen over commits mellom forrige deployment sin commit-SHA og nåværende deployment sin commit-SHA via GitHub API.

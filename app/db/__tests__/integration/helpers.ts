@@ -113,3 +113,20 @@ export async function seedDeployment(
   )
   return rows[0].id
 }
+
+/**
+ * Create an application group and return its id.
+ */
+export async function seedApplicationGroup(pool: Pool, name: string): Promise<number> {
+  const { rows } = await pool.query<{ id: number }>(`INSERT INTO application_groups (name) VALUES ($1) RETURNING id`, [
+    name,
+  ])
+  return rows[0].id
+}
+
+/**
+ * Assign a monitored application to an application group.
+ */
+export async function assignAppToGroup(pool: Pool, appId: number, groupId: number): Promise<void> {
+  await pool.query(`UPDATE monitored_applications SET application_group_id = $1 WHERE id = $2`, [groupId, appId])
+}

@@ -22,10 +22,11 @@ export async function verifyDeploymentsFourEyes(filters?: DeploymentFilters & { 
     per_page: 10000, // Get all deployments, not just first 20
   })
 
-  // Only verify deployments with 'pending' or 'error' status
-  // Other statuses (direct_push, unverified_commits, missing, etc.) are final results
-  // that can only be changed via manual approval
-  const statusesToVerify = ['pending', 'error']
+  // Only verify deployments with these statuses — other statuses (direct_push,
+  // unverified_commits, missing, etc.) are final results that can only be changed
+  // via manual approval. pending_baseline is included so that group-aware fallback
+  // can resolve baselines when a sibling environment gains history.
+  const statusesToVerify = ['pending', 'error', 'pending_baseline']
   const needsVerification = deploymentsToVerify.filter(
     (d) =>
       !isApprovedStatus(d.four_eyes_status ?? '') &&
