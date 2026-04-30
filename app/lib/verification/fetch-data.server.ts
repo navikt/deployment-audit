@@ -343,7 +343,7 @@ async function getPreviousDeployment(
 /**
  * Fallback for `getPreviousDeployment`: when no prior deployment exists in the
  * same environment, look across sibling apps in the same application group.
- * Only applies when the monitored app belongs to a group.
+ * Returns null immediately when the app has no group (avoids unnecessary query).
  */
 async function getPreviousDeploymentFromGroupSibling(
   currentDeploymentId: number,
@@ -352,6 +352,14 @@ async function getPreviousDeploymentFromGroupSibling(
   auditStartYear: number | null,
   monitoredAppId: number,
 ): Promise<{ id: number; commitSha: string; createdAt: string } | null> {
+  // Early return: check if app belongs to a group
+  const groupCheck = await pool.query<{ application_group_id: number | null }>(
+    `SELECT application_group_id FROM monitored_applications WHERE id = $1`,
+    [monitoredAppId],
+  )
+  const groupId = groupCheck.rows[0]?.application_group_id
+  if (!groupId) return null
+
   let query = `
     SELECT d.id, d.commit_sha, d.created_at
     FROM deployments d
@@ -362,12 +370,9 @@ async function getPreviousDeploymentFromGroupSibling(
       AND d.commit_sha IS NOT NULL
       AND d.four_eyes_status NOT IN ('legacy', 'legacy_pending')
       AND d.commit_sha !~ '^refs/'
-      AND ma.application_group_id IS NOT NULL
-      AND ma.application_group_id = (
-        SELECT application_group_id FROM monitored_applications WHERE id = $4
-      )
+      AND ma.application_group_id = $4
   `
-  const params: (number | string)[] = [currentDeploymentId, owner, repo, monitoredAppId]
+  const params: (number | string)[] = [currentDeploymentId, owner, repo, groupId]
 
   if (auditStartYear) {
     query += ` AND d.created_at >= $5`

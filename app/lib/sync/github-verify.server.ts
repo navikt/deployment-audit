@@ -1,3 +1,4 @@
+import { pool } from '~/db/connection.server'
 import { type DeploymentFilters, getAllDeployments, updateDeploymentFourEyes } from '~/db/deployments.server'
 import { isApprovedStatus } from '~/lib/four-eyes-status'
 import { logger } from '~/lib/logger.server'
@@ -34,10 +35,25 @@ export async function verifyDeploymentsFourEyes(filters?: DeploymentFilters & { 
       statusesToVerify.includes(d.four_eyes_status ?? ''),
   )
 
-  // Sort by created_at ascending (oldest first)
-  const prioritized = needsVerification.sort(
-    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+  // For pending_baseline: only re-verify if the app belongs to a group (otherwise
+  // re-verification would run every cycle without ever changing the result).
+  let grouped: Set<number> | null = null
+  const pendingBaselines = needsVerification.filter((d) => d.four_eyes_status === 'pending_baseline')
+  if (pendingBaselines.length > 0) {
+    const appIds = [...new Set(pendingBaselines.map((d) => d.monitored_app_id))]
+    const { rows } = await pool.query<{ id: number }>(
+      `SELECT id FROM monitored_applications WHERE id = ANY($1) AND application_group_id IS NOT NULL`,
+      [appIds],
+    )
+    grouped = new Set(rows.map((r) => r.id))
+  }
+
+  const filtered = needsVerification.filter(
+    (d) => d.four_eyes_status !== 'pending_baseline' || grouped?.has(d.monitored_app_id),
   )
+
+  // Sort by created_at ascending (oldest first)
+  const prioritized = filtered.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
 
   // Apply limit if specified
   const toVerify = filters?.limit ? prioritized.slice(0, filters.limit) : prioritized

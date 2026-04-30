@@ -194,33 +194,46 @@ describe('getPreviousDeployment query', () => {
 })
 
 /**
- * Replicates the getPreviousDeploymentFromGroupSibling query.
- * Falls back to sibling environments in the same application group.
+ * Replicates the getPreviousDeploymentFromGroupSibling query from fetch-data.server.ts.
+ * First checks if the app has a group, then queries sibling environments.
  */
 async function getPreviousDeploymentFromGroupSibling(
   currentDeploymentId: number,
   owner: string,
   repo: string,
   monitoredAppId: number,
+  auditStartYear?: number | null,
 ): Promise<{ id: number; commitSha: string } | null> {
-  const result = await pool.query(
-    `SELECT d.id, d.commit_sha
-     FROM deployments d
-     JOIN monitored_applications ma ON d.monitored_app_id = ma.id
-     WHERE d.created_at < (SELECT created_at FROM deployments WHERE id = $1)
-       AND d.detected_github_owner = $2
-       AND d.detected_github_repo_name = $3
-       AND d.commit_sha IS NOT NULL
-       AND d.four_eyes_status NOT IN ('legacy', 'legacy_pending')
-       AND d.commit_sha !~ '^refs/'
-       AND ma.application_group_id IS NOT NULL
-       AND ma.application_group_id = (
-         SELECT application_group_id FROM monitored_applications WHERE id = $4
-       )
-     ORDER BY d.created_at DESC
-     LIMIT 1`,
-    [currentDeploymentId, owner, repo, monitoredAppId],
+  // Early return: check if app belongs to a group (matches production)
+  const groupCheck = await pool.query<{ application_group_id: number | null }>(
+    `SELECT application_group_id FROM monitored_applications WHERE id = $1`,
+    [monitoredAppId],
   )
+  const groupId = groupCheck.rows[0]?.application_group_id
+  if (!groupId) return null
+
+  let query = `
+    SELECT d.id, d.commit_sha
+    FROM deployments d
+    JOIN monitored_applications ma ON d.monitored_app_id = ma.id
+    WHERE d.created_at < (SELECT created_at FROM deployments WHERE id = $1)
+      AND d.detected_github_owner = $2
+      AND d.detected_github_repo_name = $3
+      AND d.commit_sha IS NOT NULL
+      AND d.four_eyes_status NOT IN ('legacy', 'legacy_pending')
+      AND d.commit_sha !~ '^refs/'
+      AND ma.application_group_id = $4
+  `
+  const params: (number | string)[] = [currentDeploymentId, owner, repo, groupId]
+
+  if (auditStartYear) {
+    query += ` AND d.created_at >= $5`
+    params.push(`${auditStartYear}-01-01`)
+  }
+
+  query += ` ORDER BY d.created_at DESC LIMIT 1`
+
+  const result = await pool.query(query, params)
 
   if (result.rows.length === 0) return null
   return { id: result.rows[0].id, commitSha: result.rows[0].commit_sha }
@@ -362,5 +375,71 @@ describe('getPreviousDeploymentFromGroupSibling (group fallback)', () => {
 
     const prev = await getPreviousDeploymentFromGroupSibling(currentId, owner, repo, appGcp)
     expect(prev).toBeNull()
+  })
+
+  it('should respect auditStartYear and exclude older sibling deployments', async () => {
+    const appFss = await seedApp(pool, {
+      teamSlug: 'team',
+      appName: 'app-fss',
+      environment: 'prod-fss',
+      auditStartYear: 2025,
+    })
+    const appGcp = await seedApp(pool, {
+      teamSlug: 'team',
+      appName: 'app-gcp',
+      environment: 'prod-gcp',
+      auditStartYear: 2025,
+    })
+
+    const groupId = await seedApplicationGroup(pool, 'audit-year-group')
+    await assignAppToGroup(pool, appFss, groupId)
+    await assignAppToGroup(pool, appGcp, groupId)
+
+    // Deployment in sibling BEFORE audit start year
+    await seedDeployment(pool, {
+      monitoredAppId: appFss,
+      teamSlug: 'team',
+      environment: 'prod-fss',
+      commitSha: 'old111',
+      fourEyesStatus: 'approved',
+      createdAt: new Date('2024-06-15T10:00:00Z'),
+      githubOwner: owner,
+      githubRepo: repo,
+    })
+
+    // Deployment in sibling AFTER audit start year
+    const validId = await seedDeployment(pool, {
+      monitoredAppId: appFss,
+      teamSlug: 'team',
+      environment: 'prod-fss',
+      commitSha: 'new222',
+      fourEyesStatus: 'approved',
+      createdAt: new Date('2025-03-01T10:00:00Z'),
+      githubOwner: owner,
+      githubRepo: repo,
+    })
+
+    const currentId = await seedDeployment(pool, {
+      monitoredAppId: appGcp,
+      teamSlug: 'team',
+      environment: 'prod-gcp',
+      commitSha: 'cur333',
+      fourEyesStatus: 'pending',
+      createdAt: new Date('2025-04-01T10:00:00Z'),
+      githubOwner: owner,
+      githubRepo: repo,
+    })
+
+    // Without auditStartYear: finds the newest sibling (new222)
+    const prevNoFilter = await getPreviousDeploymentFromGroupSibling(currentId, owner, repo, appGcp)
+    expect(prevNoFilter?.id).toBe(validId)
+
+    // With auditStartYear=2025: still finds new222 (within window)
+    const prevWithYear = await getPreviousDeploymentFromGroupSibling(currentId, owner, repo, appGcp, 2025)
+    expect(prevWithYear?.id).toBe(validId)
+
+    // With auditStartYear=2026: excludes both (too old for this window)
+    const prevStrictYear = await getPreviousDeploymentFromGroupSibling(currentId, owner, repo, appGcp, 2026)
+    expect(prevStrictYear).toBeNull()
   })
 })
