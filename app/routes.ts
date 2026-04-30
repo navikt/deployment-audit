@@ -75,6 +75,10 @@ export default [
     route('sections/:slug/edit', 'routes/admin/sections.$slug.dev-teams.tsx'),
     route('sections/:sectionSlug/teams/:devTeamSlug', 'routes/sections.$sectionSlug.teams.$devTeamSlug.tsx'),
     route(
+      'sections/:sectionSlug/teams/:devTeamSlug/admin',
+      'routes/sections.$sectionSlug.teams.$devTeamSlug.admin.tsx',
+    ),
+    route(
       'sections/:sectionSlug/teams/:devTeamSlug/boards',
       'routes/sections.$sectionSlug.teams.$devTeamSlug.boards.tsx',
     ),

@@ -299,6 +299,46 @@ export async function addAppToDevTeam(devTeamId: number, monitoredAppId: number)
   )
 }
 
+/** Add a single Nais-team link to a dev team (idempotent; undeletes a soft-deleted link) */
+export async function addNaisTeamToDevTeam(devTeamId: number, naisTeamSlug: string): Promise<void> {
+  await pool.query(
+    `INSERT INTO dev_team_nais_teams (dev_team_id, nais_team_slug)
+     VALUES ($1, $2)
+     ON CONFLICT (dev_team_id, nais_team_slug)
+     DO UPDATE SET deleted_at = NULL, deleted_by = NULL
+     WHERE dev_team_nais_teams.deleted_at IS NOT NULL`,
+    [devTeamId, naisTeamSlug],
+  )
+}
+
+/** Atomically soft-delete a single Nais-team link from a dev team. No-op if already deleted. */
+export async function removeNaisTeamFromDevTeam(
+  devTeamId: number,
+  naisTeamSlug: string,
+  deletedBy: string,
+): Promise<void> {
+  await pool.query(
+    `UPDATE dev_team_nais_teams
+     SET deleted_at = NOW(), deleted_by = $3
+     WHERE dev_team_id = $1 AND nais_team_slug = $2 AND deleted_at IS NULL`,
+    [devTeamId, naisTeamSlug, deletedBy],
+  )
+}
+
+/** Atomically soft-delete a single application link from a dev team. No-op if already deleted. */
+export async function removeAppFromDevTeam(
+  devTeamId: number,
+  monitoredAppId: number,
+  deletedBy: string,
+): Promise<void> {
+  await pool.query(
+    `UPDATE dev_team_applications
+     SET deleted_at = NOW(), deleted_by = $3
+     WHERE dev_team_id = $1 AND monitored_app_id = $2 AND deleted_at IS NULL`,
+    [devTeamId, monitoredAppId, deletedBy],
+  )
+}
+
 /** Get all active apps with their link status for a dev team (soft-deleted links count as not linked) */
 export async function getAvailableAppsForDevTeam(
   devTeamId: number,
