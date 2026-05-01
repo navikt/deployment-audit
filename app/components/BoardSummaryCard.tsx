@@ -17,6 +17,7 @@ export interface BoardSummaryObjective {
 export interface BoardSummary {
   boardId: number
   periodLabel: string
+  periodType: 'tertiary' | 'quarterly'
   teamName: string
   teamSlug: string
   sectionSlug: string
@@ -33,14 +34,16 @@ export interface BoardSummary {
  * the card — that would break `LinkCard`'s a11y contract.
  */
 export function BoardSummaryCard({ board }: { board: BoardSummary }) {
-  const boardUrl = `/sections/${board.sectionSlug}/teams/${board.teamSlug}/${board.boardId}`
+  const dashboardUrl = `/sections/${board.sectionSlug}/teams/${board.teamSlug}/dashboard?periodType=${board.periodType}&period=${encodeURIComponent(board.periodLabel)}`
   const totalDeployments = board.objectives.reduce((sum, o) => sum + o.total_linked_deployments, 0)
 
   return (
     <LinkCard>
       <LinkCard.Title as="h3">
         <LinkCard.Anchor asChild>
-          <Link to={boardUrl}>{formatBoardLabel({ teamName: board.teamName, periodLabel: board.periodLabel })}</Link>
+          <Link to={dashboardUrl}>
+            {formatBoardLabel({ teamName: board.teamName, periodLabel: board.periodLabel })}
+          </Link>
         </LinkCard.Anchor>
       </LinkCard.Title>
       <LinkCard.Description>

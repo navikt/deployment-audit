@@ -159,6 +159,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     activeBoards.map(async ({ board, team }) => ({
       boardId: board.id,
       periodLabel: board.period_label,
+      periodType: board.period_type,
       teamName: team.name,
       teamSlug: team.slug,
       sectionSlug: team.section_slug ?? '',

@@ -303,6 +303,7 @@ const mockBoards: BoardSummary[] = [
   {
     boardId: 1,
     periodLabel: 'T1 2026',
+    periodType: 'tertiary',
     teamName: 'Skjermbildemodernisering',
     teamSlug: 'skjermbildemodernisering',
     sectionSlug: 'pensjon',
@@ -318,6 +319,7 @@ const mockBoards: BoardSummary[] = [
   {
     boardId: 2,
     periodLabel: 'T1 2026',
+    periodType: 'tertiary',
     teamName: 'Starte pensjon',
     teamSlug: 'starte-pensjon',
     sectionSlug: 'pensjon',

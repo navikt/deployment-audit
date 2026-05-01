@@ -21,6 +21,7 @@ type Story = StoryObj<typeof BoardSummaryCard>
 const baseBoard: BoardSummary = {
   boardId: 1,
   periodLabel: 'T1 2026',
+  periodType: 'tertiary',
   teamName: 'Skjermbildemodernisering',
   teamSlug: 'skjermbildemodernisering',
   sectionSlug: 'pensjon',
