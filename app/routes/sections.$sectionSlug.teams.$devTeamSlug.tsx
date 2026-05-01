@@ -1,4 +1,4 @@
-import { BarChartIcon, ClockIcon, CogIcon } from '@navikt/aksel-icons'
+import { BarChartIcon, CogIcon } from '@navikt/aksel-icons'
 import { Alert, BodyShort, Box, Button, Detail, Heading, HGrid, HStack, Tag, VStack } from '@navikt/ds-react'
 import { Link, useLoaderData, useRouteLoaderData } from 'react-router'
 import { AppCard, type AppCardData } from '~/components/AppCard'
@@ -115,7 +115,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   return {
     devTeam,
-    boards,
     activeBoard,
     activeBoardProgress,
     members,
@@ -131,7 +130,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 export default function DevTeamPage() {
   const {
     devTeam,
-    boards,
     activeBoard,
     activeBoardProgress,
     members,
@@ -144,7 +142,6 @@ export default function DevTeamPage() {
   const layoutData = useRouteLoaderData<typeof layoutLoader>('routes/layout')
   const isAdmin = layoutData?.user?.role === 'admin'
   const teamBasePath = `/sections/${sectionSlug}/teams/${devTeam.slug}`
-  const inactiveBoards = boards.filter((b) => !b.is_active)
 
   return (
     <VStack gap="space-24">
@@ -187,30 +184,6 @@ export default function DevTeamPage() {
       ) : (
         <Alert variant="info">Ingen aktiv tavle. Opprett en ny tavle via Administrer-knappen.</Alert>
       )}
-
-      {/* Board navigation */}
-      <HStack gap="space-8">
-        <Button
-          as={Link}
-          to={`${teamBasePath}/dashboard`}
-          variant="tertiary"
-          size="small"
-          icon={<BarChartIcon aria-hidden />}
-        >
-          Dashboard
-        </Button>
-        {inactiveBoards.length > 0 && (
-          <Button
-            as={Link}
-            to={`${teamBasePath}/boards`}
-            variant="tertiary"
-            size="small"
-            icon={<ClockIcon aria-hidden />}
-          >
-            Tidligere tavler ({inactiveBoards.length})
-          </Button>
-        )}
-      </HStack>
 
       {/* Members */}
       {members.length > 0 && (
@@ -369,8 +342,14 @@ function ActiveBoardSection({
               </Detail>
             </HStack>
           </VStack>
-          <Button as={Link} to={`${teamBasePath}/${board.id}`} variant="tertiary" size="small">
-            Åpne tavle
+          <Button
+            as={Link}
+            to={`${teamBasePath}/dashboard`}
+            variant="tertiary"
+            size="small"
+            icon={<BarChartIcon aria-hidden />}
+          >
+            Dashboard
           </Button>
         </HStack>
 

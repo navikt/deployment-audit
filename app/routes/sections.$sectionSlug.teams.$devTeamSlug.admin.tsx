@@ -17,9 +17,9 @@ import {
   VStack,
 } from '@navikt/ds-react'
 import { useMemo, useRef, useState } from 'react'
-import { Form, useLoaderData, useNavigation } from 'react-router'
+import { Form, Link, useLoaderData, useNavigation } from 'react-router'
 import { ActionAlert } from '~/components/ActionAlert'
-import { createBoard } from '~/db/boards.server'
+import { type Board, createBoard, getBoardsByDevTeam } from '~/db/boards.server'
 import { pool } from '~/db/connection.server'
 import {
   addNaisTeamToDevTeam,
@@ -68,7 +68,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw new Response('Utviklingsteamet tilhører ikke denne seksjonen', { status: 404 })
   }
 
-  const [members, linkedApps, allApps, allUsers, naisCatalogResult] = await Promise.all([
+  const [members, linkedApps, allApps, allUsers, naisCatalogResult, boards] = await Promise.all([
     getDevTeamMembers(devTeam.id),
     getDevTeamApplications(devTeam.id),
     getAllMonitoredApplications(),
@@ -83,6 +83,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         }
       },
     ),
+    getBoardsByDevTeam(devTeam.id),
   ])
   const naisCatalog = naisCatalogResult.catalog
   const naisCatalogFailed = !naisCatalogResult.ok
@@ -121,7 +122,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     linkedApps,
     addableApps,
     naisCatalogFailed,
-    sectionName: section.name,
+    boards,
+    sectionSlug: section.slug,
     allUsers: allUsers
       .filter((u) => u.nav_ident)
       .map((u) => ({ navIdent: u.nav_ident!, displayName: u.display_name, githubUsername: u.github_username })),
@@ -338,8 +340,10 @@ type AddableApp = {
 }
 
 export default function DevTeamAdmin({ actionData }: Route.ComponentProps) {
-  const { devTeam, members, linkedApps, addableApps, naisCatalogFailed, allUsers } = useLoaderData<typeof loader>()
+  const { devTeam, members, linkedApps, addableApps, naisCatalogFailed, allUsers, boards, sectionSlug } =
+    useLoaderData<typeof loader>()
   const navigation = useNavigation()
+  const teamBasePath = `/sections/${sectionSlug}/teams/${devTeam.slug}`
 
   return (
     <VStack gap="space-24">
@@ -352,7 +356,7 @@ export default function DevTeamAdmin({ actionData }: Route.ComponentProps) {
 
       <ActionAlert data={actionData} />
 
-      <BoardsSection teamName={devTeam.name} />
+      <BoardsSection teamName={devTeam.name} boards={boards} teamBasePath={teamBasePath} />
       <TeamNameSection name={devTeam.name} />
       <MembersSection members={members} allUsers={allUsers} />
       <NaisTeamsSection naisTeamSlugs={devTeam.nais_team_slugs} />
@@ -366,7 +370,15 @@ export default function DevTeamAdmin({ actionData }: Route.ComponentProps) {
   )
 }
 
-function BoardsSection({ teamName }: { teamName: string }) {
+function BoardsSection({
+  teamName,
+  boards,
+  teamBasePath,
+}: {
+  teamName: string
+  boards: Board[]
+  teamBasePath: string
+}) {
   const [showCreate, setShowCreate] = useState(false)
 
   return (
@@ -382,6 +394,50 @@ function BoardsSection({ teamName }: { teamName: string }) {
         )}
       </HStack>
       {showCreate && <CreateBoardForm teamName={teamName} onCancel={() => setShowCreate(false)} />}
+      {boards.length > 0 ? (
+        <Table size="small">
+          <Table.Header>
+            <Table.Row>
+              <Table.HeaderCell>Tittel</Table.HeaderCell>
+              <Table.HeaderCell>Periode</Table.HeaderCell>
+              <Table.HeaderCell>Status</Table.HeaderCell>
+              <Table.HeaderCell />
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
+            {boards.map((board) => (
+              <Table.Row key={board.id}>
+                <Table.DataCell>{formatBoardLabel({ teamName, periodLabel: board.period_label })}</Table.DataCell>
+                <Table.DataCell>
+                  {new Date(board.period_start).toLocaleDateString('nb-NO', {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                  })}
+                  {' – '}
+                  {new Date(board.period_end).toLocaleDateString('nb-NO', {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                  })}
+                </Table.DataCell>
+                <Table.DataCell>
+                  <Tag variant={board.is_active ? 'success' : 'neutral'} size="xsmall">
+                    {board.is_active ? 'Aktiv' : 'Avsluttet'}
+                  </Tag>
+                </Table.DataCell>
+                <Table.DataCell align="right">
+                  <Button as={Link} to={`${teamBasePath}/${board.id}`} variant="tertiary" size="xsmall">
+                    Åpne tavle
+                  </Button>
+                </Table.DataCell>
+              </Table.Row>
+            ))}
+          </Table.Body>
+        </Table>
+      ) : (
+        <BodyShort textColor="subtle">Ingen tavler er opprettet ennå.</BodyShort>
+      )}
     </VStack>
   )
 }
