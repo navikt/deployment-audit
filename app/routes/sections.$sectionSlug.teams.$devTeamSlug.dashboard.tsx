@@ -1,5 +1,5 @@
-import { ChevronLeftIcon, LinkIcon } from '@navikt/aksel-icons'
-import { Alert, BodyShort, Box, Button, Detail, Heading, HStack, Select, Tag, VStack } from '@navikt/ds-react'
+import { LinkIcon } from '@navikt/aksel-icons'
+import { Alert, BodyShort, Box, Detail, Heading, HStack, Select, Tag, VStack } from '@navikt/ds-react'
 import { Link, useLoaderData, useSearchParams } from 'react-router'
 import { getBoardsByDevTeam } from '~/db/boards.server'
 import { type BoardObjectiveProgress, getBoardObjectiveProgress } from '~/db/dashboard-stats.server'
@@ -79,16 +79,9 @@ export default function DevTeamDashboard() {
 
   return (
     <VStack gap="space-24">
-      <div>
-        <HStack gap="space-8" align="center">
-          <Button as={Link} to={teamBasePath} variant="tertiary" size="small" icon={<ChevronLeftIcon aria-hidden />}>
-            Tavler
-          </Button>
-        </HStack>
-        <Heading level="1" size="large" spacing>
-          Dashboard – {devTeam.name}
-        </Heading>
-      </div>
+      <Heading level="1" size="large" spacing>
+        Dashboard – {devTeam.name}
+      </Heading>
 
       {/* Period selector */}
       <HStack gap="space-16" wrap>
