@@ -80,9 +80,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const teamCoverage = {
     total: teamStats?.total_deployments ?? 0,
     with_four_eyes: teamStats?.with_four_eyes ?? 0,
-    four_eyes_percentage: teamStats ? Math.round(teamStats.four_eyes_coverage * 100) : 0,
+    four_eyes_percentage: teamStats ? floorUnlessPerfect(teamStats.four_eyes_coverage * 100) : 0,
     with_origin: teamStats?.linked_to_goal ?? 0,
-    origin_percentage: teamStats ? Math.round(teamStats.goal_coverage * 100) : 0,
+    origin_percentage: teamStats ? floorUnlessPerfect(teamStats.goal_coverage * 100) : 0,
   }
 
   // Resolve group names for grouped app cards
@@ -377,4 +377,10 @@ function ActiveBoardSection({
       </VStack>
     </Box>
   )
+}
+
+/** Floors percentage to avoid showing 100% unless it's truly complete. */
+function floorUnlessPerfect(pct: number): number {
+  if (pct >= 100) return 100
+  return Math.floor(pct)
 }
