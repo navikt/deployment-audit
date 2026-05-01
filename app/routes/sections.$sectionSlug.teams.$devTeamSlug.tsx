@@ -20,7 +20,6 @@ import {
   getMembersGithubUsernamesForDevTeams,
 } from '~/db/user-dev-team-preference.server'
 import { requireUser } from '~/lib/auth.server'
-import { formatBoardLabel } from '~/lib/board-periods'
 import { groupAppCards } from '~/lib/group-app-cards'
 import type { Route } from './+types/sections.$sectionSlug.teams.$devTeamSlug'
 import type { loader as layoutLoader } from './layout'
@@ -175,12 +174,7 @@ export default function DevTeamPage() {
 
       {/* Active board */}
       {activeBoard ? (
-        <ActiveBoardSection
-          board={activeBoard}
-          progress={activeBoardProgress}
-          teamBasePath={teamBasePath}
-          teamName={devTeam.name}
-        />
+        <ActiveBoardSection board={activeBoard} progress={activeBoardProgress} teamBasePath={teamBasePath} />
       ) : (
         <Alert variant="info">Ingen aktiv tavle. Opprett en ny tavle via Administrer-knappen.</Alert>
       )}
@@ -306,12 +300,10 @@ function ActiveBoardSection({
   board,
   progress,
   teamBasePath,
-  teamName,
 }: {
   board: Board
   progress: BoardObjectiveProgress[]
   teamBasePath: string
-  teamName: string
 }) {
   return (
     <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
@@ -319,9 +311,7 @@ function ActiveBoardSection({
         <HStack justify="space-between" align="center" wrap>
           <VStack gap="space-4">
             <Heading level="2" size="medium">
-              <Link to={`${teamBasePath}/${board.id}`}>
-                {formatBoardLabel({ teamName, periodLabel: board.period_label })}
-              </Link>
+              <Link to={`${teamBasePath}/${board.id}`}>{board.period_label}</Link>
             </Heading>
             <HStack gap="space-8" align="center">
               <Tag variant="success" size="xsmall">
@@ -344,7 +334,7 @@ function ActiveBoardSection({
           </VStack>
           <Button
             as={Link}
-            to={`${teamBasePath}/dashboard`}
+            to={`${teamBasePath}/dashboard?periodType=${board.period_type}&period=${encodeURIComponent(board.period_label)}`}
             variant="tertiary"
             size="small"
             icon={<BarChartIcon aria-hidden />}
