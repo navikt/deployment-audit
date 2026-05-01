@@ -1,29 +1,12 @@
 import { BarChartIcon, ClockIcon, CogIcon, PlusIcon } from '@navikt/aksel-icons'
-import {
-  Alert,
-  BodyShort,
-  Box,
-  Button,
-  Checkbox,
-  CheckboxGroup,
-  Detail,
-  Heading,
-  HGrid,
-  HStack,
-  Modal,
-  Select,
-  Tag,
-  TextField,
-  VStack,
-} from '@navikt/ds-react'
-import { useMemo, useRef, useState } from 'react'
-import { Form, Link, useActionData, useLoaderData, useNavigation, useRouteLoaderData } from 'react-router'
+import { Alert, BodyShort, Box, Button, Detail, Heading, HGrid, HStack, Select, Tag, VStack } from '@navikt/ds-react'
+import { useState } from 'react'
+import { Form, Link, useActionData, useLoaderData, useRouteLoaderData } from 'react-router'
 import { ActionAlert } from '~/components/ActionAlert'
 import { AppCard, type AppCardData } from '~/components/AppCard'
 import { getGroupNamesByIds } from '~/db/application-groups.server'
 import { getAllActiveRepositories } from '~/db/application-repositories.server'
 import { type Board, createBoard, getBoardsByDevTeam } from '~/db/boards.server'
-import { pool } from '~/db/connection.server'
 import {
   type BoardObjectiveProgress,
   getBoardObjectiveProgress,
@@ -41,8 +24,6 @@ import {
 import { requireUser } from '~/lib/auth.server'
 import { type BoardPeriodType, formatBoardLabel, getPeriodsForYear } from '~/lib/board-periods'
 import { groupAppCards } from '~/lib/group-app-cards'
-import { logger } from '~/lib/logger.server'
-import { fetchAllTeamsAndApplications, getApplicationInfo } from '~/lib/nais.server'
 import type { Route } from './+types/sections.$sectionSlug.teams.$devTeamSlug'
 import type { loader as layoutLoader } from './layout'
 
@@ -56,39 +37,17 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (!devTeam) {
     throw new Response('Utviklingsteam ikke funnet', { status: 404 })
   }
-  const [
-    boards,
-    members,
-    directApps,
-    groupAppIds,
-    allApps,
-    alertCounts,
-    activeRepos,
-    naisCatalogResult,
-    deployerUsernames,
-  ] = await Promise.all([
-    getBoardsByDevTeam(devTeam.id),
-    getDevTeamMembers(devTeam.id).catch(() => [] as DevTeamMember[]),
-    getDevTeamApplications(devTeam.id),
-    getGroupAppIdsForDevTeams([devTeam.id]),
-    getAllMonitoredApplications(),
-    getAllAlertCounts(),
-    getAllActiveRepositories(),
-    fetchAllTeamsAndApplications().then(
-      (catalog) => ({ ok: true as const, catalog }),
-      (err: unknown) => {
-        // Page still loads if Nais is down — UI surfaces a dedicated error state.
-        logger.error('Kunne ikke hente Nais-katalog:', err)
-        return {
-          ok: false as const,
-          catalog: [] as Array<{ teamSlug: string; appName: string; environmentName: string }>,
-        }
-      },
-    ),
-    getMembersGithubUsernamesForDevTeams([devTeam.id]).catch(() => [] as string[]),
-  ])
-  const naisCatalog = naisCatalogResult.catalog
-  const naisCatalogFailed = !naisCatalogResult.ok
+  const [boards, members, directApps, groupAppIds, allApps, alertCounts, activeRepos, deployerUsernames] =
+    await Promise.all([
+      getBoardsByDevTeam(devTeam.id),
+      getDevTeamMembers(devTeam.id).catch(() => [] as DevTeamMember[]),
+      getDevTeamApplications(devTeam.id),
+      getGroupAppIdsForDevTeams([devTeam.id]),
+      getAllMonitoredApplications(),
+      getAllAlertCounts(),
+      getAllActiveRepositories(),
+      getMembersGithubUsernamesForDevTeams([devTeam.id]).catch(() => [] as string[]),
+    ])
 
   const activeBoard = boards.find((b) => b.is_active) ?? null
   const activeBoardProgress = activeBoard ? await getBoardObjectiveProgress(activeBoard.id) : []
@@ -156,31 +115,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const section = await getSectionBySlug(params.sectionSlug)
 
-  // Build the "add apps" candidate list: every Nais app that is NOT already
-  // linked to this dev team. We deliberately exclude already-linked apps to
-  // make the dialog purely additive — unlink is a separate flow.
-  const allowedEnvs = process.env.ALLOWED_ENVIRONMENTS?.split(',').map((e) => e.trim()) || []
-  const linkedKeys = new Set(teamApps.map((a) => `${a.team_slug}|${a.environment_name}|${a.app_name}`))
-  const monitoredByKey = new Map(
-    allApps.filter((a) => a.is_active).map((a) => [`${a.team_slug}|${a.environment_name}|${a.app_name}`, a.id]),
-  )
-  const filteredCatalog =
-    allowedEnvs.length > 0 ? naisCatalog.filter((a) => allowedEnvs.includes(a.environmentName)) : naisCatalog
-  const addableApps: AddableApp[] = filteredCatalog
-    .filter((entry) => !linkedKeys.has(`${entry.teamSlug}|${entry.environmentName}|${entry.appName}`))
-    .map((entry) => ({
-      team_slug: entry.teamSlug,
-      environment_name: entry.environmentName,
-      app_name: entry.appName,
-      monitored_id: monitoredByKey.get(`${entry.teamSlug}|${entry.environmentName}|${entry.appName}`) ?? null,
-    }))
-    .sort(
-      (a, b) =>
-        a.team_slug.localeCompare(b.team_slug, 'nb') ||
-        a.app_name.localeCompare(b.app_name, 'nb') ||
-        a.environment_name.localeCompare(b.environment_name, 'nb'),
-    )
-
   return {
     devTeam,
     boards,
@@ -188,21 +122,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     activeBoardProgress,
     members,
     appCards,
-    addableApps,
-    naisCatalogFailed,
     sectionSlug: params.sectionSlug,
     sectionName: section?.name ?? params.sectionSlug,
     teamCoverage,
     hasMappedMembers,
     unmappedMemberCount: members.filter((m) => !m.github_username).length,
   }
-}
-
-type AddableApp = {
-  team_slug: string
-  environment_name: string
-  app_name: string
-  monitored_id: number | null
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
@@ -214,104 +139,6 @@ export async function action({ request, params }: Route.ActionArgs) {
 
   const formData = await request.formData()
   const intent = formData.get('intent') as string
-
-  // App management requires admin or team membership
-  if (intent === 'add_apps' && user.role !== 'admin') {
-    const teamMembers = await getDevTeamMembers(devTeam.id)
-    const isMember = teamMembers.some((m) => m.nav_ident.toUpperCase() === user.navIdent.toUpperCase())
-    if (!isMember) {
-      return { error: 'Du må være medlem av teamet for å endre applikasjoner.' }
-    }
-  }
-
-  if (intent === 'add_apps') {
-    /**
-     * Pure add-only flow. Each `app_ref` entry is either:
-     *   - "id:<n>"             → existing monitored_application id, link as-is
-     *   - "new:<team>|<env>|<app>"  → not yet monitored; create then link
-     *
-     * Existing links on the team are NEVER touched — unlinking is a separate
-     * flow.
-     *
-     * Atomicity strategy:
-     *   1. Dedupe inputs.
-     *   2. Validate ALL new entries against Nais BEFORE any DB write, so a
-     *      validation failure cannot leave partial state.
-     *   3. Apply the create+link operations in a single DB transaction; any
-     *      DB failure rolls back the whole batch.
-     */
-    const refs = [...new Set(formData.getAll('app_ref').map(String))]
-    const existingIds = new Set<number>()
-    const newKeys = new Map<string, { team_slug: string; environment_name: string; app_name: string }>()
-    for (const ref of refs) {
-      if (ref.startsWith('id:')) {
-        const n = Number(ref.slice(3))
-        if (Number.isInteger(n) && n > 0) existingIds.add(n)
-      } else if (ref.startsWith('new:')) {
-        const [team, env, app] = ref.slice(4).split('|')
-        if (team && env && app) {
-          newKeys.set(`${team}|${env}|${app}`, { team_slug: team, environment_name: env, app_name: app })
-        }
-      }
-    }
-    const newIdentities = [...newKeys.values()]
-
-    if (existingIds.size === 0 && newIdentities.length === 0) {
-      return { error: 'Velg minst én applikasjon å legge til.' }
-    }
-
-    // Pre-validate every new entry against Nais. We do this OUTSIDE the
-    // transaction because Nais calls are slow and we want to fail fast
-    // before opening a write transaction.
-    for (const id of newIdentities) {
-      const found = await getApplicationInfo(id.team_slug, id.environment_name, id.app_name)
-      if (!found) {
-        return {
-          error: `Fant ikke ${id.app_name} i Nais-team ${id.team_slug} (miljø ${id.environment_name}). Last siden på nytt og prøv igjen.`,
-        }
-      }
-    }
-
-    const client = await pool.connect()
-    try {
-      await client.query('BEGIN')
-      const createdIds: number[] = []
-      for (const id of newIdentities) {
-        const result = await client.query<{ id: number }>(
-          `INSERT INTO monitored_applications (team_slug, environment_name, app_name)
-           VALUES ($1, $2, $3)
-           ON CONFLICT (team_slug, environment_name, app_name)
-           DO UPDATE SET is_active = true, updated_at = CURRENT_TIMESTAMP
-           RETURNING id`,
-          [id.team_slug, id.environment_name, id.app_name],
-        )
-        createdIds.push(result.rows[0].id)
-      }
-      for (const monitoredAppId of [...existingIds, ...createdIds]) {
-        await client.query(
-          `INSERT INTO dev_team_applications (dev_team_id, monitored_app_id)
-           VALUES ($1, $2)
-           ON CONFLICT (dev_team_id, monitored_app_id)
-           DO UPDATE SET deleted_at = NULL, deleted_by = NULL
-           WHERE dev_team_applications.deleted_at IS NOT NULL`,
-          [devTeam.id, monitoredAppId],
-        )
-      }
-      await client.query('COMMIT')
-      const total = existingIds.size + createdIds.length
-      const createdMsg =
-        createdIds.length > 0
-          ? ` (${createdIds.length} ny${createdIds.length === 1 ? '' : 'e'} app${createdIds.length === 1 ? '' : 'er'} lagt til overvåking)`
-          : ''
-      return { success: `La til ${total} applikasjon${total === 1 ? '' : 'er'}${createdMsg}.` }
-    } catch (error) {
-      await client.query('ROLLBACK').catch(() => {})
-      logger.error('add_apps tx failed:', error)
-      return { error: `Kunne ikke legge til applikasjoner: ${error}` }
-    } finally {
-      client.release()
-    }
-  }
 
   if (intent === 'create') {
     const periodType = formData.get('period_type') as BoardPeriodType
@@ -350,23 +177,17 @@ export default function DevTeamPage() {
     activeBoardProgress,
     members,
     appCards,
-    addableApps,
-    naisCatalogFailed,
     sectionSlug,
     teamCoverage,
     hasMappedMembers,
     unmappedMemberCount,
   } = useLoaderData<typeof loader>()
   const actionData = useActionData<typeof action>()
-  const navigation = useNavigation()
   const layoutData = useRouteLoaderData<typeof layoutLoader>('routes/layout')
   const isAdmin = layoutData?.user?.role === 'admin'
-  const isMember = members.some((m) => m.nav_ident.toUpperCase() === layoutData?.user?.navIdent?.toUpperCase())
-  const canEditApps = isAdmin || isMember
   const [showCreate, setShowCreate] = useState(false)
   const teamBasePath = `/sections/${sectionSlug}/teams/${devTeam.slug}`
   const inactiveBoards = boards.filter((b) => !b.is_active)
-  const addAppsRef = useRef<HTMLDialogElement>(null)
 
   return (
     <VStack gap="space-24">
@@ -465,21 +286,9 @@ export default function DevTeamPage() {
 
       {/* Applications */}
       <VStack gap="space-8">
-        <HStack justify="space-between" align="center">
-          <Heading level="2" size="small">
-            Applikasjoner ({appCards.length})
-          </Heading>
-          {canEditApps && (
-            <Button
-              size="small"
-              variant="tertiary"
-              icon={<PlusIcon aria-hidden />}
-              onClick={() => addAppsRef.current?.showModal()}
-            >
-              Legg til applikasjon
-            </Button>
-          )}
-        </HStack>
+        <Heading level="2" size="small">
+          Applikasjoner ({appCards.length})
+        </Heading>
         <Detail textColor="subtle">Statistikk er filtrert til deploys utført av team-medlemmer.</Detail>
         <ActionAlert data={actionData} />
         {appCards.length > 0 ? (
@@ -492,14 +301,6 @@ export default function DevTeamPage() {
           <BodyShort textColor="subtle">Ingen applikasjoner er lagt til ennå.</BodyShort>
         )}
       </VStack>
-
-      {/* Add apps dialog */}
-      <AddAppsDialog
-        ref={addAppsRef}
-        addableApps={addableApps}
-        naisCatalogFailed={naisCatalogFailed}
-        isSubmitting={navigation.state === 'submitting'}
-      />
     </VStack>
   )
 }
@@ -659,135 +460,6 @@ function ActiveBoardSection({
     </Box>
   )
 }
-
-import { forwardRef } from 'react'
-
-const AddAppsDialog = forwardRef<
-  HTMLDialogElement,
-  { addableApps: AddableApp[]; naisCatalogFailed: boolean; isSubmitting: boolean }
->(function AddAppsDialog({ addableApps, naisCatalogFailed, isSubmitting }, ref) {
-  const [search, setSearch] = useState('')
-
-  const searchLower = search.toLowerCase()
-  const filteredApps = useMemo(
-    () =>
-      search
-        ? addableApps.filter(
-            (app) =>
-              app.app_name.toLowerCase().includes(searchLower) ||
-              app.team_slug.toLowerCase().includes(searchLower) ||
-              app.environment_name.toLowerCase().includes(searchLower),
-          )
-        : addableApps,
-    [addableApps, search, searchLower],
-  )
-
-  const appsByNaisTeam = useMemo(() => {
-    const grouped = new Map<string, AddableApp[]>()
-    for (const app of filteredApps) {
-      const group = grouped.get(app.team_slug) ?? []
-      group.push(app)
-      grouped.set(app.team_slug, group)
-    }
-    return grouped
-  }, [filteredApps])
-
-  const closeModal = () => {
-    if (typeof ref === 'object' && ref?.current) ref.current.close()
-  }
-
-  // Encode each row as either id:<n> (already monitored) or new:<t>|<e>|<a>.
-  // Already-linked apps are excluded server-side, so the dialog only ever
-  // submits ADDITIONS — existing links are never touched.
-  const refValue = (app: AddableApp) =>
-    app.monitored_id !== null
-      ? `id:${app.monitored_id}`
-      : `new:${app.team_slug}|${app.environment_name}|${app.app_name}`
-
-  return (
-    <Modal ref={ref} header={{ heading: 'Legg til applikasjoner' }} closeOnBackdropClick width="640px">
-      <Modal.Body>
-        <Form
-          method="post"
-          id="add-apps-form"
-          onSubmit={() => {
-            closeModal()
-          }}
-        >
-          <input type="hidden" name="intent" value="add_apps" />
-          <VStack gap="space-12">
-            {naisCatalogFailed && (
-              <Alert variant="error" size="small">
-                Kunne ikke hente Nais-katalogen akkurat nå. Last siden på nytt om litt for å se tilgjengelige
-                applikasjoner.
-              </Alert>
-            )}
-            <BodyShort size="small" textColor="subtle">
-              Lista viser Nais-applikasjoner som ikke allerede er koblet til teamet. Apper merket «Ny i overvåking»
-              opprettes automatisk når du krysser dem av og lagrer.
-            </BodyShort>
-            <TextField
-              label="Søk etter applikasjon"
-              hideLabel
-              placeholder="Søk etter applikasjon, team eller miljø..."
-              size="small"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              autoComplete="off"
-            />
-            <Box style={{ maxHeight: '400px', overflowY: 'auto' }} paddingInline="space-4" paddingBlock="space-4">
-              {filteredApps.length === 0 ? (
-                <BodyShort size="small" textColor="subtle">
-                  {search
-                    ? 'Ingen applikasjoner matcher søket.'
-                    : naisCatalogFailed
-                      ? 'Ingen applikasjoner å vise — Nais-katalogen er utilgjengelig.'
-                      : addableApps.length === 0
-                        ? 'Alle Nais-applikasjoner er allerede koblet til teamet.'
-                        : 'Ingen applikasjoner funnet i Nais.'}
-                </BodyShort>
-              ) : (
-                <VStack gap="space-16">
-                  {[...appsByNaisTeam.entries()].map(([naisTeam, apps]) => (
-                    <CheckboxGroup key={naisTeam} legend={naisTeam} size="small">
-                      {apps.map((app) => (
-                        <Checkbox
-                          key={`${app.team_slug}|${app.environment_name}|${app.app_name}`}
-                          name="app_ref"
-                          value={refValue(app)}
-                        >
-                          <HStack gap="space-8" align="center" wrap>
-                            <span>{app.app_name}</span>
-                            <BodyShort as="span" size="small" textColor="subtle">
-                              ({app.environment_name})
-                            </BodyShort>
-                            {app.monitored_id === null && (
-                              <Tag size="xsmall" variant="info">
-                                Ny i overvåking
-                              </Tag>
-                            )}
-                          </HStack>
-                        </Checkbox>
-                      ))}
-                    </CheckboxGroup>
-                  ))}
-                </VStack>
-              )}
-            </Box>
-          </VStack>
-        </Form>
-      </Modal.Body>
-      <Modal.Footer>
-        <Button type="submit" form="add-apps-form" size="small" loading={isSubmitting}>
-          Legg til valgte
-        </Button>
-        <Button variant="tertiary" size="small" type="button" onClick={closeModal}>
-          Avbryt
-        </Button>
-      </Modal.Footer>
-    </Modal>
-  )
-})
 
 function CreateBoardForm({ onCancel }: { onCancel: () => void }) {
   const [periodType, setPeriodType] = useState<BoardPeriodType>('tertiary')

@@ -15,20 +15,20 @@ import {
   UNSAFE_Combobox,
   VStack,
 } from '@navikt/ds-react'
-import { useRef, useState } from 'react'
-import { Form, useLoaderData } from 'react-router'
+import { useMemo, useRef, useState } from 'react'
+import { Form, useLoaderData, useNavigation } from 'react-router'
 import { ActionAlert } from '~/components/ActionAlert'
+import { pool } from '~/db/connection.server'
 import {
   addNaisTeamToDevTeam,
   type DevTeamApplication,
-  getAvailableAppsForDevTeam,
   getDevTeamApplications,
   getDevTeamBySlug,
   removeAppFromDevTeam,
   removeNaisTeamFromDevTeam,
-  setDevTeamApplications,
   updateDevTeam,
 } from '~/db/dev-teams.server'
+import { getAllMonitoredApplications } from '~/db/monitored-applications.server'
 import { getSectionBySlug } from '~/db/sections.server'
 import {
   addUserDevTeam,
@@ -40,7 +40,8 @@ import { getAllUserMappings, getUserMappingByNavIdent } from '~/db/user-mappings
 import { fail, ok } from '~/lib/action-result'
 import { requireAdmin } from '~/lib/auth.server'
 import { getFormString, isValidNavIdent } from '~/lib/form-validators'
-import { parseAppIds } from '~/lib/parse-app-ids'
+import { logger } from '~/lib/logger.server'
+import { fetchAllTeamsAndApplications, getApplicationInfo } from '~/lib/nais.server'
 import type { Route } from './+types/sections.$sectionSlug.teams.$devTeamSlug.admin'
 
 export function meta({ data }: Route.MetaArgs) {
@@ -64,18 +65,59 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw new Response('Utviklingsteamet tilhører ikke denne seksjonen', { status: 404 })
   }
 
-  const [members, linkedApps, availableApps, allUsers] = await Promise.all([
+  const [members, linkedApps, allApps, allUsers, naisCatalogResult] = await Promise.all([
     getDevTeamMembers(devTeam.id),
     getDevTeamApplications(devTeam.id),
-    getAvailableAppsForDevTeam(devTeam.id),
+    getAllMonitoredApplications(),
     getAllUserMappings(),
+    fetchAllTeamsAndApplications().then(
+      (catalog) => ({ ok: true as const, catalog }),
+      (err: unknown) => {
+        logger.error('Kunne ikke hente Nais-katalog:', err)
+        return {
+          ok: false as const,
+          catalog: [] as Array<{ teamSlug: string; appName: string; environmentName: string }>,
+        }
+      },
+    ),
   ])
+  const naisCatalog = naisCatalogResult.catalog
+  const naisCatalogFailed = !naisCatalogResult.ok
+
+  // Build addableApps: Nais apps not already linked to this team
+  const naisTeamSlugs = devTeam.nais_team_slugs ?? []
+  const directAppIds = new Set(linkedApps.map((a) => a.monitored_app_id))
+  const teamApps = allApps.filter(
+    (app) => app.is_active && (directAppIds.has(app.id) || naisTeamSlugs.includes(app.team_slug)),
+  )
+  const linkedKeys = new Set(teamApps.map((a) => `${a.team_slug}|${a.environment_name}|${a.app_name}`))
+  const monitoredByKey = new Map(
+    allApps.filter((a) => a.is_active).map((a) => [`${a.team_slug}|${a.environment_name}|${a.app_name}`, a.id]),
+  )
+  const allowedEnvs = process.env.ALLOWED_ENVIRONMENTS?.split(',').map((e) => e.trim()) || []
+  const filteredCatalog =
+    allowedEnvs.length > 0 ? naisCatalog.filter((a) => allowedEnvs.includes(a.environmentName)) : naisCatalog
+  const addableApps: AddableApp[] = filteredCatalog
+    .filter((entry) => !linkedKeys.has(`${entry.teamSlug}|${entry.environmentName}|${entry.appName}`))
+    .map((entry) => ({
+      team_slug: entry.teamSlug,
+      environment_name: entry.environmentName,
+      app_name: entry.appName,
+      monitored_id: monitoredByKey.get(`${entry.teamSlug}|${entry.environmentName}|${entry.appName}`) ?? null,
+    }))
+    .sort(
+      (a, b) =>
+        a.team_slug.localeCompare(b.team_slug, 'nb') ||
+        a.app_name.localeCompare(b.app_name, 'nb') ||
+        a.environment_name.localeCompare(b.environment_name, 'nb'),
+    )
 
   return {
     devTeam,
     members,
     linkedApps,
-    availableApps,
+    addableApps,
+    naisCatalogFailed,
     sectionName: section.name,
     allUsers: allUsers
       .filter((u) => u.nav_ident)
@@ -159,16 +201,74 @@ export async function action({ request, params }: Route.ActionArgs) {
     }
   }
 
-  if (intent === 'update_apps') {
-    const appIds = parseAppIds(formData.getAll('app_ids'))
-    if (!appIds) {
-      return fail('Ugyldige applikasjons-ID-er.')
+  if (intent === 'add_apps') {
+    const refs = [...new Set(formData.getAll('app_ref').map(String))]
+    const existingIds = new Set<number>()
+    const newKeys = new Map<string, { team_slug: string; environment_name: string; app_name: string }>()
+    for (const ref of refs) {
+      if (ref.startsWith('id:')) {
+        const n = Number(ref.slice(3))
+        if (Number.isInteger(n) && n > 0) existingIds.add(n)
+      } else if (ref.startsWith('new:')) {
+        const [team, env, app] = ref.slice(4).split('|')
+        if (team && env && app) {
+          newKeys.set(`${team}|${env}|${app}`, { team_slug: team, environment_name: env, app_name: app })
+        }
+      }
     }
+    const newIdentities = [...newKeys.values()]
+
+    if (existingIds.size === 0 && newIdentities.length === 0) {
+      return fail('Velg minst én applikasjon å legge til.')
+    }
+
+    for (const id of newIdentities) {
+      const found = await getApplicationInfo(id.team_slug, id.environment_name, id.app_name)
+      if (!found) {
+        return fail(
+          `Fant ikke ${id.app_name} i Nais-team ${id.team_slug} (miljø ${id.environment_name}). Last siden på nytt og prøv igjen.`,
+        )
+      }
+    }
+
+    const client = await pool.connect()
     try {
-      await setDevTeamApplications(devTeam.id, appIds, user.navIdent)
-      return ok(`Applikasjoner ble oppdatert (${appIds.length} valgt).`)
-    } catch {
-      return fail('Kunne ikke oppdatere applikasjoner.')
+      await client.query('BEGIN')
+      const createdIds: number[] = []
+      for (const id of newIdentities) {
+        const result = await client.query<{ id: number }>(
+          `INSERT INTO monitored_applications (team_slug, environment_name, app_name)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (team_slug, environment_name, app_name)
+           DO UPDATE SET is_active = true, updated_at = CURRENT_TIMESTAMP
+           RETURNING id`,
+          [id.team_slug, id.environment_name, id.app_name],
+        )
+        createdIds.push(result.rows[0].id)
+      }
+      for (const monitoredAppId of [...existingIds, ...createdIds]) {
+        await client.query(
+          `INSERT INTO dev_team_applications (dev_team_id, monitored_app_id)
+           VALUES ($1, $2)
+           ON CONFLICT (dev_team_id, monitored_app_id)
+           DO UPDATE SET deleted_at = NULL, deleted_by = NULL
+           WHERE dev_team_applications.deleted_at IS NOT NULL`,
+          [devTeam.id, monitoredAppId],
+        )
+      }
+      await client.query('COMMIT')
+      const total = existingIds.size + createdIds.length
+      const createdMsg =
+        createdIds.length > 0
+          ? ` (${createdIds.length} ny${createdIds.length === 1 ? '' : 'e'} app${createdIds.length === 1 ? '' : 'er'} lagt til overvåking)`
+          : ''
+      return ok(`La til ${total} applikasjon${total === 1 ? '' : 'er'}${createdMsg}.`)
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {})
+      logger.error('add_apps tx failed:', error)
+      return fail(`Kunne ikke legge til applikasjoner: ${error}`)
+    } finally {
+      client.release()
     }
   }
 
@@ -201,8 +301,16 @@ export async function action({ request, params }: Route.ActionArgs) {
   return fail('Ukjent handling.')
 }
 
+type AddableApp = {
+  team_slug: string
+  environment_name: string
+  app_name: string
+  monitored_id: number | null
+}
+
 export default function DevTeamAdmin({ actionData }: Route.ComponentProps) {
-  const { devTeam, members, linkedApps, availableApps, allUsers } = useLoaderData<typeof loader>()
+  const { devTeam, members, linkedApps, addableApps, naisCatalogFailed, allUsers } = useLoaderData<typeof loader>()
+  const navigation = useNavigation()
 
   return (
     <VStack gap="space-24">
@@ -218,7 +326,12 @@ export default function DevTeamAdmin({ actionData }: Route.ComponentProps) {
       <TeamNameSection name={devTeam.name} />
       <MembersSection members={members} allUsers={allUsers} />
       <NaisTeamsSection naisTeamSlugs={devTeam.nais_team_slugs} />
-      <ApplicationsSection linkedApps={linkedApps} availableApps={availableApps} />
+      <ApplicationsSection
+        linkedApps={linkedApps}
+        addableApps={addableApps}
+        naisCatalogFailed={naisCatalogFailed}
+        isSubmitting={navigation.state === 'submitting'}
+      />
     </VStack>
   )
 }
@@ -480,19 +593,16 @@ function NaisTeamsSection({ naisTeamSlugs }: { naisTeamSlugs: string[] }) {
 
 function ApplicationsSection({
   linkedApps,
-  availableApps,
+  addableApps,
+  naisCatalogFailed,
+  isSubmitting,
 }: {
   linkedApps: DevTeamApplication[]
-  availableApps: { id: number; team_slug: string; environment_name: string; app_name: string; is_linked: boolean }[]
+  addableApps: AddableApp[]
+  naisCatalogFailed: boolean
+  isSubmitting: boolean
 }) {
-  const modalRef = useRef<HTMLDialogElement>(null)
-
-  const appsByNaisTeam = new Map<string, typeof availableApps>()
-  for (const app of availableApps) {
-    const group = appsByNaisTeam.get(app.team_slug) ?? []
-    group.push(app)
-    appsByNaisTeam.set(app.team_slug, group)
-  }
+  const addModalRef = useRef<HTMLDialogElement>(null)
 
   return (
     <VStack gap="space-16">
@@ -504,9 +614,9 @@ function ApplicationsSection({
           variant="tertiary"
           size="small"
           icon={<PlusIcon aria-hidden />}
-          onClick={() => modalRef.current?.showModal()}
+          onClick={() => addModalRef.current?.showModal()}
         >
-          Rediger applikasjoner
+          Legg til applikasjon
         </Button>
       </HStack>
 
@@ -547,48 +657,138 @@ function ApplicationsSection({
         </Alert>
       )}
 
-      <Modal ref={modalRef} header={{ heading: 'Rediger applikasjoner' }} closeOnBackdropClick>
-        <Modal.Body>
-          <Form
-            method="post"
-            onSubmit={() => {
-              modalRef.current?.close()
-            }}
-          >
-            <input type="hidden" name="intent" value="update_apps" />
-            <VStack gap="space-16">
-              {availableApps.length === 0 ? (
-                <Alert variant="info" size="small">
-                  Ingen overvåkede applikasjoner funnet.
-                </Alert>
+      <AddAppsDialog
+        ref={addModalRef}
+        addableApps={addableApps}
+        naisCatalogFailed={naisCatalogFailed}
+        isSubmitting={isSubmitting}
+      />
+    </VStack>
+  )
+}
+
+import { forwardRef } from 'react'
+
+const AddAppsDialog = forwardRef<
+  HTMLDialogElement,
+  { addableApps: AddableApp[]; naisCatalogFailed: boolean; isSubmitting: boolean }
+>(function AddAppsDialog({ addableApps, naisCatalogFailed, isSubmitting }, ref) {
+  const [search, setSearch] = useState('')
+
+  const searchLower = search.toLowerCase()
+  const filteredApps = useMemo(
+    () =>
+      search
+        ? addableApps.filter(
+            (app) =>
+              app.app_name.toLowerCase().includes(searchLower) ||
+              app.team_slug.toLowerCase().includes(searchLower) ||
+              app.environment_name.toLowerCase().includes(searchLower),
+          )
+        : addableApps,
+    [addableApps, search, searchLower],
+  )
+
+  const appsByNaisTeam = useMemo(() => {
+    const grouped = new Map<string, AddableApp[]>()
+    for (const app of filteredApps) {
+      const group = grouped.get(app.team_slug) ?? []
+      group.push(app)
+      grouped.set(app.team_slug, group)
+    }
+    return grouped
+  }, [filteredApps])
+
+  const closeModal = () => {
+    if (typeof ref === 'object' && ref?.current) ref.current.close()
+  }
+
+  const refValue = (app: AddableApp) =>
+    app.monitored_id !== null
+      ? `id:${app.monitored_id}`
+      : `new:${app.team_slug}|${app.environment_name}|${app.app_name}`
+
+  return (
+    <Modal ref={ref} header={{ heading: 'Legg til applikasjoner' }} closeOnBackdropClick width="640px">
+      <Modal.Body>
+        <Form
+          method="post"
+          id="add-apps-form"
+          onSubmit={() => {
+            closeModal()
+          }}
+        >
+          <input type="hidden" name="intent" value="add_apps" />
+          <VStack gap="space-12">
+            {naisCatalogFailed && (
+              <Alert variant="error" size="small">
+                Kunne ikke hente Nais-katalogen akkurat nå. Last siden på nytt om litt for å se tilgjengelige
+                applikasjoner.
+              </Alert>
+            )}
+            <BodyShort size="small" textColor="subtle">
+              Lista viser Nais-applikasjoner som ikke allerede er koblet til teamet. Apper merket «Ny i overvåking»
+              opprettes automatisk når du krysser dem av og lagrer.
+            </BodyShort>
+            <TextField
+              label="Søk etter applikasjon"
+              hideLabel
+              placeholder="Søk etter applikasjon, team eller miljø..."
+              size="small"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              autoComplete="off"
+            />
+            <Box style={{ maxHeight: '400px', overflowY: 'auto' }} paddingInline="space-4" paddingBlock="space-4">
+              {filteredApps.length === 0 ? (
+                <BodyShort size="small" textColor="subtle">
+                  {search
+                    ? 'Ingen applikasjoner matcher søket.'
+                    : naisCatalogFailed
+                      ? 'Ingen applikasjoner å vise — Nais-katalogen er utilgjengelig.'
+                      : addableApps.length === 0
+                        ? 'Alle Nais-applikasjoner er allerede koblet til teamet.'
+                        : 'Ingen applikasjoner funnet i Nais.'}
+                </BodyShort>
               ) : (
                 <VStack gap="space-16">
                   {[...appsByNaisTeam.entries()].map(([naisTeam, apps]) => (
                     <CheckboxGroup key={naisTeam} legend={naisTeam} size="small">
                       {apps.map((app) => (
-                        <Checkbox key={app.id} name="app_ids" value={String(app.id)} defaultChecked={app.is_linked}>
-                          {app.app_name}{' '}
-                          <BodyShort as="span" size="small" textColor="subtle">
-                            ({app.environment_name})
-                          </BodyShort>
+                        <Checkbox
+                          key={`${app.team_slug}|${app.environment_name}|${app.app_name}`}
+                          name="app_ref"
+                          value={refValue(app)}
+                        >
+                          <HStack gap="space-8" align="center" wrap>
+                            <span>{app.app_name}</span>
+                            <BodyShort as="span" size="small" textColor="subtle">
+                              ({app.environment_name})
+                            </BodyShort>
+                            {app.monitored_id === null && (
+                              <Tag size="xsmall" variant="info">
+                                Ny i overvåking
+                              </Tag>
+                            )}
+                          </HStack>
                         </Checkbox>
                       ))}
                     </CheckboxGroup>
                   ))}
                 </VStack>
               )}
-              <HStack gap="space-8">
-                <Button type="submit" size="small">
-                  Lagre
-                </Button>
-                <Button variant="tertiary" size="small" type="button" onClick={() => modalRef.current?.close()}>
-                  Avbryt
-                </Button>
-              </HStack>
-            </VStack>
-          </Form>
-        </Modal.Body>
-      </Modal>
-    </VStack>
+            </Box>
+          </VStack>
+        </Form>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button type="submit" form="add-apps-form" size="small" loading={isSubmitting}>
+          Legg til valgte
+        </Button>
+        <Button variant="tertiary" size="small" type="button" onClick={closeModal}>
+          Avbryt
+        </Button>
+      </Modal.Footer>
+    </Modal>
   )
-}
+})
