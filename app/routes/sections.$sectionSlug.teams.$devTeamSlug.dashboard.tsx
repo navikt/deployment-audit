@@ -3,8 +3,9 @@ import { Alert, BodyShort, Box, Button, Detail, Heading, HStack, Select, Tag, VS
 import { Link, useLoaderData, useSearchParams } from 'react-router'
 import { getBoardsByDevTeam } from '~/db/boards.server'
 import { type BoardObjectiveProgress, getBoardObjectiveProgress } from '~/db/dashboard-stats.server'
-import { getOriginOfChangeCoverage } from '~/db/deployment-goal-links.server'
-import { getDevTeamApplications, getDevTeamBySlug } from '~/db/dev-teams.server'
+import { getDevTeamCoverageStats } from '~/db/deployment-goal-links.server'
+import { getDevTeamApplications, getDevTeamBySlug, getGroupAppIdsForDevTeams } from '~/db/dev-teams.server'
+import { getAllMonitoredApplications } from '~/db/monitored-applications.server'
 import { getSectionBySlug } from '~/db/sections.server'
 import { getMembersGithubUsernamesForDevTeams } from '~/db/user-dev-team-preference.server'
 import { requireUser } from '~/lib/auth.server'
@@ -32,9 +33,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const endDate = new Date(selectedPeriod.end)
   endDate.setDate(endDate.getDate() + 1)
 
-  const [boards, deployerUsernames] = await Promise.all([
+  const [boards, deployerUsernames, directApps, groupAppIds, allApps] = await Promise.all([
     getBoardsByDevTeam(devTeam.id),
     getMembersGithubUsernamesForDevTeams([devTeam.id]).catch(() => [] as string[]),
+    getDevTeamApplications(devTeam.id),
+    getGroupAppIdsForDevTeams([devTeam.id]),
+    getAllMonitoredApplications(),
   ])
   const currentBoard = boards.find((b) => b.period_label === selectedPeriod.label && b.period_type === periodType)
 
@@ -43,15 +47,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     objectiveProgress = await getBoardObjectiveProgress(currentBoard.id, deployerUsernames)
   }
 
-  const directApps = await getDevTeamApplications(devTeam.id)
-  const directAppIds = directApps.map((a) => a.monitored_app_id)
+  // Build full set of team app IDs: direct links + group-owned + nais team matches
+  const directAppIdSet = new Set([...directApps.map((a) => a.monitored_app_id), ...groupAppIds])
+  const naisTeamSlugs = devTeam.nais_team_slugs ?? []
+  const teamAppIds = allApps
+    .filter((app) => app.is_active && (directAppIdSet.has(app.id) || naisTeamSlugs.includes(app.team_slug)))
+    .map((app) => app.id)
 
-  const coverage = await getOriginOfChangeCoverage(
-    devTeam.nais_team_slugs,
-    startDate,
-    endDate,
-    directAppIds.length > 0 ? directAppIds : undefined,
-  )
+  const coverage = await getDevTeamCoverageStats(teamAppIds, deployerUsernames, startDate, endDate)
 
   const section = await getSectionBySlug(params.sectionSlug)
 
@@ -131,22 +134,25 @@ export default function DevTeamDashboard() {
             </Heading>
           </VStack>
           <VStack gap="space-4">
-            <Detail textColor="subtle">Med endringsopphav</Detail>
-            <Heading size="medium" level="3">
-              {coverage.linked}
-            </Heading>
+            <Detail textColor="subtle">4-øyne-dekning</Detail>
+            <Tag variant={getCoverageVariant(coverage.four_eyes_percentage / 100)} size="medium">
+              {coverage.four_eyes_percentage}%
+            </Tag>
           </VStack>
           <VStack gap="space-4">
-            <Detail textColor="subtle">Dekningsgrad</Detail>
-            <Tag variant={getCoverageVariant(coverage.coverage)} size="medium">
-              {Math.round(coverage.coverage * 100)}%
+            <Detail textColor="subtle">Endringsopphav</Detail>
+            <Tag variant={getCoverageVariant(coverage.origin_percentage / 100)} size="medium">
+              {coverage.origin_percentage}%
             </Tag>
           </VStack>
           <VStack gap="space-4">
             <Detail textColor="subtle">Uten kobling</Detail>
-            <BodyShort weight="semibold">{coverage.total - coverage.linked}</BodyShort>
+            <BodyShort weight="semibold">{coverage.total - coverage.with_origin}</BodyShort>
           </VStack>
         </HStack>
+        <Detail textColor="subtle" spacing>
+          Basert på deploys utført av team-medlemmer.
+        </Detail>
       </Box>
 
       {/* Board objective progress */}
