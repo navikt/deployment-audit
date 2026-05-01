@@ -35,7 +35,6 @@ jobs:
 
   build:
     name: Build and push Docker image
-    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -85,7 +84,7 @@ jobs:
 
   deploy:
     name: Deploy to prod-gcp
-    needs: build
+    needs: [test, build]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -102,7 +101,7 @@ jobs:
 
   attest-sign:
     name: Attest and sign image
-    needs: build
+    needs: [test, build]
     runs-on: ubuntu-latest
     permissions:
       contents: read
