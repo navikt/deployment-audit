@@ -395,7 +395,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           </HGrid>
           {/* Navigation links per team */}
           <HStack gap="space-8" wrap>
-            <Button as={Link} to="/my-apps" size="small" variant="primary">
+            <Button as={Link} to="/my-apps" size="small" variant="tertiary">
               Alle mine applikasjoner
             </Button>
             {selectedDevTeams.map((team) => (
@@ -404,7 +404,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 as={Link}
                 to={`/sections/${team.section_slug}/teams/${team.slug}`}
                 size="small"
-                variant="secondary"
+                variant="tertiary"
               >
                 {team.name}
               </Button>
