@@ -257,11 +257,18 @@ export async function getDevTeamSummaryStats(
 /**
  * Get objective progress for a board — how many deployments are linked to each objective/key result.
  *
+ * When `deployerUsernames` is provided, only deployments made by those users
+ * (deployer or PR creator) are counted. This keeps counts consistent with the
+ * team-member-filtered stats shown on team pages and section pages.
+ *
  * Implementation: 3 queries total (objectives, all KR-linked deployment
  * counts via ANY($1::int[]), all objective-linked deployment counts via
  * ANY($1::int[])) regardless of objective/key-result count.
  */
-export async function getBoardObjectiveProgress(boardId: number): Promise<BoardObjectiveProgress[]> {
+export async function getBoardObjectiveProgress(
+  boardId: number,
+  deployerUsernames?: string[],
+): Promise<BoardObjectiveProgress[]> {
   const objectivesResult = await pool.query(
     'SELECT id, title FROM board_objectives WHERE board_id = $1 AND is_active = true ORDER BY sort_order, id',
     [boardId],
@@ -269,23 +276,28 @@ export async function getBoardObjectiveProgress(boardId: number): Promise<BoardO
   const objectiveIds = objectivesResult.rows.map((o) => o.id as number)
   if (objectiveIds.length === 0) return []
 
+  const hasDeployerFilter = deployerUsernames !== undefined && deployerUsernames.length > 0
+  const deployerJoin = hasDeployerFilter ? ' JOIN deployments d ON d.id = dgl.deployment_id' : ''
+  const deployerWhere = hasDeployerFilter ? ` AND ${userDeploymentMatchAnySql(2, 'd')}` : ''
+  const deployerParams = hasDeployerFilter ? [lowerUsernames(deployerUsernames)] : []
+
   const krResult = await pool.query(
     `SELECT bkr.id, bkr.objective_id, bkr.title, bkr.sort_order,
             COUNT(DISTINCT dgl.deployment_id) AS linked_deployments
      FROM board_key_results bkr
-     LEFT JOIN deployment_goal_links dgl ON dgl.key_result_id = bkr.id AND dgl.is_active = true
+     LEFT JOIN deployment_goal_links dgl ON dgl.key_result_id = bkr.id AND dgl.is_active = true${deployerJoin}${deployerWhere}
      WHERE bkr.objective_id = ANY($1::int[]) AND bkr.is_active = true
      GROUP BY bkr.id, bkr.objective_id, bkr.title, bkr.sort_order
      ORDER BY bkr.sort_order, bkr.id`,
-    [objectiveIds],
+    [objectiveIds, ...deployerParams],
   )
 
   const objLinksResult = await pool.query(
-    `SELECT objective_id, COUNT(DISTINCT deployment_id) AS cnt
-     FROM deployment_goal_links
-     WHERE objective_id = ANY($1::int[]) AND is_active = true
-     GROUP BY objective_id`,
-    [objectiveIds],
+    `SELECT dgl.objective_id, COUNT(DISTINCT dgl.deployment_id) AS cnt
+     FROM deployment_goal_links dgl${deployerJoin}
+     WHERE dgl.objective_id = ANY($1::int[]) AND dgl.is_active = true${deployerWhere}
+     GROUP BY dgl.objective_id`,
+    [objectiveIds, ...deployerParams],
   )
 
   const krsByObjective = new Map<number, Array<{ id: number; title: string; linked_deployments: number }>>()

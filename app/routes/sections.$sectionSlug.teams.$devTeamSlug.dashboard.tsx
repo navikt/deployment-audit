@@ -6,6 +6,7 @@ import { type BoardObjectiveProgress, getBoardObjectiveProgress } from '~/db/das
 import { getOriginOfChangeCoverage } from '~/db/deployment-goal-links.server'
 import { getDevTeamApplications, getDevTeamBySlug } from '~/db/dev-teams.server'
 import { getSectionBySlug } from '~/db/sections.server'
+import { getMembersGithubUsernamesForDevTeams } from '~/db/user-dev-team-preference.server'
 import { requireUser } from '~/lib/auth.server'
 import { type BoardPeriodType, formatBoardLabel, getCurrentPeriod, getPeriodsForYear } from '~/lib/board-periods'
 import type { Route } from './+types/sections.$sectionSlug.teams.$devTeamSlug.dashboard'
@@ -31,12 +32,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const endDate = new Date(selectedPeriod.end)
   endDate.setDate(endDate.getDate() + 1)
 
-  const boards = await getBoardsByDevTeam(devTeam.id)
+  const [boards, deployerUsernames] = await Promise.all([
+    getBoardsByDevTeam(devTeam.id),
+    getMembersGithubUsernamesForDevTeams([devTeam.id]).catch(() => [] as string[]),
+  ])
   const currentBoard = boards.find((b) => b.period_label === selectedPeriod.label && b.period_type === periodType)
 
   let objectiveProgress: BoardObjectiveProgress[] = []
   if (currentBoard) {
-    objectiveProgress = await getBoardObjectiveProgress(currentBoard.id)
+    objectiveProgress = await getBoardObjectiveProgress(currentBoard.id, deployerUsernames)
   }
 
   const directApps = await getDevTeamApplications(devTeam.id)

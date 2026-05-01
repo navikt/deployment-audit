@@ -35,8 +35,10 @@ import {
   updateObjective,
   updateObjectiveKeywords,
 } from '~/db/boards.server'
+import { type BoardObjectiveProgress, getBoardObjectiveProgress } from '~/db/dashboard-stats.server'
 import { getDevTeamBySlug } from '~/db/dev-teams.server'
 import { getSectionBySlug } from '~/db/sections.server'
+import { getMembersGithubUsernamesForDevTeams } from '~/db/user-dev-team-preference.server'
 import { requireUser } from '~/lib/auth.server'
 import { formatBoardLabel, toDateInputValue } from '~/lib/board-periods'
 import type { Route } from './+types/sections.$sectionSlug.teams.$devTeamSlug.$boardId'
@@ -57,8 +59,19 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const board = await getBoardWithObjectives(Number(params.boardId))
   if (!board || board.dev_team_id !== devTeam.id) throw new Response('Tavle ikke funnet', { status: 404 })
 
-  const section = await getSectionBySlug(params.sectionSlug)
-  return { devTeam, board, sectionSlug: params.sectionSlug, sectionName: section?.name ?? params.sectionSlug }
+  const [section, deployerUsernames] = await Promise.all([
+    getSectionBySlug(params.sectionSlug),
+    getMembersGithubUsernamesForDevTeams([devTeam.id]).catch(() => [] as string[]),
+  ])
+  const objectiveProgress = await getBoardObjectiveProgress(board.id, deployerUsernames)
+
+  return {
+    devTeam,
+    board,
+    objectiveProgress,
+    sectionSlug: params.sectionSlug,
+    sectionName: section?.name ?? params.sectionSlug,
+  }
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
@@ -171,12 +184,15 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function BoardDetail() {
-  const { devTeam, board } = useLoaderData<typeof loader>()
+  const { devTeam, board, objectiveProgress } = useLoaderData<typeof loader>()
   const [showAddObjective, setShowAddObjective] = useState(false)
   const [editingDates, setEditingDates] = useState(false)
 
   const periodStartDate = toDateInputValue(board.period_start)
   const periodEndDate = toDateInputValue(board.period_end)
+
+  // Build a map of objective/KR deployment counts from the progress query
+  const progressByObjective = new Map(objectiveProgress.map((p) => [p.objective_id, p]))
 
   return (
     <VStack gap="space-24">
@@ -229,7 +245,7 @@ export default function BoardDetail() {
       )}
 
       {board.objectives.map((objective) => (
-        <ObjectiveCard key={objective.id} objective={objective} />
+        <ObjectiveCard key={objective.id} objective={objective} progress={progressByObjective.get(objective.id)} />
       ))}
 
       {!showAddObjective ? (
@@ -269,10 +285,18 @@ export default function BoardDetail() {
   )
 }
 
-function ObjectiveCard({ objective }: { objective: ObjectiveWithKeyResults }) {
+function ObjectiveCard({
+  objective,
+  progress,
+}: {
+  objective: ObjectiveWithKeyResults
+  progress?: BoardObjectiveProgress
+}) {
   const [showAddKR, setShowAddKR] = useState(false)
   const [showAddRef, setShowAddRef] = useState(false)
   const isInactive = !objective.is_active
+
+  const krProgressMap = new Map(progress?.key_results.map((kr) => [kr.id, kr.linked_deployments]) ?? [])
 
   useEffect(() => {
     if (isInactive) {
@@ -302,6 +326,11 @@ function ObjectiveCard({ objective }: { objective: ObjectiveWithKeyResults }) {
             {isInactive && (
               <Tag variant="neutral" size="xsmall">
                 Deaktivert
+              </Tag>
+            )}
+            {progress && (
+              <Tag variant={progress.total_linked_deployments > 0 ? 'info' : 'neutral'} size="xsmall">
+                {progress.total_linked_deployments} leveranser
               </Tag>
             )}
           </HStack>
@@ -341,7 +370,12 @@ function ObjectiveCard({ objective }: { objective: ObjectiveWithKeyResults }) {
               Nøkkelresultater
             </Heading>
             {objective.key_results.map((kr) => (
-              <KeyResultRow key={kr.id} kr={kr} objectiveIsActive={objective.is_active} />
+              <KeyResultRow
+                key={kr.id}
+                kr={kr}
+                objectiveIsActive={objective.is_active}
+                linkedDeployments={krProgressMap.get(kr.id) ?? 0}
+              />
             ))}
           </VStack>
         )}
@@ -398,7 +432,15 @@ function ObjectiveCard({ objective }: { objective: ObjectiveWithKeyResults }) {
   )
 }
 
-function KeyResultRow({ kr, objectiveIsActive }: { kr: BoardKeyResultWithRefs; objectiveIsActive: boolean }) {
+function KeyResultRow({
+  kr,
+  objectiveIsActive,
+  linkedDeployments,
+}: {
+  kr: BoardKeyResultWithRefs
+  objectiveIsActive: boolean
+  linkedDeployments: number
+}) {
   const isInactive = !kr.is_active
 
   return (
@@ -427,6 +469,9 @@ function KeyResultRow({ kr, objectiveIsActive }: { kr: BoardKeyResultWithRefs; o
               Deaktivert
             </Tag>
           )}
+          <Tag variant={linkedDeployments > 0 ? 'info' : 'neutral'} size="xsmall">
+            {linkedDeployments} leveranser
+          </Tag>
         </HStack>
         <Form method="post" style={{ display: 'inline' }}>
           <input type="hidden" name="intent" value={isInactive ? 'reactivate-key-result' : 'deactivate-key-result'} />

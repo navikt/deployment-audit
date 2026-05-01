@@ -48,7 +48,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     ])
 
   const activeBoard = boards.find((b) => b.is_active) ?? null
-  const activeBoardProgress = activeBoard ? await getBoardObjectiveProgress(activeBoard.id) : []
+  const activeBoardProgress = activeBoard ? await getBoardObjectiveProgress(activeBoard.id, deployerUsernames) : []
 
   // Build app cards: direct links + group-owned apps + nais team matches
   const directAppIds = new Set([...directApps.map((a) => a.monitored_app_id), ...groupAppIds])

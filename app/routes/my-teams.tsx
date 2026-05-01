@@ -162,7 +162,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       teamName: team.name,
       teamSlug: team.slug,
       sectionSlug: team.section_slug ?? '',
-      objectives: await getBoardObjectiveProgress(board.id),
+      objectives: await getBoardObjectiveProgress(board.id, scope.deployerUsernames),
     })),
   )
 
