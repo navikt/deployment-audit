@@ -9,6 +9,7 @@ import {
   Heading,
   HStack,
   Modal,
+  Select,
   Table,
   Tag,
   TextField,
@@ -18,6 +19,7 @@ import {
 import { useMemo, useRef, useState } from 'react'
 import { Form, useLoaderData, useNavigation } from 'react-router'
 import { ActionAlert } from '~/components/ActionAlert'
+import { createBoard } from '~/db/boards.server'
 import { pool } from '~/db/connection.server'
 import {
   addNaisTeamToDevTeam,
@@ -39,6 +41,7 @@ import {
 import { getAllUserMappings, getUserMappingByNavIdent } from '~/db/user-mappings.server'
 import { fail, ok } from '~/lib/action-result'
 import { requireAdmin } from '~/lib/auth.server'
+import { type BoardPeriodType, formatBoardLabel, getPeriodsForYear } from '~/lib/board-periods'
 import { getFormString, isValidNavIdent } from '~/lib/form-validators'
 import { logger } from '~/lib/logger.server'
 import { fetchAllTeamsAndApplications, getApplicationInfo } from '~/lib/nais.server'
@@ -298,6 +301,32 @@ export async function action({ request, params }: Route.ActionArgs) {
     }
   }
 
+  if (intent === 'create_board') {
+    const periodType = getFormString(formData, 'period_type') as BoardPeriodType
+    const periodLabel = getFormString(formData, 'period_label')
+    const periodStart = getFormString(formData, 'period_start')
+    const periodEnd = getFormString(formData, 'period_end')
+
+    if (!periodType || !periodStart || !periodEnd || !periodLabel) {
+      return fail('Alle felt er påkrevd.')
+    }
+
+    try {
+      await createBoard({
+        dev_team_id: devTeam.id,
+        title: formatBoardLabel({ teamName: devTeam.name, periodLabel }),
+        period_type: periodType,
+        period_start: periodStart,
+        period_end: periodEnd,
+        period_label: periodLabel,
+        created_by: user.navIdent,
+      })
+      return ok('Tavle ble opprettet.')
+    } catch (error) {
+      return fail(`Kunne ikke opprette tavle: ${error}`)
+    }
+  }
+
   return fail('Ukjent handling.')
 }
 
@@ -323,6 +352,7 @@ export default function DevTeamAdmin({ actionData }: Route.ComponentProps) {
 
       <ActionAlert data={actionData} />
 
+      <BoardsSection teamName={devTeam.name} />
       <TeamNameSection name={devTeam.name} />
       <MembersSection members={members} allUsers={allUsers} />
       <NaisTeamsSection naisTeamSlugs={devTeam.nais_team_slugs} />
@@ -333,6 +363,93 @@ export default function DevTeamAdmin({ actionData }: Route.ComponentProps) {
         isSubmitting={navigation.state === 'submitting'}
       />
     </VStack>
+  )
+}
+
+function BoardsSection({ teamName }: { teamName: string }) {
+  const [showCreate, setShowCreate] = useState(false)
+
+  return (
+    <VStack gap="space-16">
+      <HStack justify="space-between" align="center">
+        <Heading level="2" size="medium">
+          Tavler
+        </Heading>
+        {!showCreate && (
+          <Button variant="tertiary" size="small" icon={<PlusIcon aria-hidden />} onClick={() => setShowCreate(true)}>
+            Ny tavle
+          </Button>
+        )}
+      </HStack>
+      {showCreate && <CreateBoardForm teamName={teamName} onCancel={() => setShowCreate(false)} />}
+    </VStack>
+  )
+}
+
+function CreateBoardForm({ teamName, onCancel }: { teamName: string; onCancel: () => void }) {
+  const [periodType, setPeriodType] = useState<BoardPeriodType>('tertiary')
+  const year = new Date().getFullYear()
+  const periods = getPeriodsForYear(periodType, year)
+
+  const [selectedPeriod, setSelectedPeriod] = useState(periods[0])
+
+  return (
+    <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
+      <Form method="post" onSubmit={onCancel}>
+        <input type="hidden" name="intent" value="create_board" />
+        <input type="hidden" name="period_start" value={selectedPeriod?.start ?? ''} />
+        <input type="hidden" name="period_end" value={selectedPeriod?.end ?? ''} />
+        <input type="hidden" name="period_label" value={selectedPeriod?.label ?? ''} />
+        <VStack gap="space-16">
+          <Heading level="3" size="small">
+            Opprett ny tavle
+          </Heading>
+          <BodyShort size="small" textColor="subtle">
+            Tavlen får tittelen «{formatBoardLabel({ teamName, periodLabel: selectedPeriod?.label ?? '' })}».
+          </BodyShort>
+          <HStack gap="space-16" wrap>
+            <Select
+              label="Periodetype"
+              name="period_type"
+              size="small"
+              value={periodType}
+              onChange={(e) => {
+                const type = e.target.value as BoardPeriodType
+                setPeriodType(type)
+                const newPeriods = getPeriodsForYear(type, year)
+                setSelectedPeriod(newPeriods[0])
+              }}
+            >
+              <option value="tertiary">Tertial</option>
+              <option value="quarterly">Kvartal</option>
+            </Select>
+            <Select
+              label="Periode"
+              size="small"
+              value={selectedPeriod?.label ?? ''}
+              onChange={(e) => {
+                const p = periods.find((p) => p.label === e.target.value)
+                if (p) setSelectedPeriod(p)
+              }}
+            >
+              {periods.map((p) => (
+                <option key={p.label} value={p.label}>
+                  {p.label}
+                </option>
+              ))}
+            </Select>
+          </HStack>
+          <HStack gap="space-8">
+            <Button type="submit" size="small">
+              Opprett
+            </Button>
+            <Button variant="tertiary" size="small" onClick={onCancel}>
+              Avbryt
+            </Button>
+          </HStack>
+        </VStack>
+      </Form>
+    </Box>
   )
 }
 

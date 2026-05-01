@@ -1,12 +1,10 @@
-import { BarChartIcon, ClockIcon, CogIcon, PlusIcon } from '@navikt/aksel-icons'
-import { Alert, BodyShort, Box, Button, Detail, Heading, HGrid, HStack, Select, Tag, VStack } from '@navikt/ds-react'
-import { useState } from 'react'
-import { Form, Link, useActionData, useLoaderData, useRouteLoaderData } from 'react-router'
-import { ActionAlert } from '~/components/ActionAlert'
+import { BarChartIcon, ClockIcon, CogIcon } from '@navikt/aksel-icons'
+import { Alert, BodyShort, Box, Button, Detail, Heading, HGrid, HStack, Tag, VStack } from '@navikt/ds-react'
+import { Link, useLoaderData, useRouteLoaderData } from 'react-router'
 import { AppCard, type AppCardData } from '~/components/AppCard'
 import { getGroupNamesByIds } from '~/db/application-groups.server'
 import { getAllActiveRepositories } from '~/db/application-repositories.server'
-import { type Board, createBoard, getBoardsByDevTeam } from '~/db/boards.server'
+import { type Board, getBoardsByDevTeam } from '~/db/boards.server'
 import {
   type BoardObjectiveProgress,
   getBoardObjectiveProgress,
@@ -22,7 +20,7 @@ import {
   getMembersGithubUsernamesForDevTeams,
 } from '~/db/user-dev-team-preference.server'
 import { requireUser } from '~/lib/auth.server'
-import { type BoardPeriodType, formatBoardLabel, getPeriodsForYear } from '~/lib/board-periods'
+import { formatBoardLabel } from '~/lib/board-periods'
 import { groupAppCards } from '~/lib/group-app-cards'
 import type { Route } from './+types/sections.$sectionSlug.teams.$devTeamSlug'
 import type { loader as layoutLoader } from './layout'
@@ -130,45 +128,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 }
 
-export async function action({ request, params }: Route.ActionArgs) {
-  const user = await requireUser(request)
-  const devTeam = await getDevTeamBySlug(params.devTeamSlug)
-  if (!devTeam) {
-    throw new Response('Utviklingsteam ikke funnet', { status: 404 })
-  }
-
-  const formData = await request.formData()
-  const intent = formData.get('intent') as string
-
-  if (intent === 'create') {
-    const periodType = formData.get('period_type') as BoardPeriodType
-    const periodLabel = formData.get('period_label') as string
-    const periodStart = formData.get('period_start') as string
-    const periodEnd = formData.get('period_end') as string
-
-    if (!periodType || !periodStart || !periodEnd || !periodLabel) {
-      return { error: 'Alle felt er påkrevd.' }
-    }
-
-    try {
-      await createBoard({
-        dev_team_id: devTeam.id,
-        title: formatBoardLabel({ teamName: devTeam.name, periodLabel }),
-        period_type: periodType,
-        period_start: periodStart,
-        period_end: periodEnd,
-        period_label: periodLabel,
-        created_by: user.navIdent,
-      })
-      return { success: true }
-    } catch (error) {
-      return { error: `Kunne ikke opprette tavle: ${error}` }
-    }
-  }
-
-  return { error: 'Ukjent handling.' }
-}
-
 export default function DevTeamPage() {
   const {
     devTeam,
@@ -182,10 +141,8 @@ export default function DevTeamPage() {
     hasMappedMembers,
     unmappedMemberCount,
   } = useLoaderData<typeof loader>()
-  const actionData = useActionData<typeof action>()
   const layoutData = useRouteLoaderData<typeof layoutLoader>('routes/layout')
   const isAdmin = layoutData?.user?.role === 'admin'
-  const [showCreate, setShowCreate] = useState(false)
   const teamBasePath = `/sections/${sectionSlug}/teams/${devTeam.slug}`
   const inactiveBoards = boards.filter((b) => !b.is_active)
 
@@ -228,39 +185,32 @@ export default function DevTeamPage() {
           teamName={devTeam.name}
         />
       ) : (
-        <Alert variant="info">Ingen aktiv tavle. Opprett en ny tavle for å komme i gang.</Alert>
+        <Alert variant="info">Ingen aktiv tavle. Opprett en ny tavle via Administrer-knappen.</Alert>
       )}
 
-      {/* Board actions */}
-      {!showCreate ? (
-        <HStack gap="space-8">
-          <Button variant="secondary" size="small" icon={<PlusIcon aria-hidden />} onClick={() => setShowCreate(true)}>
-            Ny tavle
-          </Button>
+      {/* Board navigation */}
+      <HStack gap="space-8">
+        <Button
+          as={Link}
+          to={`${teamBasePath}/dashboard`}
+          variant="tertiary"
+          size="small"
+          icon={<BarChartIcon aria-hidden />}
+        >
+          Dashboard
+        </Button>
+        {inactiveBoards.length > 0 && (
           <Button
             as={Link}
-            to={`${teamBasePath}/dashboard`}
+            to={`${teamBasePath}/boards`}
             variant="tertiary"
             size="small"
-            icon={<BarChartIcon aria-hidden />}
+            icon={<ClockIcon aria-hidden />}
           >
-            Dashboard
+            Tidligere tavler ({inactiveBoards.length})
           </Button>
-          {inactiveBoards.length > 0 && (
-            <Button
-              as={Link}
-              to={`${teamBasePath}/boards`}
-              variant="tertiary"
-              size="small"
-              icon={<ClockIcon aria-hidden />}
-            >
-              Tidligere tavler ({inactiveBoards.length})
-            </Button>
-          )}
-        </HStack>
-      ) : (
-        <CreateBoardForm onCancel={() => setShowCreate(false)} />
-      )}
+        )}
+      </HStack>
 
       {/* Members */}
       {members.length > 0 && (
@@ -290,7 +240,6 @@ export default function DevTeamPage() {
           Applikasjoner ({appCards.length})
         </Heading>
         <Detail textColor="subtle">Statistikk er filtrert til deploys utført av team-medlemmer.</Detail>
-        <ActionAlert data={actionData} />
         {appCards.length > 0 ? (
           <VStack gap="space-4">
             {appCards.map((app) => (
@@ -457,70 +406,6 @@ function ActiveBoardSection({
           </BodyShort>
         )}
       </VStack>
-    </Box>
-  )
-}
-
-function CreateBoardForm({ onCancel }: { onCancel: () => void }) {
-  const [periodType, setPeriodType] = useState<BoardPeriodType>('tertiary')
-  const year = new Date().getFullYear()
-  const periods = getPeriodsForYear(periodType, year)
-
-  const [selectedPeriod, setSelectedPeriod] = useState(periods[0])
-
-  return (
-    <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
-      <Form method="post" onSubmit={onCancel}>
-        <input type="hidden" name="intent" value="create" />
-        <input type="hidden" name="period_start" value={selectedPeriod?.start ?? ''} />
-        <input type="hidden" name="period_end" value={selectedPeriod?.end ?? ''} />
-        <input type="hidden" name="period_label" value={selectedPeriod?.label ?? ''} />
-        <VStack gap="space-16">
-          <Heading level="2" size="small">
-            Opprett ny tavle
-          </Heading>
-          <HStack gap="space-16" wrap>
-            <Select
-              label="Periodetype"
-              name="period_type"
-              size="small"
-              value={periodType}
-              onChange={(e) => {
-                const type = e.target.value as BoardPeriodType
-                setPeriodType(type)
-                const newPeriods = getPeriodsForYear(type, year)
-                setSelectedPeriod(newPeriods[0])
-              }}
-            >
-              <option value="tertiary">Tertial</option>
-              <option value="quarterly">Kvartal</option>
-            </Select>
-            <Select
-              label="Periode"
-              size="small"
-              value={selectedPeriod?.label ?? ''}
-              onChange={(e) => {
-                const p = periods.find((p) => p.label === e.target.value)
-                if (p) setSelectedPeriod(p)
-              }}
-            >
-              {periods.map((p) => (
-                <option key={p.label} value={p.label}>
-                  {p.label}
-                </option>
-              ))}
-            </Select>
-          </HStack>
-          <HStack gap="space-8">
-            <Button type="submit" size="small">
-              Opprett
-            </Button>
-            <Button variant="tertiary" size="small" onClick={onCancel}>
-              Avbryt
-            </Button>
-          </HStack>
-        </VStack>
-      </Form>
     </Box>
   )
 }
