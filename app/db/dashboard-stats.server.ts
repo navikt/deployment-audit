@@ -439,10 +439,10 @@ export async function getDevTeamStatsBatch(
      ),
      deployment_stats AS (
        SELECT ta.dev_team_id,
-              COUNT(d.id)::int AS total_deployments,
-              COUNT(d.id) FILTER (WHERE d.four_eyes_status IN (${APPROVED_STATUSES_SQL}))::int AS with_four_eyes,
-              COUNT(d.id) FILTER (WHERE d.four_eyes_status IN ('direct_push', 'unverified_commits', 'approved_pr_with_unreviewed', 'unauthorized_repository', 'unauthorized_branch'))::int AS without_four_eyes,
-              COUNT(d.id) FILTER (WHERE d.four_eyes_status IN ('pending', 'pending_baseline', 'pending_approval', 'unknown'))::int AS pending_verification,
+              COUNT(DISTINCT d.id)::int AS total_deployments,
+              COUNT(DISTINCT d.id) FILTER (WHERE d.four_eyes_status IN (${APPROVED_STATUSES_SQL}))::int AS with_four_eyes,
+              COUNT(DISTINCT d.id) FILTER (WHERE d.four_eyes_status IN ('direct_push', 'unverified_commits', 'approved_pr_with_unreviewed', 'unauthorized_repository', 'unauthorized_branch'))::int AS without_four_eyes,
+              COUNT(DISTINCT d.id) FILTER (WHERE d.four_eyes_status IN ('pending', 'pending_baseline', 'pending_approval', 'unknown'))::int AS pending_verification,
               COUNT(DISTINCT dgl.deployment_id)::int AS linked_to_goal
        FROM team_apps ta
        JOIN team_members tm ON tm.dev_team_id = ta.dev_team_id
