@@ -72,13 +72,18 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   }
 
   const teamAppIds = teamApps.map((a) => a.id)
-  const filteredAppIds = appFilter ? teamAppIds.filter((id) => id === parseInt(appFilter, 10)) : teamAppIds
+  const parsedAppFilter = appFilter ? parseInt(appFilter, 10) : undefined
+  const filteredAppIds = parsedAppFilter && teamAppIds.includes(parsedAppFilter) ? [parsedAppFilter] : teamAppIds
 
   // Resolve current user
   const currentUser = await getUserIdentity(request)
 
   // Deployer filter: default shows only team members' deployments
-  let deployerUsernamesFilter: string[] | undefined = deployerUsernames.length > 0 ? deployerUsernames : undefined
+  let deployerUsernamesFilter: string[] | undefined = deployerUsernames
+  let teamFilterEmptyReason: string | null = null
+  if (deployerUsernames.length === 0) {
+    teamFilterEmptyReason = 'no-team-members'
+  }
 
   if (deployer) {
     // If a specific deployer is selected, override the team filter
@@ -115,41 +120,49 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   // Parallel: error reasons, all deployers, current user GitHub mapping, goal options
   const errorDeploymentIds = result.deployments.filter((d) => d.four_eyes_status === 'error').map((d) => d.id)
 
-  const [errorReasonsResult, allDeployersResult, _allContributorsResult, currentUserMapping, goalOptions] =
-    await Promise.all([
-      errorDeploymentIds.length > 0
-        ? pool.query<{ deployment_id: number; reason: string }>(
-            'SELECT deployment_id, reason FROM deployment_error_reasons WHERE deployment_id = ANY($1)',
-            [errorDeploymentIds],
-          )
-        : Promise.resolve({ rows: [] as { deployment_id: number; reason: string }[] }),
-      pool.query<{ deployer_username: string }>(
-        `SELECT DISTINCT deployer_username FROM deployments
-         WHERE monitored_app_id = ANY($1) AND deployer_username IS NOT NULL`,
-        [teamAppIds],
-      ),
-      pool
-        .query<{ contributor: string }>(
-          `SELECT DISTINCT contributor FROM (
-           SELECT deployer_username AS contributor FROM deployments WHERE monitored_app_id = ANY($1) AND deployer_username IS NOT NULL
-           UNION
-           SELECT github_pr_data->>'creator'->>'username' FROM deployments WHERE monitored_app_id = ANY($1) AND github_pr_data->'creator'->>'username' IS NOT NULL
-         ) t`,
-          [teamAppIds],
+  const [errorReasonsResult, allDeployersResult, currentUserMapping, goalOptions] = await Promise.all([
+    errorDeploymentIds.length > 0
+      ? pool.query<{ deployment_id: number; result: any }>(
+          `SELECT DISTINCT ON (deployment_id) deployment_id, result
+           FROM verification_runs
+           WHERE deployment_id = ANY($1)
+           ORDER BY deployment_id, run_at DESC`,
+          [errorDeploymentIds],
         )
-        .catch(() => ({ rows: [] as { contributor: string }[] })),
-      currentUser?.navIdent ? getUserMappingByNavIdent(currentUser.navIdent) : Promise.resolve(null),
-      getLinkedObjectivesForApps(teamAppIds),
-    ])
+      : Promise.resolve({ rows: [] as { deployment_id: number; result: any }[] }),
+    pool.query<{ deployer_username: string }>(
+      `SELECT DISTINCT deployer_username FROM deployments
+         WHERE monitored_app_id = ANY($1) AND deployer_username IS NOT NULL AND deployer_username != ''`,
+      [teamAppIds],
+    ),
+    currentUser?.navIdent ? getUserMappingByNavIdent(currentUser.navIdent) : Promise.resolve(null),
+    getLinkedObjectivesForApps(teamAppIds),
+  ])
 
-  const errorReasons: Record<number, string> = {}
-  for (const row of errorReasonsResult.rows) {
-    errorReasons[row.deployment_id] = row.reason
-  }
+  const errorReasons: Record<number, string> = Object.fromEntries(
+    errorReasonsResult.rows
+      .filter((row) => row.result?.approvalDetails?.reason)
+      .map((row) => [row.deployment_id, row.result.approvalDetails.reason as string]),
+  )
 
   // Build deployer options with display names
   const allDeployerUsernames = allDeployersResult.rows.map((r) => r.deployer_username)
-  const userMappingsMap = allDeployerUsernames.length > 0 ? await getUserMappings(allDeployerUsernames) : new Map()
+
+  // Get display names for deployers, PR creators, and mergers
+  const deployerUsernamesOnPage = [
+    ...new Set(result.deployments.map((d) => d.deployer_username).filter(Boolean)),
+  ] as string[]
+  const prCreatorUsernames = result.deployments
+    .map((d: any) => d.github_pr_data?.creator?.username)
+    .filter(Boolean) as string[]
+  const prMergerUsernames = result.deployments
+    .map((d: any) => d.github_pr_data?.merged_by?.username)
+    .filter(Boolean) as string[]
+  const allUsernamesForMapping = [
+    ...new Set([...deployerUsernamesOnPage, ...prCreatorUsernames, ...prMergerUsernames, ...allDeployerUsernames]),
+  ]
+  const userMappingsMap = allUsernamesForMapping.length > 0 ? await getUserMappings(allUsernamesForMapping) : new Map()
+
   const deployerOptions = allDeployerUsernames
     .map((username) => ({
       value: username,
@@ -183,7 +196,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     deployerOptions,
     currentUserGithub,
     errorReasons,
-    teamFilterEmptyReason: null,
+    teamFilterEmptyReason,
     hasUnmappedDeployers,
     goalOptions,
     appOptions,

@@ -1,5 +1,18 @@
 import { BarChartIcon, CogIcon } from '@navikt/aksel-icons'
-import { Alert, BodyShort, Box, Button, Detail, Heading, HGrid, HStack, Switch, Tag, VStack } from '@navikt/ds-react'
+import {
+  Alert,
+  BodyShort,
+  Box,
+  Button,
+  Detail,
+  Heading,
+  HGrid,
+  HStack,
+  LinkCard,
+  Switch,
+  Tag,
+  VStack,
+} from '@navikt/ds-react'
 import { Link, useLoaderData, useRouteLoaderData, useSearchParams } from 'react-router'
 import { AppCard, type AppCardData } from '~/components/AppCard'
 import { getGroupNamesByIds } from '~/db/application-groups.server'
@@ -335,21 +348,40 @@ function TeamCoverageCards({
 
 function CoverageCard({ label, value, sub, href }: { label: string; value: string; sub?: string; href?: string }) {
   const content = (
-    <Box padding="space-16" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
-      <VStack gap="space-4">
-        <Detail textColor="subtle">{label}</Detail>
-        <Heading level="3" size="medium">
-          {value}
-        </Heading>
-        {sub && <Detail textColor="subtle">{sub}</Detail>}
-      </VStack>
-    </Box>
+    <VStack gap="space-4">
+      <Detail textColor="subtle">{label}</Detail>
+      <Heading level="3" size="medium">
+        {value}
+      </Heading>
+      {sub && <Detail textColor="subtle">{sub}</Detail>}
+    </VStack>
   )
 
   if (href) {
-    return <Link to={href}>{content}</Link>
+    return (
+      <LinkCard>
+        <LinkCard.Title as="span">
+          <LinkCard.Anchor asChild>
+            <Link to={href}>{label}</Link>
+          </LinkCard.Anchor>
+        </LinkCard.Title>
+        <LinkCard.Description>
+          <VStack gap="space-4">
+            <Heading level="3" size="medium" aria-label={`${label}: ${value}`}>
+              {value}
+            </Heading>
+            {sub && <Detail textColor="subtle">{sub}</Detail>}
+          </VStack>
+        </LinkCard.Description>
+      </LinkCard>
+    )
   }
-  return content
+
+  return (
+    <Box padding="space-16" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
+      {content}
+    </Box>
+  )
 }
 
 function ActiveBoardSection({
