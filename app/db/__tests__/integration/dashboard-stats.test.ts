@@ -611,10 +611,9 @@ describe('getDevTeamStatsBatch vs getAppDeploymentStatsBatch consistency', () =>
   })
 
   it('NULL four_eyes_status deployments are counted in totals consistently', async () => {
-    // Deployments with NULL four_eyes_status must be categorized (not fall
-    // through all categories). The DB column allows NULL because it defaults
-    // to 'unknown' but doesn't have a NOT NULL constraint.
-    // This test proves that NULL status causes a gap: total > sum of categories.
+    // Regression test: NULL four_eyes_status must be treated as 'unknown' (pending).
+    // The DB column allows NULL (DEFAULT 'unknown' without NOT NULL constraint).
+    // Without COALESCE, NULL falls through all category FILTERs, causing total > sum.
     const sectionId = await seedSection(pool, 'sec-null-status')
     const { githubUsernames } = await seedTeamWithMembers(sectionId, {
       teamSlug: 'team-null-status',
@@ -650,11 +649,10 @@ describe('getDevTeamStatsBatch vs getAppDeploymentStatsBatch consistency', () =>
     expect(appStats).toBeDefined()
     expect(appStats?.total).toBe(3)
 
-    // BUG: total (3) > with_four_eyes (2) + without_four_eyes (0) + pending (0)
-    // The NULL status deployment falls through all categories.
-    // After fix: NULL should be counted as pending (like 'unknown').
+    // NULL is treated as 'unknown' (pending), so categories must sum to total
     const sumCategories =
       (appStats?.with_four_eyes ?? 0) + (appStats?.without_four_eyes ?? 0) + (appStats?.pending_verification ?? 0)
     expect(sumCategories).toBe(appStats?.total)
+    expect(appStats?.pending_verification).toBe(1)
   })
 })
