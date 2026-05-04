@@ -18,6 +18,7 @@ import {
 import { getUserMappingByNavIdent, getUserMappings } from '~/db/user-mappings.server'
 import { getUserIdentity } from '~/lib/auth.server'
 import type { FourEyesStatus } from '~/lib/four-eyes-status'
+import { logger } from '~/lib/logger.server'
 import { requireTeamEnvAppParams } from '~/lib/route-params.server'
 import { getDateRangeForPeriod, TIME_PERIOD_OPTIONS, type TimePeriod } from '~/lib/time-periods'
 import { serializeUserMappings } from '~/lib/user-display'
@@ -172,7 +173,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       [appIds],
     ),
     pool.query(
-      `SELECT DISTINCT username FROM (
+      `SELECT username FROM (
          SELECT d.deployer_username AS username
          FROM deployments d
          INNER JOIN monitored_applications ma ON d.monitored_app_id = ma.id
@@ -247,8 +248,8 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   let contributingTeams: Array<{ id: number; slug: string; name: string }> = []
   try {
     contributingTeams = await getDevTeamsForGithubUsernames(allContributors)
-  } catch {
-    // user_dev_team_preference table may not exist yet — fall back to owning teams only
+  } catch (error) {
+    logger.warn('Failed to fetch contributing teams for deployment list', { error })
   }
 
   const teamOptions: { value: string; label: string }[] = []
