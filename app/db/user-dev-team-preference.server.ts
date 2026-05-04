@@ -133,3 +133,25 @@ export async function getMembersGithubUsernamesForDevTeams(devTeamIds: number[])
   )
   return result.rows.map((r) => r.github_username as string)
 }
+
+/**
+ * Find active dev teams that have at least one member whose GitHub username
+ * is in the given set. Used to populate the team filter with "contributing
+ * teams" — teams whose members deployed, created PRs, or merged PRs.
+ */
+export async function getDevTeamsForGithubUsernames(
+  githubUsernames: string[],
+): Promise<Array<{ id: number; slug: string; name: string }>> {
+  if (githubUsernames.length === 0) return []
+  const result = await pool.query(
+    `SELECT DISTINCT dt.id, dt.slug, dt.name
+     FROM user_dev_team_preference p
+     JOIN user_mappings um
+       ON UPPER(um.nav_ident) = UPPER(p.nav_ident) AND um.deleted_at IS NULL
+     JOIN dev_teams dt
+       ON dt.id = p.dev_team_id AND dt.is_active = true
+     WHERE LOWER(um.github_username) = ANY($1)`,
+    [githubUsernames.map((u) => u.toLowerCase())],
+  )
+  return result.rows
+}

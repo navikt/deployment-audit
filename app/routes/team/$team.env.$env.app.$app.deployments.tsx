@@ -8,9 +8,13 @@ import { UserName } from '~/components/UserName'
 import { getGroupContext } from '~/db/application-groups.server'
 import { pool } from '~/db/connection.server'
 import { type DeploymentFilters, getDeploymentsPaginated } from '~/db/deployments.server'
-import { getDevTeamsForApp, getDevTeamsForApps } from '~/db/dev-teams.server'
+import { getDevTeamBySlug, getDevTeamsForApp, getDevTeamsForApps } from '~/db/dev-teams.server'
 import { getMonitoredApplicationByIdentity } from '~/db/monitored-applications.server'
-import { getMembersGithubUsernamesForDevTeams, getUserDevTeams } from '~/db/user-dev-team-preference.server'
+import {
+  getDevTeamsForGithubUsernames,
+  getMembersGithubUsernamesForDevTeams,
+  getUserDevTeams,
+} from '~/db/user-dev-team-preference.server'
 import { getUserMappingByNavIdent, getUserMappings } from '~/db/user-mappings.server'
 import { getUserIdentity } from '~/lib/auth.server'
 import type { FourEyesStatus } from '~/lib/four-eyes-status'
@@ -102,7 +106,8 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       }
     }
   } else if (teamFilter) {
-    const matched = owningDevTeams.find((t) => t.slug === teamFilter)
+    // Look up the team by slug — it may be an owning team or a contributing team
+    const matched = owningDevTeams.find((t) => t.slug === teamFilter) ?? (await getDevTeamBySlug(teamFilter))
     if (matched) {
       try {
         deployerUsernamesFilter = await getMembersGithubUsernamesForDevTeams([matched.id])
@@ -111,7 +116,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
         deployerUsernamesFilter = undefined
       }
     }
-    // If the slug doesn't match an owning team, silently ignore (treat as "Alle")
+    // If the slug doesn't match any known team, silently ignore (treat as "Alle")
   }
 
   const isUnmappedFilter = deployer === '__unmapped__'
@@ -145,7 +150,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const errorDeploymentIds = result.deployments.filter((d) => d.four_eyes_status === 'error').map((d) => d.id)
   const appIds = showGroup && hasGroup ? [app.id, ...siblings.map((s) => s.id)] : [app.id]
 
-  const [errorReasonsResult, allDeployersResult, currentUserMapping] = await Promise.all([
+  const [errorReasonsResult, allDeployersResult, allContributorsResult, currentUserMapping] = await Promise.all([
     errorDeploymentIds.length > 0
       ? pool.query(
           `SELECT DISTINCT ON (deployment_id) deployment_id, result
@@ -164,6 +169,32 @@ export async function loader({ params, request }: Route.LoaderArgs) {
          AND d.deployer_username != ''
          AND (ma.audit_start_year IS NULL OR d.created_at >= make_date(ma.audit_start_year, 1, 1))
        ORDER BY d.deployer_username`,
+      [appIds],
+    ),
+    pool.query(
+      `SELECT DISTINCT username FROM (
+         SELECT d.deployer_username AS username
+         FROM deployments d
+         INNER JOIN monitored_applications ma ON d.monitored_app_id = ma.id
+         WHERE d.monitored_app_id = ANY($1)
+           AND d.deployer_username IS NOT NULL AND d.deployer_username != ''
+           AND (ma.audit_start_year IS NULL OR d.created_at >= make_date(ma.audit_start_year, 1, 1))
+         UNION
+         SELECT d.github_pr_data->'creator'->>'username'
+         FROM deployments d
+         INNER JOIN monitored_applications ma ON d.monitored_app_id = ma.id
+         WHERE d.monitored_app_id = ANY($1)
+           AND d.github_pr_data->'creator'->>'username' IS NOT NULL
+           AND (ma.audit_start_year IS NULL OR d.created_at >= make_date(ma.audit_start_year, 1, 1))
+         UNION
+         SELECT d.github_pr_data->'merged_by'->>'username'
+         FROM deployments d
+         INNER JOIN monitored_applications ma ON d.monitored_app_id = ma.id
+         WHERE d.monitored_app_id = ANY($1)
+           AND d.github_pr_data->'merged_by'->>'username' IS NOT NULL
+           AND (ma.audit_start_year IS NULL OR d.created_at >= make_date(ma.audit_start_year, 1, 1))
+       ) sub
+       WHERE username IS NOT NULL AND username != ''`,
       [appIds],
     ),
     currentUser?.navIdent ? getUserMappingByNavIdent(currentUser.navIdent) : Promise.resolve(null),
@@ -209,13 +240,27 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     currentUserGithub = currentUserMapping.github_username
   }
 
-  // Build dropdown options for the team filter. "Mine team" is only offered
-  // when the user actually has dev-team preferences set.
+  // Build dropdown options for the team filter:
+  // 1. "Mine team" (if user has dev-team preferences)
+  // 2. Teams owning the app + teams with contributing members (deployer/PR creator/merger)
+  const allContributors = [...new Set(allContributorsResult.rows.map((r: any) => r.username as string))]
+  let contributingTeams: Array<{ id: number; slug: string; name: string }> = []
+  try {
+    contributingTeams = await getDevTeamsForGithubUsernames(allContributors)
+  } catch {
+    // user_dev_team_preference table may not exist yet — fall back to owning teams only
+  }
+
   const teamOptions: { value: string; label: string }[] = []
   if (userDevTeams.length > 0) {
     teamOptions.push({ value: 'mine', label: 'Mine team' })
   }
-  for (const t of owningDevTeams) {
+  const seenSlugs = new Set<string>()
+  const allTeams = [...owningDevTeams, ...contributingTeams]
+  allTeams.sort((a, b) => a.name.localeCompare(b.name, 'no'))
+  for (const t of allTeams) {
+    if (seenSlugs.has(t.slug)) continue
+    seenSlugs.add(t.slug)
     teamOptions.push({ value: t.slug, label: t.name })
   }
 
