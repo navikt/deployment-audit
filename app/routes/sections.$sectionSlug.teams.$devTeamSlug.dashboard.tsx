@@ -3,7 +3,7 @@ import { Alert, BodyShort, Box, Detail, Heading, HStack, Select, Tag, VStack } f
 import { Link, useLoaderData, useSearchParams } from 'react-router'
 import { getBoardsByDevTeam } from '~/db/boards.server'
 import { type BoardObjectiveProgress, getBoardObjectiveProgress } from '~/db/dashboard-stats.server'
-import { getDevTeamCoverageStats } from '~/db/deployment-goal-links.server'
+import { getAppDeploymentStatsBatch } from '~/db/deployments.server'
 import { getDevTeamApplications, getDevTeamBySlug, getGroupAppIdsForDevTeams } from '~/db/dev-teams.server'
 import { getAllMonitoredApplications } from '~/db/monitored-applications.server'
 import { getSectionBySlug } from '~/db/sections.server'
@@ -29,10 +29,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const periods = getPeriodsForYear(periodType, year)
   const selectedPeriod = periods.find((p) => p.label === periodLabel) ?? getCurrentPeriod(periodType)
 
-  const startDate = new Date(selectedPeriod.start)
-  const endDate = new Date(selectedPeriod.end)
-  endDate.setDate(endDate.getDate() + 1)
-
   const [boards, deployerUsernames, directApps, groupAppIds, allApps] = await Promise.all([
     getBoardsByDevTeam(devTeam.id),
     getMembersGithubUsernamesForDevTeams([devTeam.id]).catch(() => [] as string[]),
@@ -42,19 +38,50 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   ])
   const currentBoard = boards.find((b) => b.period_label === selectedPeriod.label && b.period_type === periodType)
 
+  // Use board's actual dates when available, otherwise fall back to calculated period.
+  // This ensures the dashboard matches the team page's board section.
+  const startDate = currentBoard ? new Date(currentBoard.period_start) : new Date(selectedPeriod.start)
+  const endDate = currentBoard ? new Date(currentBoard.period_end) : new Date(selectedPeriod.end)
+  endDate.setDate(endDate.getDate() + 1)
+
   let objectiveProgress: BoardObjectiveProgress[] = []
   if (currentBoard) {
-    objectiveProgress = (await getBoardObjectiveProgress(currentBoard.id, deployerUsernames)).objectives
+    objectiveProgress = (await getBoardObjectiveProgress(currentBoard.id, deployerUsernames, { startDate })).objectives
   }
 
-  // Build full set of team app IDs: direct links + group-owned + nais team matches
+  // Build full set of team apps: direct links + group-owned + nais team matches
   const directAppIdSet = new Set([...directApps.map((a) => a.monitored_app_id), ...groupAppIds])
   const naisTeamSlugs = devTeam.nais_team_slugs ?? []
-  const teamAppIds = allApps
-    .filter((app) => app.is_active && (directAppIdSet.has(app.id) || naisTeamSlugs.includes(app.team_slug)))
-    .map((app) => app.id)
+  const teamApps = allApps.filter(
+    (app) => app.is_active && (directAppIdSet.has(app.id) || naisTeamSlugs.includes(app.team_slug)),
+  )
 
-  const coverage = await getDevTeamCoverageStats(teamAppIds, deployerUsernames, startDate, endDate)
+  // Use the same query as the team page (getAppDeploymentStatsBatch) for consistent counts
+  const statsByApp =
+    teamApps.length > 0
+      ? await getAppDeploymentStatsBatch(
+          teamApps.map((a) => ({ id: a.id, audit_start_year: a.audit_start_year })),
+          deployerUsernames,
+          { startDate, endDate },
+        )
+      : new Map()
+
+  let totalDeployments = 0
+  let totalWithFourEyes = 0
+  let totalMissingGoalLinks = 0
+  for (const stats of statsByApp.values()) {
+    totalDeployments += stats.total
+    totalWithFourEyes += stats.with_four_eyes
+    totalMissingGoalLinks += stats.missing_goal_links
+  }
+  const withOrigin = totalDeployments - totalMissingGoalLinks
+  const coverage = {
+    total: totalDeployments,
+    with_four_eyes: totalWithFourEyes,
+    four_eyes_percentage: totalDeployments > 0 ? floorUnlessPerfect((totalWithFourEyes / totalDeployments) * 100) : 0,
+    with_origin: withOrigin,
+    origin_percentage: totalDeployments > 0 ? floorUnlessPerfect((withOrigin / totalDeployments) * 100) : 0,
+  }
 
   const section = await getSectionBySlug(params.sectionSlug)
 
@@ -214,4 +241,9 @@ function getCoverageVariant(ratio: number): 'success' | 'warning' | 'error' | 'n
   if (ratio >= 0.7) return 'warning'
   if (ratio > 0) return 'error'
   return 'neutral'
+}
+
+function floorUnlessPerfect(pct: number): number {
+  if (pct >= 100) return 100
+  return Math.floor(pct)
 }
