@@ -63,7 +63,7 @@ function IssueBadge({ to, icon, color, variant = 'outline', children }: IssueBad
   return tag
 }
 
-function getStatusBadge(appStats: AppStats, links: { failedTo?: string; pendingTo?: string }) {
+function getStatusBadge(appStats: AppStats, links: { failedTo?: string; pendingTo?: string; okTo?: string }) {
   if (appStats.without_four_eyes > 0) {
     const label = appStats.without_four_eyes === 1 ? 'mangel' : 'mangler'
     return (
@@ -87,7 +87,7 @@ function getStatusBadge(appStats: AppStats, links: { failedTo?: string; pendingT
     )
   }
   return (
-    <IssueBadge icon={<CheckmarkCircleIcon aria-hidden />} color="success">
+    <IssueBadge to={links.okTo} icon={<CheckmarkCircleIcon aria-hidden />} color="success">
       OK
     </IssueBadge>
   )
@@ -181,6 +181,7 @@ export function AppCard({ app, showEnvironment = true, appendSearchParams }: App
                 app.stats.pending_verification > 0
                   ? `${appUrl}/deployments?status=pending&period=all${groupParam}${extraParams}`
                   : undefined,
+              okTo: `${appUrl}/deployments?period=all${groupParam}${extraParams}`,
             })}
           </HStack>
         </HStack>
