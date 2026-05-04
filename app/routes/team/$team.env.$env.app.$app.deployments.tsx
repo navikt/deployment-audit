@@ -141,43 +141,44 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     throw redirect(url.pathname + url.search)
   }
 
-  // Fetch error reasons from latest verification runs for error deployments
+  // ── Parallel: error reasons, all deployers, and current user GitHub mapping ──
   const errorDeploymentIds = result.deployments.filter((d) => d.four_eyes_status === 'error').map((d) => d.id)
+  const appIds = showGroup && hasGroup ? [app.id, ...siblings.map((s) => s.id)] : [app.id]
 
-  let errorReasons: Record<number, string> = {}
-  if (errorDeploymentIds.length > 0) {
-    const errorResult = await pool.query(
-      `SELECT DISTINCT ON (deployment_id) deployment_id, result
-       FROM verification_runs
-       WHERE deployment_id = ANY($1)
-       ORDER BY deployment_id, run_at DESC`,
-      [errorDeploymentIds],
-    )
-    errorReasons = Object.fromEntries(
-      errorResult.rows
-        .filter((row) => row.result?.approvalDetails?.reason)
-        .map((row) => [row.deployment_id, row.result.approvalDetails.reason as string]),
-    )
-  }
+  const [errorReasonsResult, allDeployersResult, currentUserMapping] = await Promise.all([
+    errorDeploymentIds.length > 0
+      ? pool.query(
+          `SELECT DISTINCT ON (deployment_id) deployment_id, result
+           FROM verification_runs
+           WHERE deployment_id = ANY($1)
+           ORDER BY deployment_id, run_at DESC`,
+          [errorDeploymentIds],
+        )
+      : Promise.resolve({ rows: [] as any[] }),
+    pool.query(
+      `SELECT DISTINCT d.deployer_username
+       FROM deployments d
+       INNER JOIN monitored_applications ma ON d.monitored_app_id = ma.id
+       WHERE d.monitored_app_id = ANY($1)
+         AND d.deployer_username IS NOT NULL
+         AND d.deployer_username != ''
+         AND (ma.audit_start_year IS NULL OR d.created_at >= make_date(ma.audit_start_year, 1, 1))
+       ORDER BY d.deployer_username`,
+      [appIds],
+    ),
+    currentUser?.navIdent ? getUserMappingByNavIdent(currentUser.navIdent) : Promise.resolve(null),
+  ])
+
+  const errorReasons: Record<number, string> = Object.fromEntries(
+    errorReasonsResult.rows
+      .filter((row: any) => row.result?.approvalDetails?.reason)
+      .map((row: any) => [row.deployment_id, row.result.approvalDetails.reason as string]),
+  )
+
+  const allDeployers = allDeployersResult.rows.map((r: any) => r.deployer_username as string)
 
   // Get display names for deployers (current page + all distinct deployers for filter)
   const deployerUsernames = [...new Set(result.deployments.map((d) => d.deployer_username).filter(Boolean))] as string[]
-
-  // Deployer dropdown: only deployers within the audit window (and group if active)
-  const appIds = showGroup && hasGroup ? [app.id, ...siblings.map((s) => s.id)] : [app.id]
-  const allDeployersResult = await pool.query(
-    `SELECT DISTINCT d.deployer_username
-     FROM deployments d
-     INNER JOIN monitored_applications ma ON d.monitored_app_id = ma.id
-     WHERE d.monitored_app_id = ANY($1)
-       AND d.deployer_username IS NOT NULL
-       AND d.deployer_username != ''
-       AND (ma.audit_start_year IS NULL OR d.created_at >= make_date(ma.audit_start_year, 1, 1))
-     ORDER BY d.deployer_username`,
-    [appIds],
-  )
-  const allDeployers = allDeployersResult.rows.map((r) => r.deployer_username as string)
-
   const allUsernamesForMapping = [...new Set([...deployerUsernames, ...allDeployers])]
   const userMappings = await getUserMappings(allUsernamesForMapping)
 
@@ -196,11 +197,8 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 
   // Find current user's GitHub username for "Meg" shortcut
   let currentUserGithub: string | null = null
-  if (currentUser?.navIdent) {
-    const mapping = await getUserMappingByNavIdent(currentUser.navIdent)
-    if (mapping?.github_username && allDeployers.includes(mapping.github_username)) {
-      currentUserGithub = mapping.github_username
-    }
+  if (currentUserMapping?.github_username && allDeployers.includes(currentUserMapping.github_username)) {
+    currentUserGithub = currentUserMapping.github_username
   }
 
   // Build dropdown options for the team filter. "Mine team" is only offered

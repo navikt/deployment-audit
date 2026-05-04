@@ -6,6 +6,31 @@ import { withDbSpan } from '~/lib/tracing.server'
 
 let poolInstance: Pool | null = null
 
+// ─── Retry helper for transient PostgreSQL connection errors ─────────────────
+// PG error 53300 ("too_many_connections") is transient — connections free up
+// within milliseconds as other requests finish. Retrying with backoff avoids
+// surfacing a hard 500 to users during brief traffic spikes.
+const MAX_RETRIES = 3
+const BASE_DELAY_MS = 200
+
+function isConnectionExhausted(err: unknown): boolean {
+  return err instanceof Error && (err as NodeJS.ErrnoException).code === '53300'
+}
+
+async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await fn()
+    } catch (err: unknown) {
+      if (!isConnectionExhausted(err) || attempt === MAX_RETRIES) throw err
+      const delay = Math.min(BASE_DELAY_MS * 2 ** attempt, 2000)
+      logger.warn(`DB connection exhausted (53300), retry ${attempt + 1}/${MAX_RETRIES} after ${delay}ms`)
+      await new Promise((r) => setTimeout(r, delay))
+    }
+  }
+  throw new Error('unreachable')
+}
+
 function buildConnectionConfig() {
   // Nais injects individual DB_* variables with envVarPrefix: DB
   const dbHost = process.env.DB_HOST
@@ -58,9 +83,9 @@ export function getPool(): Pool {
 
     poolInstance = new Pool({
       ...config,
-      max: 10,
+      max: process.env.DB_POOL_MAX ? parseInt(process.env.DB_POOL_MAX, 10) : 5,
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
+      connectionTimeoutMillis: 5000,
     })
 
     poolInstance.on('error', (err) => {
@@ -139,7 +164,7 @@ export const pool: Pool = new Proxy({} as Pool, {
         const target = syncClient ?? instance
         const sql = typeof args[0] === 'string' ? args[0] : args[0]?.text || 'unknown'
         const operation = extractOperation(sql)
-        return withDbSpan(operation, sql, () => (target as any).query(...args))
+        return withDbSpan(operation, sql, () => withRetry(() => (target as any).query(...args)))
       }
     }
 
@@ -166,7 +191,7 @@ export const pool: Pool = new Proxy({} as Pool, {
 
           return Promise.resolve(client)
         }
-        return value.call(instance, ...args)
+        return withRetry(() => value.call(instance, ...args))
       }
     }
 
@@ -189,11 +214,13 @@ export async function query<T extends Record<string, any> = any>(
   params?: any[],
 ): Promise<QueryResult<T>> {
   const operation = extractOperation(text)
-  return withDbSpan(operation, text, () => {
-    const syncClient = getSyncClient()
-    const target = syncClient ?? getPool()
-    return target.query<T>(text, params)
-  })
+  return withDbSpan(operation, text, () =>
+    withRetry(() => {
+      const syncClient = getSyncClient()
+      const target = syncClient ?? getPool()
+      return target.query<T>(text, params)
+    }),
+  )
 }
 
 export async function closePool(): Promise<void> {

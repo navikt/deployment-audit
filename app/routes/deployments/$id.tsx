@@ -121,17 +121,77 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     audit_start_year: app.audit_start_year,
   }
 
-  const comments = await getCommentsByDeploymentId(deploymentId)
-  const manualApproval = await getManualApproval(deploymentId)
-  const legacyInfo = await getLegacyInfo(deploymentId)
-  const statusHistory = await getStatusHistory(deploymentId)
-  const deviations = await getDeviationsByDeploymentId(deploymentId)
-  const goalLinks = await getLinksForDeployment(deploymentId)
-
-  // Get available boards/goals for goal linking UI (scoped to deployment date + user's teams)
-  const currentUser = await getUserIdentity(request)
-  const allDevTeams = await getDevTeamsForApp(deployment.monitored_app_id, app.team_slug)
+  // ── Phase 2: Fetch all independent data in parallel ──────────────────────
   const deploymentDate = new Date(deployment.created_at).toISOString().split('T')[0]
+
+  const nearbyDeploymentsPromise =
+    deployment.four_eyes_status === 'error'
+      ? pool
+          .query(
+            `SELECT d.id, d.commit_sha, d.created_at, d.four_eyes_status, d.deployer_username,
+              ${TITLE_COALESCE_SQL} AS title
+       FROM deployments d
+       LEFT JOIN commits c ON c.sha = d.commit_sha
+         AND c.repo_owner = d.detected_github_owner
+         AND c.repo_name = d.detected_github_repo_name
+       WHERE d.monitored_app_id = $1
+         AND d.id != $2
+         AND d.created_at BETWEEN ($3::timestamptz - interval '30 minutes') AND ($3::timestamptz + interval '30 minutes')
+       ORDER BY d.created_at`,
+            [deployment.monitored_app_id, deploymentId, deployment.created_at],
+          )
+          .then((r) =>
+            r.rows.map((row) => ({
+              id: row.id as number,
+              commit_sha: row.commit_sha as string,
+              created_at: (row.created_at as Date).toISOString(),
+              four_eyes_status: row.four_eyes_status as string,
+              deployer_username: row.deployer_username as string | null,
+              title: row.title as string | null,
+            })),
+          )
+      : Promise.resolve(
+          [] as Array<{
+            id: number
+            commit_sha: string
+            created_at: string
+            four_eyes_status: string
+            deployer_username: string | null
+            title: string | null
+          }>,
+        )
+
+  const [
+    comments,
+    manualApproval,
+    legacyInfo,
+    statusHistory,
+    deviations,
+    goalLinks,
+    currentUser,
+    allDevTeams,
+    previousDeployment,
+    nextDeployment,
+    previousDeploymentForDiff,
+    fullVerificationRun,
+    nearbyDeployments,
+  ] = await Promise.all([
+    getCommentsByDeploymentId(deploymentId),
+    getManualApproval(deploymentId),
+    getLegacyInfo(deploymentId),
+    getStatusHistory(deploymentId),
+    getDeviationsByDeploymentId(deploymentId),
+    getLinksForDeployment(deploymentId),
+    getUserIdentity(request),
+    getDevTeamsForApp(deployment.monitored_app_id, app.team_slug),
+    getPreviousDeploymentForNav(deploymentId, deployment.monitored_app_id, navFilters),
+    getNextDeployment(deploymentId, deployment.monitored_app_id, navFilters),
+    getPreviousDeploymentForDiff(deploymentId, deployment.monitored_app_id, app.audit_start_year),
+    getLatestVerificationRun(deploymentId),
+    nearbyDeploymentsPromise,
+  ])
+
+  // ── Phase 3: Queries that depend on Phase 2 results ─────────────────────
 
   // Filter to teams the current user belongs to (if they have team preferences)
   let devTeams = allDevTeams
@@ -144,15 +204,19 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     }
   }
 
-  const boardsPerTeam = await Promise.all(devTeams.map((dt) => getBoardsWithGoalsForDevTeam(dt.id, deploymentDate)))
+  // Fetch boards for user's teams and other section teams in parallel
+  const devTeamIds = new Set(devTeams.map((dt) => dt.id))
+  const sectionIds = [...new Set(allDevTeams.map((dt) => dt.section_id))]
+
+  const [boardsPerTeam, sectionTeamArrays] = await Promise.all([
+    Promise.all(devTeams.map((dt) => getBoardsWithGoalsForDevTeam(dt.id, deploymentDate))),
+    Promise.all(sectionIds.map((sid) => getDevTeamsBySection(sid))),
+  ])
+
   const availableBoards = boardsPerTeam.flatMap((boards, i) =>
     boards.map((b) => ({ ...b, dev_team_name: devTeams[i].name })),
   )
 
-  // Load boards from other teams in the same section(s) for cross-team goal linking
-  const devTeamIds = new Set(devTeams.map((dt) => dt.id))
-  const sectionIds = [...new Set(allDevTeams.map((dt) => dt.section_id))]
-  const sectionTeamArrays = await Promise.all(sectionIds.map((sid) => getDevTeamsBySection(sid)))
   const otherSectionTeams = sectionTeamArrays.flat().filter((dt) => !devTeamIds.has(dt.id))
   const sectionBoardsPerTeam = await Promise.all(
     otherSectionTeams.map((dt) => getBoardsWithGoalsForDevTeam(dt.id, deploymentDate)),
@@ -160,50 +224,6 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const sectionBoards = sectionBoardsPerTeam.flatMap((boards, i) =>
     boards.map((b) => ({ ...b, dev_team_name: otherSectionTeams[i].name })),
   )
-
-  // Get previous and next deployments for navigation (respecting filters)
-  const previousDeployment = await getPreviousDeploymentForNav(deploymentId, deployment.monitored_app_id, navFilters)
-  const nextDeployment = await getNextDeployment(deploymentId, deployment.monitored_app_id, navFilters)
-
-  // Get the true chronological previous deployment for GitHub diff links (unfiltered)
-  const previousDeploymentForDiff = await getPreviousDeploymentForDiff(
-    deploymentId,
-    deployment.monitored_app_id,
-    app.audit_start_year,
-  )
-
-  // Fetch nearby deployments (±30 min) for error status to provide context
-  let nearbyDeployments: Array<{
-    id: number
-    commit_sha: string
-    created_at: string
-    four_eyes_status: string
-    deployer_username: string | null
-    title: string | null
-  }> = []
-  if (deployment.four_eyes_status === 'error') {
-    const nearbyResult = await pool.query(
-      `SELECT d.id, d.commit_sha, d.created_at, d.four_eyes_status, d.deployer_username,
-              ${TITLE_COALESCE_SQL} AS title
-       FROM deployments d
-       LEFT JOIN commits c ON c.sha = d.commit_sha
-         AND c.repo_owner = d.detected_github_owner
-         AND c.repo_name = d.detected_github_repo_name
-       WHERE d.monitored_app_id = $1
-         AND d.id != $2
-         AND d.created_at BETWEEN ($3::timestamptz - interval '30 minutes') AND ($3::timestamptz + interval '30 minutes')
-       ORDER BY d.created_at`,
-      [deployment.monitored_app_id, deploymentId, deployment.created_at],
-    )
-    nearbyDeployments = nearbyResult.rows.map((row) => ({
-      id: row.id,
-      commit_sha: row.commit_sha,
-      created_at: row.created_at.toISOString(),
-      four_eyes_status: row.four_eyes_status,
-      deployer_username: row.deployer_username,
-      title: row.title,
-    }))
-  }
 
   // Collect all GitHub usernames we need to look up
   const usernames: string[] = []
@@ -216,7 +236,6 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   }
   if (deployment.github_pr_data?.creator?.username) usernames.push(deployment.github_pr_data.creator.username)
   if (deployment.github_pr_data?.merger?.username) usernames.push(deployment.github_pr_data.merger.username)
-  // Include assignees
   if (deployment.github_pr_data?.assignees) {
     for (const assignee of deployment.github_pr_data.assignees) {
       if (assignee.username && !usernames.includes(assignee.username)) {
@@ -224,7 +243,6 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       }
     }
   }
-  // Include reviewers
   if (deployment.github_pr_data?.reviewers) {
     for (const reviewer of deployment.github_pr_data.reviewers) {
       if (reviewer.username && !usernames.includes(reviewer.username)) {
@@ -232,7 +250,6 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       }
     }
   }
-  // Include requested reviewers
   if (deployment.github_pr_data?.requested_reviewers) {
     for (const reviewer of deployment.github_pr_data.requested_reviewers) {
       if (reviewer.username && !usernames.includes(reviewer.username)) {
@@ -240,7 +257,6 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       }
     }
   }
-  // Include PR commits authors
   if (deployment.github_pr_data?.commits) {
     for (const commit of deployment.github_pr_data.commits) {
       if (commit.author?.username && !usernames.includes(commit.author.username)) {
@@ -248,7 +264,6 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       }
     }
   }
-  // Include PR comments authors
   if (deployment.github_pr_data?.comments) {
     for (const comment of deployment.github_pr_data.comments) {
       if (comment.user?.username && !usernames.includes(comment.user.username)) {
@@ -256,7 +271,6 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       }
     }
   }
-  // Include unverified commit authors
   if (deployment.unverified_commits) {
     for (const commit of deployment.unverified_commits) {
       if (commit.author && !usernames.includes(commit.author)) {
@@ -298,12 +312,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 
   const isAdmin = currentUser?.role === 'admin'
 
-  // Fetch verification run data. Used to surface warnings (e.g. branch mismatch)
-  // to all viewers, and for admin-only debug/download UI gated separately below.
-  // To avoid exposing the full verification payload (snapshot IDs, internal
-  // status, etc.) to non-admins, we strip down to the minimal shape needed for
-  // the public warning when the user is not an admin.
-  const fullVerificationRun = await getLatestVerificationRun(deploymentId)
+  // Strip verification run data for non-admins
   const verificationRun = isAdmin
     ? fullVerificationRun
     : fullVerificationRun
