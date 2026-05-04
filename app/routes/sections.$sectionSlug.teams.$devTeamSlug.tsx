@@ -5,7 +5,7 @@ import { AppCard, type AppCardData } from '~/components/AppCard'
 import { getGroupNamesByIds } from '~/db/application-groups.server'
 import { getAllActiveRepositories } from '~/db/application-repositories.server'
 import { type Board, getBoardsByDevTeam } from '~/db/boards.server'
-import { type BoardProgressResult, getBoardObjectiveProgress, getDevTeamStatsBatch } from '~/db/dashboard-stats.server'
+import { type BoardProgressResult, getBoardObjectiveProgress } from '~/db/dashboard-stats.server'
 import { getAppDeploymentStatsBatch } from '~/db/deployments.server'
 import { getDevTeamApplications, getDevTeamBySlug, getGroupAppIdsForDevTeams } from '~/db/dev-teams.server'
 import { getAllAlertCounts, getAllMonitoredApplications } from '~/db/monitored-applications.server'
@@ -69,28 +69,34 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // (not from deployerUsernames which is deduplicated and may not reflect 1:1 mapping).
   const hasMappedMembers = members.some((m) => Boolean(m.github_username))
 
-  const [statsByApp, teamStatsMap] = await Promise.all([
+  const statsByApp =
     appsForStats.length > 0
-      ? getAppDeploymentStatsBatch(
+      ? await getAppDeploymentStatsBatch(
           appsForStats.map((a) => ({ id: a.id, audit_start_year: a.audit_start_year })),
           deployerUsernames,
           { startDate: ytdStart },
         )
-      : Promise.resolve(new Map()),
-    getDevTeamStatsBatch([devTeam.id], ytdStart),
-  ])
+      : new Map()
 
-  const teamStats = teamStatsMap.get(devTeam.id)
-  const totalDeployments = teamStats?.total_deployments ?? 0
+  // Derive top-card stats by summing per-app stats. This guarantees the top cards
+  // are always consistent with the app cards (same query, same data source).
+  let totalDeployments = 0
+  let totalWithFourEyes = 0
+  let totalMissingGoalLinks = 0
+  for (const stats of statsByApp.values()) {
+    totalDeployments += stats.total
+    totalWithFourEyes += stats.with_four_eyes
+    totalMissingGoalLinks += stats.missing_goal_links
+  }
+  const linkedToGoal = totalDeployments - totalMissingGoalLinks
+
   // When an active board exists, use its distinct deployment count for "endringsopphav"
   // since the board covers the same period as YTD. This ensures the top card matches the board.
-  const withOrigin = activeBoardProgress
-    ? activeBoardProgress.totalDistinctDeployments
-    : (teamStats?.linked_to_goal ?? 0)
+  const withOrigin = activeBoardProgress ? activeBoardProgress.totalDistinctDeployments : linkedToGoal
   const teamCoverage = {
     total: totalDeployments,
-    with_four_eyes: teamStats?.with_four_eyes ?? 0,
-    four_eyes_percentage: teamStats ? floorUnlessPerfect(teamStats.four_eyes_coverage * 100) : 0,
+    with_four_eyes: totalWithFourEyes,
+    four_eyes_percentage: totalDeployments > 0 ? floorUnlessPerfect((totalWithFourEyes / totalDeployments) * 100) : 0,
     with_origin: withOrigin,
     origin_percentage: totalDeployments > 0 ? floorUnlessPerfect((withOrigin / totalDeployments) * 100) : 0,
   }

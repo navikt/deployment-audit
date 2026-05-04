@@ -520,4 +520,93 @@ describe('getDevTeamStatsBatch vs getAppDeploymentStatsBatch consistency', () =>
       (teamStats?.with_four_eyes ?? 0) + (teamStats?.without_four_eyes ?? 0) + (teamStats?.pending_verification ?? 0)
     expect(total).toBe(covered)
   })
+
+  it('bot deployer with team member PR creator: both queries agree', async () => {
+    // Production scenario: CI bot deploys, but PR was created by a team member.
+    // Both queries should match via PR creator.
+    const sectionId = await seedSection(pool, 'sec-bot')
+    const { devTeamId, githubUsernames } = await seedTeamWithMembers(sectionId, {
+      teamSlug: 'team-bot',
+      naisTeamSlug: 'nais-team-bot',
+      members: [{ navIdent: 'A100004', githubUsername: 'alice' }],
+    })
+
+    const appId = await seedApp(pool, { teamSlug: 'nais-team-bot', appName: 'app-bot', environment: 'prod' })
+    const now = new Date()
+    const startDate = new Date(now.getFullYear(), 0, 1)
+
+    // Bot deploys, but alice created the PR. Status = legacy (not approved).
+    await seedDeployWithPrCreator(appId, 'nais-team-bot', now, 'legacy', 'github-actions[bot]', 'alice')
+    // Bot deploys approved PR by alice
+    await seedDeployWithPrCreator(appId, 'nais-team-bot', now, 'approved_pr', 'github-actions[bot]', 'alice')
+
+    const batchMap = await getDevTeamStatsBatch([devTeamId], startDate)
+    const teamStats = batchMap.get(devTeamId)
+
+    const appStatsMap = await getAppDeploymentStatsBatch([{ id: appId }], githubUsernames, { startDate })
+    const appStats = appStatsMap.get(appId)
+
+    // Both should find 2 deployments (matched via PR creator)
+    expect(teamStats?.total_deployments).toBe(2)
+    expect(appStats?.total).toBe(2)
+    expect(teamStats?.without_four_eyes).toBe(1)
+    expect(appStats?.without_four_eyes).toBe(1)
+    expect(teamStats?.with_four_eyes).toBe(1)
+    expect(appStats?.with_four_eyes).toBe(1)
+  })
+
+  it('multiple apps across nais teams: team total equals sum of app totals', async () => {
+    // Production scenario: team has apps across multiple nais teams.
+    // Top card total must equal sum of all app card totals.
+    const sectionId = await seedSection(pool, 'sec-multi')
+    const { devTeamId, githubUsernames } = await seedTeamWithMembers(sectionId, {
+      teamSlug: 'team-multi',
+      naisTeamSlug: 'nais-team-m1',
+      members: [
+        { navIdent: 'A100005', githubUsername: 'alice' },
+        { navIdent: 'B200005', githubUsername: 'bob' },
+      ],
+    })
+    // Add a second nais team
+    await pool.query(`INSERT INTO dev_team_nais_teams (dev_team_id, nais_team_slug) VALUES ($1, $2)`, [
+      devTeamId,
+      'nais-team-m2',
+    ])
+
+    const app1 = await seedApp(pool, { teamSlug: 'nais-team-m1', appName: 'app-m1', environment: 'prod' })
+    const app2 = await seedApp(pool, { teamSlug: 'nais-team-m2', appName: 'app-m2', environment: 'prod' })
+    const now = new Date()
+    const startDate = new Date(now.getFullYear(), 0, 1)
+
+    // App1: 3 approved by alice, 1 legacy by bob
+    await seedDeploymentWithStatus(pool, app1, 'nais-team-m1', now, 'approved_pr', 'alice')
+    await seedDeploymentWithStatus(pool, app1, 'nais-team-m1', now, 'approved_pr', 'alice')
+    await seedDeploymentWithStatus(pool, app1, 'nais-team-m1', now, 'approved_pr', 'alice')
+    await seedDeploymentWithStatus(pool, app1, 'nais-team-m1', now, 'legacy', 'bob')
+
+    // App2: 2 approved by bob, 1 error by alice
+    await seedDeploymentWithStatus(pool, app2, 'nais-team-m2', now, 'approved_pr', 'bob')
+    await seedDeploymentWithStatus(pool, app2, 'nais-team-m2', now, 'approved_pr', 'bob')
+    await seedDeploymentWithStatus(pool, app2, 'nais-team-m2', now, 'error', 'alice')
+
+    const batchMap = await getDevTeamStatsBatch([devTeamId], startDate)
+    const teamStats = batchMap.get(devTeamId)
+
+    const appStatsMap = await getAppDeploymentStatsBatch([{ id: app1 }, { id: app2 }], githubUsernames, { startDate })
+    const app1Stats = appStatsMap.get(app1)
+    const app2Stats = appStatsMap.get(app2)
+
+    // Team total must equal sum of app totals
+    const sumTotal = (app1Stats?.total ?? 0) + (app2Stats?.total ?? 0)
+    const sumWithout = (app1Stats?.without_four_eyes ?? 0) + (app2Stats?.without_four_eyes ?? 0)
+    const sumWith = (app1Stats?.with_four_eyes ?? 0) + (app2Stats?.with_four_eyes ?? 0)
+
+    expect(teamStats?.total_deployments).toBe(7)
+    expect(sumTotal).toBe(7)
+    expect(teamStats?.total_deployments).toBe(sumTotal)
+    expect(teamStats?.without_four_eyes).toBe(sumWithout)
+    expect(teamStats?.with_four_eyes).toBe(sumWith)
+    expect(teamStats?.without_four_eyes).toBe(2)
+    expect(teamStats?.with_four_eyes).toBe(5)
+  })
 })
