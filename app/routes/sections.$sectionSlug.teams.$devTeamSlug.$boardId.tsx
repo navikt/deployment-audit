@@ -4,6 +4,7 @@ import {
   BodyShort,
   Box,
   Button,
+  DatePicker,
   Detail,
   Heading,
   HStack,
@@ -11,6 +12,7 @@ import {
   Tag,
   TextField,
   Tooltip,
+  useDatepicker,
   VStack,
 } from '@navikt/ds-react'
 import { useEffect, useState } from 'react'
@@ -720,6 +722,24 @@ function EditDatesForm({
   const [end, setEnd] = useState(periodEnd)
   const submit = useSubmit()
 
+  const startDatepicker = useDatepicker({
+    defaultSelected: new Date(`${periodStart}T12:00:00`),
+    onDateChange: (date) => {
+      if (date) {
+        setStart(toDateInputValue(date))
+      }
+    },
+  })
+
+  const endDatepicker = useDatepicker({
+    defaultSelected: new Date(`${periodEnd}T12:00:00`),
+    onDateChange: (date) => {
+      if (date) {
+        setEnd(toDateInputValue(date))
+      }
+    },
+  })
+
   return (
     <Form
       method="post"
@@ -730,35 +750,15 @@ function EditDatesForm({
       }}
     >
       <input type="hidden" name="intent" value="update-dates" />
+      <input type="hidden" name="period_start" value={start} />
+      <input type="hidden" name="period_end" value={end} />
       <HStack gap="space-8" align="end">
-        <VStack gap="space-4">
-          <Detail as="label" htmlFor="edit-period-start">
-            Fra
-          </Detail>
-          <input
-            id="edit-period-start"
-            type="date"
-            name="period_start"
-            value={start}
-            onChange={(e) => setStart(e.target.value)}
-            className="navds-text-field__input navds-body-short navds-body-short--small"
-            style={{ width: '155px', padding: '0.25rem 0.5rem' }}
-          />
-        </VStack>
-        <VStack gap="space-4">
-          <Detail as="label" htmlFor="edit-period-end">
-            Til
-          </Detail>
-          <input
-            id="edit-period-end"
-            type="date"
-            name="period_end"
-            value={end}
-            onChange={(e) => setEnd(e.target.value)}
-            className="navds-text-field__input navds-body-short navds-body-short--small"
-            style={{ width: '155px', padding: '0.25rem 0.5rem' }}
-          />
-        </VStack>
+        <DatePicker {...startDatepicker.datepickerProps}>
+          <DatePicker.Input {...startDatepicker.inputProps} label="Fra" size="small" />
+        </DatePicker>
+        <DatePicker {...endDatepicker.datepickerProps}>
+          <DatePicker.Input {...endDatepicker.inputProps} label="Til" size="small" />
+        </DatePicker>
         <Button type="submit" size="small">
           Lagre
         </Button>
