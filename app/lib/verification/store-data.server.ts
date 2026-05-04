@@ -10,6 +10,7 @@ import { updateCommitPrVerification } from '~/db/commits.server'
 import { pool } from '~/db/connection.server'
 import { logStatusTransition } from '~/db/deployments.server'
 import { getAllLatestPrSnapshots, saveVerificationRun } from '~/db/github-data.server'
+import { PROTECTED_STATUSES_SQL } from '~/lib/four-eyes-status'
 import { buildGithubPrDataFromSnapshots } from './build-github-pr-data'
 import type {
   PrChecks,
@@ -89,7 +90,7 @@ export async function updateDeploymentVerification(
   const current = await pool.query(`SELECT four_eyes_status FROM deployments WHERE id = $1`, [deploymentId])
 
   // Update deployment record
-  await pool.query(
+  const updateResult = await pool.query(
     `UPDATE deployments
      SET 
        four_eyes_status = $1,
@@ -99,7 +100,7 @@ export async function updateDeploymentVerification(
        github_pr_data = COALESCE($5::jsonb, github_pr_data),
        title = COALESCE($6, title)
      WHERE id = $3
-       AND four_eyes_status NOT IN ('manually_approved', 'legacy')`,
+       AND four_eyes_status NOT IN (${PROTECTED_STATUSES_SQL})`,
     [
       result.status,
       result.deployedPr?.number || null,
@@ -123,8 +124,8 @@ export async function updateDeploymentVerification(
     ],
   )
 
-  // Log status transition if status changed
-  if (current.rows.length > 0) {
+  // Log status transition only if the UPDATE actually changed a row
+  if (updateResult.rowCount && updateResult.rowCount > 0 && current.rows.length > 0) {
     const prev = current.rows[0]
     const newStatus = result.status
     if (prev.four_eyes_status !== newStatus) {

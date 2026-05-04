@@ -26,6 +26,7 @@ import {
   getPreviousDeploymentForDiff,
   getPrSnapshotsForDiff,
 } from '~/db/verification-diff.server'
+import { isProtectedStatus } from '~/lib/four-eyes-status'
 import { logger } from '~/lib/logger.server'
 import { buildCommitsBetweenFromCache, fetchVerificationData } from './fetch-data.server'
 import { storeVerificationResult, updateDeploymentVerification } from './store-data.server'
@@ -331,12 +332,8 @@ export async function reverifyDeployment(deploymentId: number): Promise<{
 
   const dep = row.rows[0]
 
-  // Skip manually approved, baseline-approved, or legacy
-  if (
-    dep.four_eyes_status === 'manually_approved' ||
-    dep.four_eyes_status === 'baseline' ||
-    dep.four_eyes_status === 'legacy'
-  ) {
+  // Skip protected statuses (manually approved, baseline, legacy)
+  if (isProtectedStatus(dep.four_eyes_status ?? '')) {
     return null
   }
 
