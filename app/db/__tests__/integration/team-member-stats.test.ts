@@ -219,14 +219,14 @@ describe('getAppDeploymentStats / batch parity', () => {
     const batchMap = await getAppDeploymentStatsBatch([{ id: appId, audit_start_year: 2024 }])
     const batch = batchMap.get(appId)
 
-    expect(batch).toBeDefined()
-    expect(single.total).toBe(batch!.total)
-    expect(single.with_four_eyes).toBe(batch!.with_four_eyes)
-    expect(single.without_four_eyes).toBe(batch!.without_four_eyes)
-    expect(single.pending_verification).toBe(batch!.pending_verification)
-    expect(single.four_eyes_percentage).toBe(batch!.four_eyes_percentage)
-    expect(single.last_deployment_id).toBe(batch!.last_deployment_id)
-    expect(single.missing_goal_links).toBe(batch!.missing_goal_links)
+    if (!batch) throw new Error('batch result missing')
+    expect(single.total).toBe(batch.total)
+    expect(single.with_four_eyes).toBe(batch.with_four_eyes)
+    expect(single.without_four_eyes).toBe(batch.without_four_eyes)
+    expect(single.pending_verification).toBe(batch.pending_verification)
+    expect(single.four_eyes_percentage).toBe(batch.four_eyes_percentage)
+    expect(single.last_deployment_id).toBe(batch.last_deployment_id)
+    expect(single.missing_goal_links).toBe(batch.missing_goal_links)
     // No goal links seeded, so missing_goal_links should equal total
     expect(single.missing_goal_links).toBe(single.total)
   })
@@ -248,8 +248,9 @@ describe('getAppDeploymentStats / batch parity', () => {
     const batch = batchMap.get(appId)
 
     expect(single.total).toBe(1)
-    expect(batch!.total).toBe(1)
-    expect(single.without_four_eyes).toBe(batch!.without_four_eyes)
+    if (!batch) throw new Error('batch result missing')
+    expect(batch.total).toBe(1)
+    expect(single.without_four_eyes).toBe(batch.without_four_eyes)
   })
 
   it('date range + deployer filter combined', async () => {
@@ -266,9 +267,10 @@ describe('getAppDeploymentStats / batch parity', () => {
     const stats = await getAppDeploymentStatsBatch([{ id: appId }], ['alice'], { startDate, endDate })
     const s = stats.get(appId)
 
-    expect(s!.total).toBe(1)
-    expect(s!.with_four_eyes).toBe(1)
-    expect(s!.without_four_eyes).toBe(0)
+    if (!s) throw new Error('stats result missing')
+    expect(s.total).toBe(1)
+    expect(s.with_four_eyes).toBe(1)
+    expect(s.without_four_eyes).toBe(0)
   })
 })
 

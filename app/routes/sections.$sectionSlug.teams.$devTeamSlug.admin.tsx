@@ -124,9 +124,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     naisCatalogFailed,
     boards,
     sectionSlug: section.slug,
-    allUsers: allUsers
-      .filter((u) => u.nav_ident)
-      .map((u) => ({ navIdent: u.nav_ident!, displayName: u.display_name, githubUsername: u.github_username })),
+    allUsers: allUsers.flatMap((u) =>
+      u.nav_ident ? [{ navIdent: u.nav_ident, displayName: u.display_name, githubUsername: u.github_username }] : [],
+    ),
   }
 }
 
