@@ -1,6 +1,6 @@
 import { BarChartIcon, CogIcon } from '@navikt/aksel-icons'
-import { Alert, BodyShort, Box, Button, Detail, Heading, HGrid, HStack, Tag, VStack } from '@navikt/ds-react'
-import { Link, useLoaderData, useRouteLoaderData } from 'react-router'
+import { Alert, BodyShort, Box, Button, Detail, Heading, HGrid, HStack, Switch, Tag, VStack } from '@navikt/ds-react'
+import { Link, useLoaderData, useRouteLoaderData, useSearchParams } from 'react-router'
 import { AppCard, type AppCardData } from '~/components/AppCard'
 import { getGroupNamesByIds } from '~/db/application-groups.server'
 import { getAllActiveRepositories } from '~/db/application-repositories.server'
@@ -57,6 +57,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     (app) => app.is_active && (directAppIds.has(app.id) || naisTeamSlugs.includes(app.team_slug)),
   )
 
+  // When ?allApps=true, show all apps where team members have deployed (not just team-owned).
+  const url = new URL(request.url)
+  const showAllApps = url.searchParams.get('allApps') === 'true'
+  const appsForStats = showAllApps ? allApps.filter((a) => a.is_active) : teamApps
+
   // Filter stats to deploys made by team members (their GitHub usernames).
   // deployerUsernames is fetched in Promise.all above via getMembersGithubUsernamesForDevTeams
   // (handles soft-deletes, consistent with the deployment list page's team filter).
@@ -65,9 +70,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const hasMappedMembers = members.some((m) => Boolean(m.github_username))
 
   const [statsByApp, teamStatsMap] = await Promise.all([
-    teamApps.length > 0
+    appsForStats.length > 0
       ? getAppDeploymentStatsBatch(
-          teamApps.map((a) => ({ id: a.id, audit_start_year: a.audit_start_year })),
+          appsForStats.map((a) => ({ id: a.id, audit_start_year: a.audit_start_year })),
           deployerUsernames,
           { startDate: ytdStart },
         )
@@ -91,13 +96,19 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   // Resolve group names for grouped app cards
+  const displayApps = showAllApps
+    ? appsForStats.filter((app) => {
+        const stats = statsByApp.get(app.id)
+        return stats && stats.total > 0
+      })
+    : teamApps
   const teamGroupIds = [
-    ...new Set(teamApps.map((a) => a.application_group_id).filter((id): id is number => id != null)),
+    ...new Set(displayApps.map((a) => a.application_group_id).filter((id): id is number => id != null)),
   ]
   const groupNames = await getGroupNamesByIds(teamGroupIds)
 
   const appCards: AppCardData[] = groupAppCards(
-    teamApps.map((app) => ({
+    displayApps.map((app) => ({
       ...app,
       active_repo: activeRepos.get(app.id) || null,
       stats: statsByApp.get(app.id) || {
@@ -123,6 +134,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     activeBoardProgress,
     members,
     appCards,
+    showAllApps,
     sectionSlug: params.sectionSlug,
     sectionName: section?.name ?? params.sectionSlug,
     teamCoverage,
@@ -138,6 +150,7 @@ export default function DevTeamPage() {
     activeBoardProgress,
     members,
     appCards,
+    showAllApps,
     sectionSlug,
     teamCoverage,
     hasMappedMembers,
@@ -146,6 +159,7 @@ export default function DevTeamPage() {
   const layoutData = useRouteLoaderData<typeof layoutLoader>('routes/layout')
   const isAdmin = layoutData?.user?.role === 'admin'
   const teamBasePath = `/sections/${sectionSlug}/teams/${devTeam.slug}`
+  const [searchParams, setSearchParams] = useSearchParams()
 
   return (
     <VStack gap="space-24">
@@ -208,9 +222,26 @@ export default function DevTeamPage() {
 
       {/* Applications */}
       <VStack gap="space-8">
-        <Heading level="2" size="small">
-          Applikasjoner ({appCards.length})
-        </Heading>
+        <HStack align="center" justify="space-between" wrap>
+          <Heading level="2" size="small">
+            Applikasjoner ({appCards.length})
+          </Heading>
+          <Switch
+            size="small"
+            checked={showAllApps}
+            onChange={(e) => {
+              const next = new URLSearchParams(searchParams)
+              if (e.target.checked) {
+                next.set('allApps', 'true')
+              } else {
+                next.delete('allApps')
+              }
+              setSearchParams(next)
+            }}
+          >
+            Vis alle apper med teamaktivitet
+          </Switch>
+        </HStack>
         <Detail textColor="subtle">Statistikk er filtrert til deploys utført av team-medlemmer.</Detail>
         {appCards.length > 0 ? (
           <VStack gap="space-4">
