@@ -249,7 +249,9 @@ describe('getBoardObjectiveProgress', () => {
        VALUES ($1, 'B', 'tertiary', '2026-01-01', '2026-04-30', 'T1') RETURNING id`,
       [devTeamId],
     )
-    expect(await getBoardObjectiveProgress(rows[0].id)).toEqual([])
+    const result = await getBoardObjectiveProgress(rows[0].id)
+    expect(result.objectives).toEqual([])
+    expect(result.totalDistinctDeployments).toBe(0)
   })
 
   it('aggregates linked deployment counts per objective and key result in constant queries', async () => {
@@ -317,7 +319,7 @@ describe('getBoardObjectiveProgress', () => {
       [d1, kr2[0].id],
     )
 
-    const result = await getBoardObjectiveProgress(boardId)
+    const { objectives: result, totalDistinctDeployments } = await getBoardObjectiveProgress(boardId)
     expect(result).toHaveLength(2)
 
     const r1 = result.find((r) => r.objective_id === o1[0].id)
@@ -335,5 +337,8 @@ describe('getBoardObjectiveProgress', () => {
     if (!r2) throw new Error('expected r2')
     expect(r2.key_results).toEqual([])
     expect(r2.total_linked_deployments).toBe(0)
+
+    // Total distinct deployments linked to this board = d1 (KR1), d2 (KR1+KR2), d3 (O1) = 3
+    expect(totalDistinctDeployments).toBe(3)
   })
 })

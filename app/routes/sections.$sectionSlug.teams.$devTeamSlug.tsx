@@ -5,11 +5,7 @@ import { AppCard, type AppCardData } from '~/components/AppCard'
 import { getGroupNamesByIds } from '~/db/application-groups.server'
 import { getAllActiveRepositories } from '~/db/application-repositories.server'
 import { type Board, getBoardsByDevTeam } from '~/db/boards.server'
-import {
-  type BoardObjectiveProgress,
-  getBoardObjectiveProgress,
-  getDevTeamStatsBatch,
-} from '~/db/dashboard-stats.server'
+import { type BoardProgressResult, getBoardObjectiveProgress, getDevTeamStatsBatch } from '~/db/dashboard-stats.server'
 import { getAppDeploymentStatsBatch } from '~/db/deployments.server'
 import { getDevTeamApplications, getDevTeamBySlug, getGroupAppIdsForDevTeams } from '~/db/dev-teams.server'
 import { getAllAlertCounts, getAllMonitoredApplications } from '~/db/monitored-applications.server'
@@ -52,7 +48,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const activeBoard = boards.find((b) => b.is_active) ?? null
   const activeBoardProgress = activeBoard
     ? await getBoardObjectiveProgress(activeBoard.id, deployerUsernames, { startDate: ytdStart })
-    : []
+    : null
 
   // Build app cards: direct links + group-owned apps + nais team matches
   const directAppIds = new Set([...directApps.map((a) => a.monitored_app_id), ...groupAppIds])
@@ -80,12 +76,18 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   ])
 
   const teamStats = teamStatsMap.get(devTeam.id)
+  const totalDeployments = teamStats?.total_deployments ?? 0
+  // When an active board exists, use its distinct deployment count for "endringsopphav"
+  // since the board covers the same period as YTD. This ensures the top card matches the board.
+  const withOrigin = activeBoardProgress
+    ? activeBoardProgress.totalDistinctDeployments
+    : (teamStats?.linked_to_goal ?? 0)
   const teamCoverage = {
-    total: teamStats?.total_deployments ?? 0,
+    total: totalDeployments,
     with_four_eyes: teamStats?.with_four_eyes ?? 0,
     four_eyes_percentage: teamStats ? floorUnlessPerfect(teamStats.four_eyes_coverage * 100) : 0,
-    with_origin: teamStats?.linked_to_goal ?? 0,
-    origin_percentage: teamStats ? floorUnlessPerfect(teamStats.goal_coverage * 100) : 0,
+    with_origin: withOrigin,
+    origin_percentage: totalDeployments > 0 ? floorUnlessPerfect((withOrigin / totalDeployments) * 100) : 0,
   }
 
   // Resolve group names for grouped app cards
@@ -305,9 +307,10 @@ function ActiveBoardSection({
   teamBasePath,
 }: {
   board: Board
-  progress: BoardObjectiveProgress[]
+  progress: BoardProgressResult | null
   teamBasePath: string
 }) {
+  const objectives = progress?.objectives ?? []
   return (
     <Box padding="space-24" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
       <VStack gap="space-16">
@@ -346,9 +349,9 @@ function ActiveBoardSection({
           </Button>
         </HStack>
 
-        {progress.length > 0 ? (
+        {objectives.length > 0 ? (
           <VStack gap="space-8">
-            {progress.map((obj) => (
+            {objectives.map((obj) => (
               <Box key={obj.objective_id} padding="space-12" borderRadius="4" background="neutral-soft">
                 <VStack gap="space-4">
                   <HStack justify="space-between" align="center">

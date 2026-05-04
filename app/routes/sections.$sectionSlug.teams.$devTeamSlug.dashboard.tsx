@@ -44,7 +44,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   let objectiveProgress: BoardObjectiveProgress[] = []
   if (currentBoard) {
-    objectiveProgress = await getBoardObjectiveProgress(currentBoard.id, deployerUsernames)
+    objectiveProgress = (await getBoardObjectiveProgress(currentBoard.id, deployerUsernames)).objectives
   }
 
   // Build full set of team app IDs: direct links + group-owned + nais team matches

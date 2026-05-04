@@ -65,7 +65,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     getSectionBySlug(params.sectionSlug),
     getMembersGithubUsernamesForDevTeams([devTeam.id]).catch(() => [] as string[]),
   ])
-  const objectiveProgress = await getBoardObjectiveProgress(board.id, deployerUsernames)
+  const { objectives: objectiveProgress } = await getBoardObjectiveProgress(board.id, deployerUsernames)
 
   return {
     devTeam,
