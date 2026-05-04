@@ -1,14 +1,10 @@
-import { ChevronLeftIcon, ChevronRightIcon, LinkBrokenIcon, LinkIcon } from '@navikt/aksel-icons'
-import { BodyShort, Box, Button, Detail, Hide, HStack, Select, Show, Tag, TextField, VStack } from '@navikt/ds-react'
-import { Form, Link, redirect, useLoaderData, useSearchParams } from 'react-router'
-import { MethodTag, StatusTag } from '~/components/deployment-tags'
-import { ErrorReasonWithLink } from '~/components/ErrorReasonWithLink'
-import { ExternalLink } from '~/components/ExternalLink'
-import { UserName } from '~/components/UserName'
+import { BodyShort, Box, Button, HStack, VStack } from '@navikt/ds-react'
+import { Link, redirect, useLoaderData, useSearchParams } from 'react-router'
+import { DeploymentFilters, DeploymentRow, PaginationControls } from '~/components/deployments'
 import { getGroupContext } from '~/db/application-groups.server'
 import { pool } from '~/db/connection.server'
 import { getLinkedObjectivesForApps } from '~/db/deployment-goal-links.server'
-import { type DeploymentFilters, getDeploymentsPaginated } from '~/db/deployments.server'
+import { type DeploymentFilters as DeploymentFiltersType, getDeploymentsPaginated } from '~/db/deployments.server'
 import { getDevTeamBySlug, getDevTeamsForApp, getDevTeamsForApps } from '~/db/dev-teams.server'
 import { getMonitoredApplicationByIdentity } from '~/db/monitored-applications.server'
 import {
@@ -18,12 +14,10 @@ import {
 } from '~/db/user-dev-team-preference.server'
 import { getUserMappingByNavIdent, getUserMappings } from '~/db/user-mappings.server'
 import { getUserIdentity } from '~/lib/auth.server'
-import type { FourEyesStatus } from '~/lib/four-eyes-status'
 import { logger } from '~/lib/logger.server'
 import { requireTeamEnvAppParams } from '~/lib/route-params.server'
-import { getDateRangeForPeriod, TIME_PERIOD_OPTIONS, type TimePeriod } from '~/lib/time-periods'
+import { getDateRangeForPeriod, type TimePeriod } from '~/lib/time-periods'
 import { serializeUserMappings } from '~/lib/user-display'
-import styles from '~/styles/common.module.css'
 import type { Route } from './+types/$team.env.$env.app.$app.deployments'
 
 export function meta({ data }: Route.MetaArgs) {
@@ -126,7 +120,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 
   const isUnmappedFilter = deployer === '__unmapped__'
 
-  const filters: DeploymentFilters = {
+  const filters: DeploymentFiltersType = {
     ...(showGroup && hasGroup
       ? { monitored_app_ids: [app.id, ...siblings.map((s) => s.id)], per_app_audit_start_year: true }
       : { monitored_app_id: app.id, audit_start_year: app.audit_start_year }),
@@ -327,7 +321,7 @@ export default function AppDeployments() {
     } else {
       newParams.delete(key)
     }
-    newParams.set('page', '1') // Reset to page 1 when filtering
+    newParams.set('page', '1')
     setSearchParams(newParams)
   }
 
@@ -367,121 +361,22 @@ export default function AppDeployments() {
           </HStack>
         </Box>
       )}
-      <Box padding="space-20" borderRadius="8" background="sunken">
-        <Form method="get">
-          <VStack gap="space-16">
-            <HStack gap="space-16" wrap>
-              <Select
-                label="Tidsperiode"
-                size="small"
-                value={currentPeriod}
-                onChange={(e) => updateFilter('period', e.target.value)}
-              >
-                {TIME_PERIOD_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </Select>
 
-              <Select
-                label="Status"
-                size="small"
-                value={currentStatus}
-                onChange={(e) => updateFilter('status', e.target.value)}
-              >
-                <option value="">Alle</option>
-                <option value="approved">Godkjent</option>
-                <option value="manually_approved">Manuelt godkjent</option>
-                <option value="not_approved">Ikke godkjent</option>
-                <option value="pending">Venter</option>
-                <option value="legacy">Legacy</option>
-                <option value="legacy_pending">Legacy (venter)</option>
-                <option value="baseline">Baseline</option>
-                <option value="pending_baseline">Baseline (venter)</option>
-                <option value="error">Feil</option>
-                <option value="unknown">Ukjent</option>
-              </Select>
-
-              <Select
-                label="Metode"
-                size="small"
-                value={currentMethod}
-                onChange={(e) => updateFilter('method', e.target.value)}
-              >
-                <option value="">Alle</option>
-                <option value="pr">Pull Request</option>
-                <option value="direct_push">Direct Push</option>
-                <option value="legacy">Legacy</option>
-              </Select>
-
-              <Select
-                label="Endringsopphav"
-                size="small"
-                value={currentGoal}
-                onChange={(e) => updateFilter('goal', e.target.value)}
-              >
-                <option value="">Alle</option>
-                <option value="missing">Mangler kobling</option>
-                <option value="linked">Alle koblede</option>
-                {goalOptions.length > 0 && (
-                  <optgroup label="Mål">
-                    {goalOptions.map((obj) => (
-                      <option key={obj.id} value={`obj:${obj.id}`}>
-                        {obj.title}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-              </Select>
-
-              <Select
-                label="Deployer"
-                size="small"
-                value={currentDeployer}
-                onChange={(e) => updateFilter('deployer', e.target.value)}
-              >
-                <option value="">Alle</option>
-                {currentUserGithub && <option value={currentUserGithub}>Meg</option>}
-                {(hasUnmappedDeployers || currentDeployer === '__unmapped__') && (
-                  <option value="__unmapped__">Manglende mapping</option>
-                )}
-                {deployerOptions
-                  .filter((opt) => opt.value !== currentUserGithub)
-                  .map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-              </Select>
-
-              {teamOptions.length > 0 && (
-                <Select
-                  label="Team"
-                  size="small"
-                  value={currentTeam}
-                  onChange={(e) => updateFilter('team', e.target.value)}
-                >
-                  <option value="">Alle</option>
-                  {teamOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </Select>
-              )}
-
-              <TextField
-                label="Commit SHA"
-                size="small"
-                value={currentSha}
-                onChange={(e) => updateFilter('sha', e.target.value)}
-                placeholder="Søk..."
-              />
-            </HStack>
-          </VStack>
-        </Form>
-      </Box>
+      <DeploymentFilters
+        currentPeriod={currentPeriod}
+        currentStatus={currentStatus}
+        currentMethod={currentMethod}
+        currentGoal={currentGoal}
+        currentDeployer={currentDeployer}
+        currentSha={currentSha}
+        currentTeam={currentTeam}
+        deployerOptions={deployerOptions}
+        teamOptions={teamOptions}
+        goalOptions={goalOptions}
+        hasUnmappedDeployers={hasUnmappedDeployers}
+        currentUserGithub={currentUserGithub}
+        onFilterChange={updateFilter}
+      />
 
       <HStack justify="space-between" align="center" wrap>
         <BodyShort textColor="subtle">
@@ -513,150 +408,20 @@ export default function AppDeployments() {
           </Box>
         ) : (
           deployments.map((deployment) => (
-            <Box key={deployment.id} padding="space-20" background="raised" className={styles.stackedListItem}>
-              <VStack gap="space-12">
-                {/* First row: Time, Title (on desktop), Tags (right-aligned) */}
-                <HStack gap="space-8" align="center" justify="space-between">
-                  <HStack gap="space-8" align="center" style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                    <BodyShort weight="semibold" style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-                      {new Date(deployment.created_at).toLocaleString('no-NO', {
-                        dateStyle: 'short',
-                        timeStyle: 'short',
-                      })}
-                    </BodyShort>
-                    {showGroup && deployment.environment_name !== app.environment_name && (
-                      <Tag variant="neutral" size="xsmall">
-                        {deployment.environment_name}
-                      </Tag>
-                    )}
-                    {/* Title on desktop - inline with time */}
-                    <Show above="md">
-                      {deployment.title && (
-                        <BodyShort className={styles.truncateText} style={{ flex: 1, minWidth: 0 }}>
-                          {deployment.title}
-                        </BodyShort>
-                      )}
-                    </Show>
-                  </HStack>
-                  <HStack gap="space-8" style={{ flexShrink: 0 }}>
-                    <MethodTag
-                      github_pr_number={deployment.github_pr_number}
-                      four_eyes_status={deployment.four_eyes_status as FourEyesStatus}
-                    />
-                    <StatusTag four_eyes_status={deployment.four_eyes_status as FourEyesStatus} />
-                    {deployment.has_goal_link ? (
-                      <Tag variant="info" size="xsmall" icon={<LinkIcon aria-hidden />}>
-                        Koblet
-                      </Tag>
-                    ) : (
-                      <Tag variant="neutral" size="xsmall" icon={<LinkBrokenIcon aria-hidden />}>
-                        Mangler
-                      </Tag>
-                    )}
-                  </HStack>
-                </HStack>
-
-                {/* Title on mobile - separate line */}
-                <Hide above="md">
-                  {deployment.title && <BodyShort className={styles.truncateText}>{deployment.title}</BodyShort>}
-                </Hide>
-
-                {/* Second row: Details and View button */}
-                <HStack gap="space-16" align="center" justify="space-between" wrap>
-                  <HStack gap="space-16" wrap>
-                    <Detail textColor="subtle">
-                      <UserName username={deployment.deployer_username} userMappings={userMappings} />
-                    </Detail>
-                    {deployment.github_pr_data?.creator?.username &&
-                      deployment.github_pr_data.creator.username !== deployment.deployer_username && (
-                        <Detail textColor="subtle">
-                          PR:{' '}
-                          <UserName username={deployment.github_pr_data.creator.username} userMappings={userMappings} />
-                        </Detail>
-                      )}
-                    {deployment.github_pr_data?.merged_by?.username &&
-                      deployment.github_pr_data.merged_by.username !== deployment.deployer_username && (
-                        <Detail textColor="subtle">
-                          Merge:{' '}
-                          <UserName
-                            username={deployment.github_pr_data.merged_by.username}
-                            userMappings={userMappings}
-                          />
-                        </Detail>
-                      )}
-                    <Detail textColor="subtle">
-                      {deployment.commit_sha ? (
-                        <ExternalLink
-                          href={`https://github.com/${deployment.detected_github_owner}/${deployment.detected_github_repo_name}/commit/${deployment.commit_sha}`}
-                          style={{ fontFamily: 'monospace' }}
-                        >
-                          {deployment.commit_sha.substring(0, 7)}
-                        </ExternalLink>
-                      ) : (
-                        '(ukjent)'
-                      )}
-                    </Detail>
-                    {deployment.github_pr_number && (
-                      <Detail textColor="subtle">
-                        {deployment.github_pr_url ? (
-                          <ExternalLink href={deployment.github_pr_url}>#{deployment.github_pr_number}</ExternalLink>
-                        ) : (
-                          <>#{deployment.github_pr_number}</>
-                        )}
-                      </Detail>
-                    )}
-                  </HStack>
-                  <Button
-                    as={Link}
-                    to={`/team/${deployment.team_slug}/env/${deployment.environment_name}/app/${deployment.app_name}/deployments/${deployment.id}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`}
-                    variant="tertiary"
-                    size="small"
-                  >
-                    Vis
-                  </Button>
-                </HStack>
-
-                {/* Error reason for deployments with error status */}
-                {errorReasons[deployment.id] && (
-                  <ErrorReasonWithLink
-                    errorReason={errorReasons[deployment.id]}
-                    githubOwner={deployment.detected_github_owner}
-                    githubRepoName={deployment.detected_github_repo_name}
-                  />
-                )}
-              </VStack>
-            </Box>
+            <DeploymentRow
+              key={deployment.id}
+              deployment={deployment}
+              userMappings={userMappings}
+              errorReason={errorReasons[deployment.id]}
+              showEnv={showGroup}
+              currentEnv={app.environment_name}
+              searchParams={searchParams}
+            />
           ))
         )}
       </div>
 
-      {/* Pagination */}
-      {total_pages > 1 && (
-        <HStack gap="space-16" justify="center" align="center">
-          <Button
-            variant="tertiary"
-            size="small"
-            icon={<ChevronLeftIcon aria-hidden />}
-            disabled={page <= 1}
-            onClick={() => goToPage(page - 1)}
-          >
-            Forrige
-          </Button>
-          <BodyShort>
-            Side {page} av {total_pages}
-          </BodyShort>
-          <Button
-            variant="tertiary"
-            size="small"
-            icon={<ChevronRightIcon aria-hidden />}
-            iconPosition="right"
-            disabled={page >= total_pages}
-            onClick={() => goToPage(page + 1)}
-          >
-            Neste
-          </Button>
-        </HStack>
-      )}
+      <PaginationControls page={page} totalPages={total_pages} onPageChange={goToPage} />
     </VStack>
   )
 }
