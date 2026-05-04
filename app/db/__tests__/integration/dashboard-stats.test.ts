@@ -327,8 +327,9 @@ describe('getBoardObjectiveProgress', () => {
       { id: kr1[0].id, linked: 2 },
       { id: kr2[0].id, linked: 1 },
     ])
-    // 1 (objective-direct) + 2 (KR1) + 1 (KR2) = 4
-    expect(r1.total_linked_deployments).toBe(4)
+    // 1 (objective-direct d3) + 2 distinct deployments via KRs (d1, d2) = 3
+    // d2 is linked to both KR1 and KR2, but counts only once at objective level
+    expect(r1.total_linked_deployments).toBe(3)
 
     const r2 = result.find((r) => r.objective_id === o2[0].id)
     if (!r2) throw new Error('expected r2')
