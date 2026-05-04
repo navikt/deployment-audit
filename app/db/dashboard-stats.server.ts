@@ -70,9 +70,9 @@ export async function getSectionOverallStats(
   const result = await pool.query(
     `SELECT
        COUNT(d.id)::int AS total_deployments,
-       COUNT(d.id) FILTER (WHERE d.four_eyes_status IN (${APPROVED_STATUSES_SQL}))::int AS with_four_eyes,
-       COUNT(d.id) FILTER (WHERE d.four_eyes_status IN (${NOT_APPROVED_STATUSES_SQL}))::int AS without_four_eyes,
-       COUNT(d.id) FILTER (WHERE d.four_eyes_status IN (${PENDING_STATUSES_SQL}))::int AS pending_verification,
+       COUNT(d.id) FILTER (WHERE COALESCE(d.four_eyes_status, 'unknown') IN (${APPROVED_STATUSES_SQL}))::int AS with_four_eyes,
+       COUNT(d.id) FILTER (WHERE COALESCE(d.four_eyes_status, 'unknown') IN (${NOT_APPROVED_STATUSES_SQL}))::int AS without_four_eyes,
+       COUNT(d.id) FILTER (WHERE COALESCE(d.four_eyes_status, 'unknown') IN (${PENDING_STATUSES_SQL}))::int AS pending_verification,
        COUNT(DISTINCT dgl.deployment_id)::int AS linked_to_goal
      FROM section_teams st
      JOIN deployments d ON d.team_slug = st.team_slug
@@ -127,9 +127,9 @@ export async function getSectionDashboardStats(
      deployment_stats AS (
        SELECT ta.dev_team_id,
               COUNT(d.id) AS total_deployments,
-              COUNT(d.id) FILTER (WHERE d.four_eyes_status IN (${APPROVED_STATUSES_SQL})) AS with_four_eyes,
-              COUNT(d.id) FILTER (WHERE d.four_eyes_status IN (${NOT_APPROVED_STATUSES_SQL})) AS without_four_eyes,
-              COUNT(d.id) FILTER (WHERE d.four_eyes_status IN (${PENDING_STATUSES_SQL})) AS pending_verification,
+              COUNT(d.id) FILTER (WHERE COALESCE(d.four_eyes_status, 'unknown') IN (${APPROVED_STATUSES_SQL})) AS with_four_eyes,
+              COUNT(d.id) FILTER (WHERE COALESCE(d.four_eyes_status, 'unknown') IN (${NOT_APPROVED_STATUSES_SQL})) AS without_four_eyes,
+              COUNT(d.id) FILTER (WHERE COALESCE(d.four_eyes_status, 'unknown') IN (${PENDING_STATUSES_SQL})) AS pending_verification,
               COUNT(DISTINCT dgl.deployment_id) AS linked_to_goal
        FROM team_apps ta
        LEFT JOIN LATERAL (
@@ -209,9 +209,9 @@ export async function getDevTeamSummaryStats(
      app_stats AS (
        SELECT d.monitored_app_id,
               COUNT(d.id) AS total_deployments,
-              COUNT(d.id) FILTER (WHERE d.four_eyes_status IN (${APPROVED_STATUSES_SQL})) AS with_four_eyes,
-              COUNT(d.id) FILTER (WHERE d.four_eyes_status IN (${NOT_APPROVED_STATUSES_SQL})) AS without_four_eyes,
-              COUNT(d.id) FILTER (WHERE d.four_eyes_status IN (${PENDING_STATUSES_SQL})) AS pending_verification,
+              COUNT(d.id) FILTER (WHERE COALESCE(d.four_eyes_status, 'unknown') IN (${APPROVED_STATUSES_SQL})) AS with_four_eyes,
+              COUNT(d.id) FILTER (WHERE COALESCE(d.four_eyes_status, 'unknown') IN (${NOT_APPROVED_STATUSES_SQL})) AS without_four_eyes,
+              COUNT(d.id) FILTER (WHERE COALESCE(d.four_eyes_status, 'unknown') IN (${PENDING_STATUSES_SQL})) AS pending_verification,
               COUNT(DISTINCT dgl.deployment_id) AS linked_to_goal
        FROM team_apps ta
        JOIN deployments d ON d.monitored_app_id = ta.id
@@ -440,9 +440,9 @@ export async function getDevTeamStatsBatch(
      deployment_stats AS (
        SELECT ta.dev_team_id,
               COUNT(DISTINCT d.id)::int AS total_deployments,
-              COUNT(DISTINCT d.id) FILTER (WHERE d.four_eyes_status IN (${APPROVED_STATUSES_SQL}))::int AS with_four_eyes,
-              COUNT(DISTINCT d.id) FILTER (WHERE d.four_eyes_status IN (${NOT_APPROVED_STATUSES_SQL}))::int AS without_four_eyes,
-              COUNT(DISTINCT d.id) FILTER (WHERE d.four_eyes_status IN (${PENDING_STATUSES_SQL}))::int AS pending_verification,
+              COUNT(DISTINCT d.id) FILTER (WHERE COALESCE(d.four_eyes_status, 'unknown') IN (${APPROVED_STATUSES_SQL}))::int AS with_four_eyes,
+              COUNT(DISTINCT d.id) FILTER (WHERE COALESCE(d.four_eyes_status, 'unknown') IN (${NOT_APPROVED_STATUSES_SQL}))::int AS without_four_eyes,
+              COUNT(DISTINCT d.id) FILTER (WHERE COALESCE(d.four_eyes_status, 'unknown') IN (${PENDING_STATUSES_SQL}))::int AS pending_verification,
               COUNT(DISTINCT dgl.deployment_id)::int AS linked_to_goal
        FROM team_apps ta
        JOIN team_members tm ON tm.dev_team_id = ta.dev_team_id

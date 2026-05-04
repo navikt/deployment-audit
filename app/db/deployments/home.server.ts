@@ -157,8 +157,8 @@ export async function getDevTeamAppsWithIssues(
     FROM monitored_applications ma
     LEFT JOIN LATERAL (
       SELECT 
-        SUM(CASE WHEN d.four_eyes_status = ANY($1)${deployerFilterClause} THEN 1 ELSE 0 END) as without_four_eyes,
-        SUM(CASE WHEN d.four_eyes_status = ANY($2)${deployerFilterClause} THEN 1 ELSE 0 END) as pending_verification,
+        SUM(CASE WHEN COALESCE(d.four_eyes_status, 'unknown') = ANY($1)${deployerFilterClause} THEN 1 ELSE 0 END) as without_four_eyes,
+        SUM(CASE WHEN COALESCE(d.four_eyes_status, 'unknown') = ANY($2)${deployerFilterClause} THEN 1 ELSE 0 END) as pending_verification,
         SUM(CASE WHEN NOT EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = d.id AND dgl.is_active = true)${deployerFilterClause} THEN 1 ELSE 0 END) as missing_goal_links,
         COUNT(DISTINCT CASE
           WHEN d.deployer_username IS NOT NULL

@@ -609,4 +609,52 @@ describe('getDevTeamStatsBatch vs getAppDeploymentStatsBatch consistency', () =>
     expect(teamStats?.without_four_eyes).toBe(2)
     expect(teamStats?.with_four_eyes).toBe(5)
   })
+
+  it('NULL four_eyes_status deployments are counted in totals consistently', async () => {
+    // Deployments with NULL four_eyes_status must be categorized (not fall
+    // through all categories). The DB column allows NULL because it defaults
+    // to 'unknown' but doesn't have a NOT NULL constraint.
+    // This test proves that NULL status causes a gap: total > sum of categories.
+    const sectionId = await seedSection(pool, 'sec-null-status')
+    const { githubUsernames } = await seedTeamWithMembers(sectionId, {
+      teamSlug: 'team-null-status',
+      naisTeamSlug: 'nais-team-null',
+      members: [{ navIdent: 'A100006', githubUsername: 'alice' }],
+    })
+
+    const appId = await seedApp(pool, {
+      teamSlug: 'nais-team-null',
+      appName: 'app-null',
+      environment: 'prod',
+    })
+    const now = new Date()
+    const startDate = new Date(now.getFullYear(), 0, 1)
+
+    // 2 approved + 1 with NULL four_eyes_status
+    await seedDeploymentWithStatus(pool, appId, 'nais-team-null', now, 'approved_pr', 'alice')
+    await seedDeploymentWithStatus(pool, appId, 'nais-team-null', now, 'approved_pr', 'alice')
+
+    // Insert deployment with NULL four_eyes_status
+    const naisId = `deploy-null-${Date.now()}`
+    await pool.query(
+      `INSERT INTO deployments (
+        monitored_app_id, nais_deployment_id, team_slug, app_name, environment_name,
+        commit_sha, created_at, four_eyes_status, deployer_username
+      ) VALUES ($1, $2, $3, 'app-null', 'prod', $4, $5, NULL, 'alice')`,
+      [appId, naisId, 'nais-team-null', `sha-${naisId}`, now],
+    )
+
+    const appStatsMap = await getAppDeploymentStatsBatch([{ id: appId }], githubUsernames, { startDate })
+    const appStats = appStatsMap.get(appId)
+
+    expect(appStats).toBeDefined()
+    expect(appStats?.total).toBe(3)
+
+    // BUG: total (3) > with_four_eyes (2) + without_four_eyes (0) + pending (0)
+    // The NULL status deployment falls through all categories.
+    // After fix: NULL should be counted as pending (like 'unknown').
+    const sumCategories =
+      (appStats?.with_four_eyes ?? 0) + (appStats?.without_four_eyes ?? 0) + (appStats?.pending_verification ?? 0)
+    expect(sumCategories).toBe(appStats?.total)
+  })
 })
