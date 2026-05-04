@@ -85,6 +85,17 @@ export const PENDING_STATUSES: FourEyesStatus[] = ['pending', 'pending_baseline'
 export const PENDING_STATUSES_SQL = PENDING_STATUSES.map((s) => `'${s}'`).join(', ')
 
 /**
+ * SQL WHERE clause fragment that matches deployments considered "not approved".
+ * Uses exclusion logic: anything NOT in APPROVED and NOT in PENDING is "not approved".
+ * This is consistent with the remainder-based derivation in stats queries.
+ *
+ * @param column - The column expression, e.g. 'd.four_eyes_status'
+ */
+export function notApprovedWhereClause(column: string): string {
+  return `COALESCE(${column}, 'unknown') NOT IN (${APPROVED_STATUSES_SQL}) AND COALESCE(${column}, 'unknown') NOT IN (${PENDING_STATUSES_SQL})`
+}
+
+/**
  * Statuses that indicate legacy deployments
  */
 export const LEGACY_STATUSES: FourEyesStatus[] = ['legacy', 'legacy_pending']

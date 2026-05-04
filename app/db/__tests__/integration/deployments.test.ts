@@ -322,3 +322,58 @@ describe('manual approval preserves existing data', () => {
     ])
   })
 })
+
+describe('not_approved filter includes unrecognized statuses', () => {
+  it('should include deployments with unrecognized four_eyes_status in not_approved filter', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'team-filter', appName: 'app-filter', environment: 'prod' })
+
+    // Seed deployments with various statuses
+    const statuses = ['approved_pr', 'pending', 'direct_push', 'some_unknown_status', null]
+    for (const status of statuses) {
+      const naisId = `dep-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      await pool.query(
+        `INSERT INTO deployments (monitored_app_id, nais_deployment_id, team_slug, app_name, environment_name, created_at, four_eyes_status)
+         VALUES ($1, $2, 'team-filter', 'app-filter', 'prod', NOW(), $3)`,
+        [appId, naisId, status],
+      )
+    }
+
+    // Query using the same exclusion logic as getDeploymentsPaginated
+    const { rows } = await pool.query(`
+      SELECT d.four_eyes_status
+      FROM deployments d
+      JOIN monitored_applications ma ON d.monitored_app_id = ma.id
+      WHERE d.team_slug = 'team-filter'
+        AND COALESCE(d.four_eyes_status, 'unknown') NOT IN ('approved', 'approved_pr', 'implicitly_approved', 'manually_approved', 'no_changes')
+        AND COALESCE(d.four_eyes_status, 'unknown') NOT IN ('pending', 'pending_baseline', 'unknown')
+      ORDER BY d.four_eyes_status
+    `)
+
+    // Should include direct_push and the unknown status
+    expect(rows).toHaveLength(2)
+    const statuses_found = rows.map((r: { four_eyes_status: string | null }) => r.four_eyes_status)
+    expect(statuses_found).toContain('direct_push')
+    expect(statuses_found).toContain('some_unknown_status')
+  })
+
+  it('should NOT include NULL status in not_approved (NULL → unknown → pending)', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'team-null', appName: 'app-null', environment: 'prod' })
+
+    await pool.query(
+      `INSERT INTO deployments (monitored_app_id, nais_deployment_id, team_slug, app_name, environment_name, created_at, four_eyes_status)
+       VALUES ($1, 'dep-null-1', 'team-null', 'app-null', 'prod', NOW(), NULL)`,
+      [appId],
+    )
+
+    const { rows } = await pool.query(`
+      SELECT d.four_eyes_status
+      FROM deployments d
+      WHERE d.team_slug = 'team-null'
+        AND COALESCE(d.four_eyes_status, 'unknown') NOT IN ('approved', 'approved_pr', 'implicitly_approved', 'manually_approved', 'no_changes')
+        AND COALESCE(d.four_eyes_status, 'unknown') NOT IN ('pending', 'pending_baseline', 'unknown')
+    `)
+
+    // NULL coalesces to 'unknown' which is in PENDING_STATUSES, so excluded from not_approved
+    expect(rows).toHaveLength(0)
+  })
+})

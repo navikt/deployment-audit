@@ -1,4 +1,9 @@
-import { APPROVED_STATUSES_SQL, NOT_APPROVED_STATUSES, PENDING_STATUSES } from '~/lib/four-eyes-status'
+import {
+  APPROVED_STATUSES_SQL,
+  notApprovedWhereClause,
+  PENDING_STATUSES,
+  PENDING_STATUSES_SQL,
+} from '~/lib/four-eyes-status'
 import { AUDIT_START_YEAR_FILTER } from './audit-start-year'
 import { pool } from './connection.server'
 import { logStatusTransition } from './deployments/status-history.server'
@@ -295,13 +300,9 @@ export async function getDeploymentsPaginated(filters?: DeploymentFilters): Prom
 
   if (filters?.four_eyes_status) {
     if (filters.four_eyes_status === 'not_approved') {
-      whereSql += ` AND d.four_eyes_status = ANY($${paramIndex})`
-      params.push(NOT_APPROVED_STATUSES)
-      paramIndex++
+      whereSql += ` AND ${notApprovedWhereClause('d.four_eyes_status')}`
     } else if (filters.four_eyes_status === 'pending') {
-      whereSql += ` AND d.four_eyes_status = ANY($${paramIndex})`
-      params.push(PENDING_STATUSES)
-      paramIndex++
+      whereSql += ` AND COALESCE(d.four_eyes_status, 'unknown') IN (${PENDING_STATUSES_SQL})`
     } else {
       whereSql += ` AND d.four_eyes_status = $${paramIndex}`
       params.push(filters.four_eyes_status)
@@ -730,13 +731,9 @@ function buildNavFilterConditions(
   if (filters.four_eyes_status) {
     // Handle meta-statuses that map to multiple four_eyes_status values
     if (filters.four_eyes_status === 'not_approved') {
-      conditions.push(`nav_dep.four_eyes_status = ANY($${idx})`)
-      params.push(NOT_APPROVED_STATUSES)
-      idx++
+      conditions.push(notApprovedWhereClause('nav_dep.four_eyes_status'))
     } else if (filters.four_eyes_status === 'pending') {
-      conditions.push(`nav_dep.four_eyes_status = ANY($${idx})`)
-      params.push(PENDING_STATUSES)
-      idx++
+      conditions.push(`COALESCE(nav_dep.four_eyes_status, 'unknown') IN (${PENDING_STATUSES_SQL})`)
     } else {
       conditions.push(`nav_dep.four_eyes_status = $${idx}`)
       params.push(filters.four_eyes_status)
@@ -1044,11 +1041,9 @@ export async function getDeployerDeploymentsPaginated(
   if (filters?.approval === 'approved') {
     whereSql += ` AND d.four_eyes_status IN (${APPROVED_STATUSES_SQL})`
   } else if (filters?.approval === 'not_approved') {
-    const notApprovedSql = NOT_APPROVED_STATUSES.map((s) => `'${s}'`).join(', ')
-    whereSql += ` AND d.four_eyes_status IN (${notApprovedSql})`
+    whereSql += ` AND ${notApprovedWhereClause('d.four_eyes_status')}`
   } else if (filters?.approval === 'pending') {
-    const pendingSql = PENDING_STATUSES.map((s) => `'${s}'`).join(', ')
-    whereSql += ` AND d.four_eyes_status IN (${pendingSql})`
+    whereSql += ` AND COALESCE(d.four_eyes_status, 'unknown') IN (${PENDING_STATUSES_SQL})`
   }
 
   if (filters?.appName) {
