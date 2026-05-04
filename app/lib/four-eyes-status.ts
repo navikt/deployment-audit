@@ -75,11 +75,6 @@ export const NOT_APPROVED_STATUSES: FourEyesStatus[] = [
 ]
 
 /**
- * SQL fragment for filtering not-approved deployments.
- */
-export const NOT_APPROVED_STATUSES_SQL = NOT_APPROVED_STATUSES.map((s) => `'${s}'`).join(', ')
-
-/**
  * Statuses that indicate deployment is pending verification
  */
 export const PENDING_STATUSES: FourEyesStatus[] = ['pending', 'pending_baseline', 'pending_approval', 'unknown']

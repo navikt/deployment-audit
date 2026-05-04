@@ -261,3 +261,56 @@ describe('getDevTeamAppsWithIssues - unmapped_deployer_count', () => {
     expect(result[0].unmapped_deployer_count).toBe(1) // NOT filtered
   })
 })
+
+describe('getDevTeamAppsWithIssues - unrecognized four_eyes_status', () => {
+  it('surfaces app as having issues when status is not in any known category', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'team-x', appName: 'mystery', environment: 'prod' })
+    await seedUserMapping('deployer1')
+
+    // Seed a deployment with an unrecognized status value (e.g. a migrated/legacy value)
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team-x',
+      environment: 'prod',
+      deployerUsername: 'deployer1',
+      fourEyesStatus: 'some_future_status_not_in_any_array',
+    })
+
+    const result = await getDevTeamAppsWithIssues(['team-x'], undefined)
+    expect(result).toHaveLength(1)
+    expect(result[0].without_four_eyes).toBe(1)
+  })
+
+  it('derives without_four_eyes correctly when mix of known and unknown statuses', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'team-y', appName: 'mixed', environment: 'prod' })
+    await seedUserMapping('deployer2')
+
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team-y',
+      environment: 'prod',
+      deployerUsername: 'deployer2',
+      fourEyesStatus: 'approved_pr',
+    })
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team-y',
+      environment: 'prod',
+      deployerUsername: 'deployer2',
+      fourEyesStatus: 'baseline_migrated',
+    })
+    await seedDeployment(pool, {
+      monitoredAppId: appId,
+      teamSlug: 'team-y',
+      environment: 'prod',
+      deployerUsername: 'deployer2',
+      fourEyesStatus: 'pending',
+    })
+
+    const result = await getDevTeamAppsWithIssues(['team-y'], undefined)
+    expect(result).toHaveLength(1)
+    // 3 total - 1 approved - 1 pending = 1 without four eyes (the unknown status)
+    expect(result[0].without_four_eyes).toBe(1)
+    expect(result[0].pending_verification).toBe(1)
+  })
+})

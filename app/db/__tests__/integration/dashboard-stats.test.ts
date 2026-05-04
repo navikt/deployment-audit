@@ -656,3 +656,62 @@ describe('getDevTeamStatsBatch vs getAppDeploymentStatsBatch consistency', () =>
     expect(appStats?.pending_verification).toBe(1)
   })
 })
+
+describe('Regression: unrecognized four_eyes_status values sum correctly', () => {
+  it('getDevTeamSummaryStats derives without_four_eyes as remainder', async () => {
+    const appId = await seedApp(pool, { teamSlug: 'team-unrec', appName: 'app-unrec', environment: 'prod' })
+
+    const now = new Date()
+    await seedDeploymentWithStatus(pool, appId, 'team-unrec', now, 'approved_pr')
+    await seedDeploymentWithStatus(pool, appId, 'team-unrec', now, 'some_unknown_legacy_status')
+    await seedDeploymentWithStatus(pool, appId, 'team-unrec', now, 'pending')
+
+    const stats = await getDevTeamSummaryStats(['team-unrec'])
+
+    expect(stats.total_deployments).toBe(3)
+    expect(stats.with_four_eyes).toBe(1)
+    expect(stats.pending_verification).toBe(1)
+    // The unrecognized status is captured by remainder derivation
+    expect(stats.without_four_eyes).toBe(1)
+    // Categories must always sum to total
+    const sum = stats.with_four_eyes + stats.without_four_eyes + stats.pending_verification
+    expect(sum).toBe(stats.total_deployments)
+  })
+
+  it('getDevTeamStatsBatch derives without_four_eyes as remainder', async () => {
+    const sectionId = await seedSection(pool, 'sec-batch-unrec')
+    const devTeamId = await seedDevTeam(pool, 'team-batch-unrec', 'BatchUnrec', sectionId)
+    const appId = await seedApp(pool, { teamSlug: 'team-batch-unrec', appName: 'app-batch-unrec', environment: 'prod' })
+
+    // Link app to dev team
+    await pool.query(`INSERT INTO dev_team_applications (dev_team_id, monitored_app_id) VALUES ($1, $2)`, [
+      devTeamId,
+      appId,
+    ])
+    // Add team member via user_mappings + user_dev_team_preference
+    await pool.query(`INSERT INTO user_mappings (nav_ident, github_username, display_name) VALUES ($1, $2, $3)`, [
+      'A123456',
+      'alice',
+      'Alice',
+    ])
+    await pool.query(`INSERT INTO user_dev_team_preference (nav_ident, dev_team_id) VALUES ($1, $2)`, [
+      'A123456',
+      devTeamId,
+    ])
+
+    const now = new Date()
+    const startDate = new Date(now.getFullYear(), 0, 1)
+    await seedDeploymentWithStatus(pool, appId, 'team-batch-unrec', now, 'approved_pr', 'alice')
+    await seedDeploymentWithStatus(pool, appId, 'team-batch-unrec', now, 'mystery_value', 'alice')
+
+    const resultsMap = await getDevTeamStatsBatch([devTeamId], startDate)
+    const team = resultsMap.get(devTeamId)
+
+    expect(team).toBeDefined()
+    expect(team?.total_deployments).toBe(2)
+    expect(team?.with_four_eyes).toBe(1)
+    expect(team?.without_four_eyes).toBe(1)
+    const sum = (team?.with_four_eyes ?? 0) + (team?.without_four_eyes ?? 0) + (team?.pending_verification ?? 0)
+    expect(sum).toBe(team?.total_deployments)
+  })
+})
