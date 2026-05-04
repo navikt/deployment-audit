@@ -195,6 +195,7 @@ export default function DevTeamPage() {
         hasMappedMembers={hasMappedMembers}
         unmappedMemberCount={unmappedMemberCount}
         totalMembers={members.length}
+        deploymentsPath={`${teamBasePath}/deployments`}
       />
 
       {/* Active board */}
@@ -268,6 +269,7 @@ function TeamCoverageCards({
   hasMappedMembers,
   unmappedMemberCount,
   totalMembers,
+  deploymentsPath,
 }: {
   coverage: {
     total: number
@@ -279,6 +281,7 @@ function TeamCoverageCards({
   hasMappedMembers: boolean
   unmappedMemberCount: number
   totalMembers: number
+  deploymentsPath: string
 }) {
   if (totalMembers === 0) {
     return (
@@ -307,16 +310,22 @@ function TeamCoverageCards({
         </Alert>
       )}
       <HGrid gap="space-12" columns={{ xs: 1, sm: 3 }}>
-        <CoverageCard label="Deployments i år" value={coverage.total.toString()} />
+        <CoverageCard
+          label="Deployments i år"
+          value={coverage.total.toString()}
+          href={`${deploymentsPath}?period=ytd`}
+        />
         <CoverageCard
           label="4-øyne-dekning"
           value={`${coverage.four_eyes_percentage}%`}
           sub={`${coverage.with_four_eyes} av ${coverage.total}`}
+          href={`${deploymentsPath}?period=ytd&status=not_approved`}
         />
         <CoverageCard
           label="Endringsopphav"
           value={`${coverage.origin_percentage}%`}
           sub={`${coverage.with_origin} av ${coverage.total}`}
+          href={`${deploymentsPath}?period=ytd&goal=missing`}
         />
       </HGrid>
       <Detail textColor="subtle">Basert på deploys utført av team-medlemmer (år til dato).</Detail>
@@ -324,8 +333,8 @@ function TeamCoverageCards({
   )
 }
 
-function CoverageCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
+function CoverageCard({ label, value, sub, href }: { label: string; value: string; sub?: string; href?: string }) {
+  const content = (
     <Box padding="space-16" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
       <VStack gap="space-4">
         <Detail textColor="subtle">{label}</Detail>
@@ -336,6 +345,11 @@ function CoverageCard({ label, value, sub }: { label: string; value: string; sub
       </VStack>
     </Box>
   )
+
+  if (href) {
+    return <Link to={href}>{content}</Link>
+  }
+  return content
 }
 
 function ActiveBoardSection({
