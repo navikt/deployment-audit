@@ -427,9 +427,19 @@ function BoardsSection({
                   </Tag>
                 </Table.DataCell>
                 <Table.DataCell align="right">
-                  <Button as={Link} to={`${teamBasePath}/${board.id}`} variant="tertiary" size="xsmall">
-                    Åpne tavle
-                  </Button>
+                  <HStack gap="space-4" justify="end">
+                    <Button
+                      as={Link}
+                      to={`${teamBasePath}/dashboard?periodType=${board.period_type}&period=${encodeURIComponent(board.period_label)}`}
+                      variant="tertiary"
+                      size="xsmall"
+                    >
+                      Åpne tavle
+                    </Button>
+                    <Button as={Link} to={`${teamBasePath}/${board.id}`} variant="tertiary" size="xsmall">
+                      Rediger
+                    </Button>
+                  </HStack>
                 </Table.DataCell>
               </Table.Row>
             ))}
