@@ -1,5 +1,18 @@
 import { BarChartIcon, CogIcon } from '@navikt/aksel-icons'
-import { Alert, BodyShort, Box, Button, Detail, Heading, HGrid, HStack, Switch, Tag, VStack } from '@navikt/ds-react'
+import {
+  Alert,
+  BodyShort,
+  Box,
+  Button,
+  Detail,
+  Heading,
+  HGrid,
+  HStack,
+  LinkCard,
+  Switch,
+  Tag,
+  VStack,
+} from '@navikt/ds-react'
 import { Link, useLoaderData, useRouteLoaderData, useSearchParams } from 'react-router'
 import { AppCard, type AppCardData } from '~/components/AppCard'
 import { getGroupNamesByIds } from '~/db/application-groups.server'
@@ -195,6 +208,7 @@ export default function DevTeamPage() {
         hasMappedMembers={hasMappedMembers}
         unmappedMemberCount={unmappedMemberCount}
         totalMembers={members.length}
+        deploymentsPath={`${teamBasePath}/deployments`}
       />
 
       {/* Active board */}
@@ -268,6 +282,7 @@ function TeamCoverageCards({
   hasMappedMembers,
   unmappedMemberCount,
   totalMembers,
+  deploymentsPath,
 }: {
   coverage: {
     total: number
@@ -279,6 +294,7 @@ function TeamCoverageCards({
   hasMappedMembers: boolean
   unmappedMemberCount: number
   totalMembers: number
+  deploymentsPath: string
 }) {
   if (totalMembers === 0) {
     return (
@@ -307,16 +323,22 @@ function TeamCoverageCards({
         </Alert>
       )}
       <HGrid gap="space-12" columns={{ xs: 1, sm: 3 }}>
-        <CoverageCard label="Deployments i år" value={coverage.total.toString()} />
+        <CoverageCard
+          label="Deployments i år"
+          value={coverage.total.toString()}
+          href={`${deploymentsPath}?period=ytd`}
+        />
         <CoverageCard
           label="4-øyne-dekning"
           value={`${coverage.four_eyes_percentage}%`}
           sub={`${coverage.with_four_eyes} av ${coverage.total}`}
+          href={`${deploymentsPath}?period=ytd&status=not_approved`}
         />
         <CoverageCard
           label="Endringsopphav"
           value={`${coverage.origin_percentage}%`}
           sub={`${coverage.with_origin} av ${coverage.total}`}
+          href={`${deploymentsPath}?period=ytd&goal=missing`}
         />
       </HGrid>
       <Detail textColor="subtle">Basert på deploys utført av team-medlemmer (år til dato).</Detail>
@@ -324,16 +346,40 @@ function TeamCoverageCards({
   )
 }
 
-function CoverageCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function CoverageCard({ label, value, sub, href }: { label: string; value: string; sub?: string; href?: string }) {
+  const content = (
+    <VStack gap="space-4">
+      <Detail textColor="subtle">{label}</Detail>
+      <Heading level="3" size="medium">
+        {value}
+      </Heading>
+      {sub && <Detail textColor="subtle">{sub}</Detail>}
+    </VStack>
+  )
+
+  if (href) {
+    return (
+      <LinkCard>
+        <LinkCard.Title as="span">
+          <LinkCard.Anchor asChild>
+            <Link to={href}>{label}</Link>
+          </LinkCard.Anchor>
+        </LinkCard.Title>
+        <LinkCard.Description>
+          <VStack gap="space-4">
+            <Heading level="3" size="medium" aria-label={`${label}: ${value}`}>
+              {value}
+            </Heading>
+            {sub && <Detail textColor="subtle">{sub}</Detail>}
+          </VStack>
+        </LinkCard.Description>
+      </LinkCard>
+    )
+  }
+
   return (
     <Box padding="space-16" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
-      <VStack gap="space-4">
-        <Detail textColor="subtle">{label}</Detail>
-        <Heading level="3" size="medium">
-          {value}
-        </Heading>
-        {sub && <Detail textColor="subtle">{sub}</Detail>}
-      </VStack>
+      {content}
     </Box>
   )
 }

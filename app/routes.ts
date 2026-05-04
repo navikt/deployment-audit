@@ -87,6 +87,10 @@ export default [
       'routes/sections.$sectionSlug.teams.$devTeamSlug.dashboard.tsx',
     ),
     route(
+      'sections/:sectionSlug/teams/:devTeamSlug/deployments',
+      'routes/sections.$sectionSlug.teams.$devTeamSlug.deployments.tsx',
+    ),
+    route(
       'sections/:sectionSlug/teams/:devTeamSlug/:boardId',
       'routes/sections.$sectionSlug.teams.$devTeamSlug.$boardId.tsx',
     ),
