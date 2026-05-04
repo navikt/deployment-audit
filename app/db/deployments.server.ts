@@ -362,14 +362,14 @@ export async function getDeploymentsPaginated(filters?: DeploymentFilters): Prom
   let goalJoinSql = ''
   if (needsGoalJoin && filters?.goal_objective_id) {
     // Filter by specific objective (directly linked or via key result) using EXISTS to avoid duplicates
-    const objParamIdx = params.length + 1
     whereSql += ` AND EXISTS (
       SELECT 1 FROM deployment_goal_links dgl
       LEFT JOIN board_key_results bkr_f ON bkr_f.id = dgl.key_result_id
       WHERE dgl.deployment_id = d.id AND dgl.is_active = true
-        AND (dgl.objective_id = $${objParamIdx} OR bkr_f.objective_id = $${objParamIdx})
+        AND (dgl.objective_id = $${paramIndex} OR bkr_f.objective_id = $${paramIndex})
     )`
     params.push(filters.goal_objective_id)
+    paramIndex++
   } else if (needsGoalJoin) {
     goalJoinSql =
       'LEFT JOIN (SELECT DISTINCT deployment_id FROM deployment_goal_links WHERE is_active = true) dgl ON dgl.deployment_id = d.id'
