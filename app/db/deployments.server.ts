@@ -1,4 +1,4 @@
-import { APPROVED_STATUSES_SQL, NOT_APPROVED_STATUSES, PENDING_STATUSES } from '~/lib/four-eyes-status'
+import { APPROVED_STATUSES_SQL, PENDING_STATUSES, PENDING_STATUSES_SQL } from '~/lib/four-eyes-status'
 import { AUDIT_START_YEAR_FILTER } from './audit-start-year'
 import { pool } from './connection.server'
 import { logStatusTransition } from './deployments/status-history.server'
@@ -295,8 +295,11 @@ export async function getDeploymentsPaginated(filters?: DeploymentFilters): Prom
 
   if (filters?.four_eyes_status) {
     if (filters.four_eyes_status === 'not_approved') {
-      whereSql += ` AND d.four_eyes_status = ANY($${paramIndex})`
-      params.push(NOT_APPROVED_STATUSES)
+      // Use exclusion logic: anything NOT approved AND NOT pending is "not approved".
+      // This matches the remainder-based derivation used in stats queries,
+      // catching statuses not in any known category.
+      whereSql += ` AND COALESCE(d.four_eyes_status, 'unknown') NOT IN (${APPROVED_STATUSES_SQL}) AND d.four_eyes_status != ALL($${paramIndex})`
+      params.push(PENDING_STATUSES)
       paramIndex++
     } else if (filters.four_eyes_status === 'pending') {
       whereSql += ` AND d.four_eyes_status = ANY($${paramIndex})`
@@ -730,8 +733,11 @@ function buildNavFilterConditions(
   if (filters.four_eyes_status) {
     // Handle meta-statuses that map to multiple four_eyes_status values
     if (filters.four_eyes_status === 'not_approved') {
-      conditions.push(`nav_dep.four_eyes_status = ANY($${idx})`)
-      params.push(NOT_APPROVED_STATUSES)
+      // Exclusion: anything NOT approved AND NOT pending
+      conditions.push(
+        `COALESCE(nav_dep.four_eyes_status, 'unknown') NOT IN (${APPROVED_STATUSES_SQL}) AND nav_dep.four_eyes_status != ALL($${idx})`,
+      )
+      params.push(PENDING_STATUSES)
       idx++
     } else if (filters.four_eyes_status === 'pending') {
       conditions.push(`nav_dep.four_eyes_status = ANY($${idx})`)
@@ -1044,11 +1050,9 @@ export async function getDeployerDeploymentsPaginated(
   if (filters?.approval === 'approved') {
     whereSql += ` AND d.four_eyes_status IN (${APPROVED_STATUSES_SQL})`
   } else if (filters?.approval === 'not_approved') {
-    const notApprovedSql = NOT_APPROVED_STATUSES.map((s) => `'${s}'`).join(', ')
-    whereSql += ` AND d.four_eyes_status IN (${notApprovedSql})`
+    whereSql += ` AND COALESCE(d.four_eyes_status, 'unknown') NOT IN (${APPROVED_STATUSES_SQL}) AND d.four_eyes_status NOT IN (${PENDING_STATUSES_SQL})`
   } else if (filters?.approval === 'pending') {
-    const pendingSql = PENDING_STATUSES.map((s) => `'${s}'`).join(', ')
-    whereSql += ` AND d.four_eyes_status IN (${pendingSql})`
+    whereSql += ` AND d.four_eyes_status IN (${PENDING_STATUSES_SQL})`
   }
 
   if (filters?.appName) {
