@@ -224,6 +224,8 @@ export interface DeploymentFilters {
   commit_sha?: string
   method?: 'pr' | 'direct_push' | 'legacy'
   goal_filter?: 'missing' | 'linked'
+  /** Filter to deployments linked to a specific objective (directly or via key result). */
+  goal_objective_id?: number
   page?: number
   per_page?: number
   audit_start_year?: number | null
@@ -356,10 +358,22 @@ export async function getDeploymentsPaginated(filters?: DeploymentFilters): Prom
     whereSql += ` AND d.four_eyes_status = 'legacy'`
   }
 
-  const needsGoalJoin = filters?.goal_filter != null
-  const goalJoinSql = needsGoalJoin
-    ? 'LEFT JOIN (SELECT DISTINCT deployment_id FROM deployment_goal_links WHERE is_active = true) dgl ON dgl.deployment_id = d.id'
-    : ''
+  const needsGoalJoin = filters?.goal_filter != null || filters?.goal_objective_id != null
+  let goalJoinSql = ''
+  if (needsGoalJoin && filters?.goal_objective_id) {
+    // Filter by specific objective (directly linked or via key result) using EXISTS to avoid duplicates
+    whereSql += ` AND EXISTS (
+      SELECT 1 FROM deployment_goal_links dgl
+      LEFT JOIN board_key_results bkr_f ON bkr_f.id = dgl.key_result_id
+      WHERE dgl.deployment_id = d.id AND dgl.is_active = true
+        AND (dgl.objective_id = $${paramIndex} OR bkr_f.objective_id = $${paramIndex})
+    )`
+    params.push(filters.goal_objective_id)
+    paramIndex++
+  } else if (needsGoalJoin) {
+    goalJoinSql =
+      'LEFT JOIN (SELECT DISTINCT deployment_id FROM deployment_goal_links WHERE is_active = true) dgl ON dgl.deployment_id = d.id'
+  }
 
   if (filters?.goal_filter === 'missing') {
     whereSql += ' AND dgl.deployment_id IS NULL'

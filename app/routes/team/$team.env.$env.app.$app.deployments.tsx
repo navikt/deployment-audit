@@ -7,6 +7,7 @@ import { ExternalLink } from '~/components/ExternalLink'
 import { UserName } from '~/components/UserName'
 import { getGroupContext } from '~/db/application-groups.server'
 import { pool } from '~/db/connection.server'
+import { getLinkedObjectivesForApps } from '~/db/deployment-goal-links.server'
 import { type DeploymentFilters, getDeploymentsPaginated } from '~/db/deployments.server'
 import { getDevTeamBySlug, getDevTeamsForApp, getDevTeamsForApps } from '~/db/dev-teams.server'
 import { getMonitoredApplicationByIdentity } from '~/db/monitored-applications.server'
@@ -41,7 +42,10 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const page = parseInt(url.searchParams.get('page') || '1', 10)
   const status = url.searchParams.get('status') || undefined
   const method = url.searchParams.get('method') as 'pr' | 'direct_push' | 'legacy' | undefined
-  const goal = url.searchParams.get('goal') as 'missing' | 'linked' | undefined
+  const goalParam = url.searchParams.get('goal') || ''
+  const goal: 'missing' | 'linked' | undefined =
+    goalParam === 'missing' || goalParam === 'linked' ? goalParam : undefined
+  const goalObjectiveId = goalParam.startsWith('obj:') ? parseInt(goalParam.slice(4), 10) : undefined
   const deployer = url.searchParams.get('deployer') || undefined
   const sha = url.searchParams.get('sha') || undefined
   const period = (url.searchParams.get('period') || 'last-week') as TimePeriod
@@ -131,6 +135,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     four_eyes_status: status,
     method: method && ['pr', 'direct_push', 'legacy'].includes(method) ? method : undefined,
     goal_filter: goal && ['missing', 'linked'].includes(goal) ? goal : undefined,
+    goal_objective_id: goalObjectiveId && !Number.isNaN(goalObjectiveId) ? goalObjectiveId : undefined,
     deployer_username: isUnmappedFilter ? undefined : deployer,
     unmapped_deployers: isUnmappedFilter || undefined,
     deployer_usernames: deployerUsernamesFilter,
@@ -151,18 +156,19 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const errorDeploymentIds = result.deployments.filter((d) => d.four_eyes_status === 'error').map((d) => d.id)
   const appIds = showGroup && hasGroup ? [app.id, ...siblings.map((s) => s.id)] : [app.id]
 
-  const [errorReasonsResult, allDeployersResult, allContributorsResult, currentUserMapping] = await Promise.all([
-    errorDeploymentIds.length > 0
-      ? pool.query(
-          `SELECT DISTINCT ON (deployment_id) deployment_id, result
+  const [errorReasonsResult, allDeployersResult, allContributorsResult, currentUserMapping, goalOptions] =
+    await Promise.all([
+      errorDeploymentIds.length > 0
+        ? pool.query(
+            `SELECT DISTINCT ON (deployment_id) deployment_id, result
            FROM verification_runs
            WHERE deployment_id = ANY($1)
            ORDER BY deployment_id, run_at DESC`,
-          [errorDeploymentIds],
-        )
-      : Promise.resolve({ rows: [] as any[] }),
-    pool.query(
-      `SELECT DISTINCT d.deployer_username
+            [errorDeploymentIds],
+          )
+        : Promise.resolve({ rows: [] as any[] }),
+      pool.query(
+        `SELECT DISTINCT d.deployer_username
        FROM deployments d
        INNER JOIN monitored_applications ma ON d.monitored_app_id = ma.id
        WHERE d.monitored_app_id = ANY($1)
@@ -170,10 +176,10 @@ export async function loader({ params, request }: Route.LoaderArgs) {
          AND d.deployer_username != ''
          AND (ma.audit_start_year IS NULL OR d.created_at >= make_date(ma.audit_start_year, 1, 1))
        ORDER BY d.deployer_username`,
-      [appIds],
-    ),
-    pool.query(
-      `SELECT username FROM (
+        [appIds],
+      ),
+      pool.query(
+        `SELECT username FROM (
          SELECT d.deployer_username AS username
          FROM deployments d
          INNER JOIN monitored_applications ma ON d.monitored_app_id = ma.id
@@ -196,10 +202,11 @@ export async function loader({ params, request }: Route.LoaderArgs) {
            AND (ma.audit_start_year IS NULL OR d.created_at >= make_date(ma.audit_start_year, 1, 1))
        ) sub
        WHERE username IS NOT NULL AND username != ''`,
-      [appIds],
-    ),
-    currentUser?.navIdent ? getUserMappingByNavIdent(currentUser.navIdent) : Promise.resolve(null),
-  ])
+        [appIds],
+      ),
+      currentUser?.navIdent ? getUserMappingByNavIdent(currentUser.navIdent) : Promise.resolve(null),
+      getLinkedObjectivesForApps(appIds),
+    ])
 
   const errorReasons: Record<number, string> = Object.fromEntries(
     errorReasonsResult.rows
@@ -278,6 +285,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     teamOptions,
     teamFilterEmptyReason,
     hasUnmappedDeployers,
+    goalOptions,
     ...result,
   }
 }
@@ -300,6 +308,7 @@ export default function AppDeployments() {
     teamOptions,
     teamFilterEmptyReason,
     hasUnmappedDeployers,
+    goalOptions,
   } = useLoaderData<typeof loader>()
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -413,8 +422,17 @@ export default function AppDeployments() {
                 onChange={(e) => updateFilter('goal', e.target.value)}
               >
                 <option value="">Alle</option>
-                <option value="missing">Mangler</option>
-                <option value="linked">Koblet</option>
+                <option value="missing">Mangler kobling</option>
+                <option value="linked">Alle koblede</option>
+                {goalOptions.length > 0 && (
+                  <optgroup label="Mål">
+                    {goalOptions.map((obj) => (
+                      <option key={obj.id} value={`obj:${obj.id}`}>
+                        {obj.title}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
               </Select>
 
               <Select
