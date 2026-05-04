@@ -144,4 +144,14 @@ describe('matchCommitKeywords', () => {
     const result = matchCommitKeywords([commit('refactor(PEN-123): cleanup')], [kw('PEN-123', 10)])
     expect(result).toHaveLength(1)
   })
+
+  it('matches commit on the exact period end date with later timestamp', () => {
+    // period_end is "2026-03-31" (midnight), commit is at 14:30 the same day
+    const result = matchCommitKeywords(
+      [commit('fix: PEN-123 last day fix', new Date('2026-03-31T14:30:00Z'))],
+      [kw('PEN-123', 10, { periodStart: board1Start, periodEnd: board1End })],
+    )
+    expect(result).toHaveLength(1)
+    expect(result[0].keyword).toBe('pen-123')
+  })
 })

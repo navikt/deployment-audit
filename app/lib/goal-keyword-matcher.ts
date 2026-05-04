@@ -1,3 +1,5 @@
+import { endOfDay } from '~/lib/date-utils'
+
 /**
  * Pure keyword matching logic for auto-linking deployments to board goals.
  *
@@ -44,7 +46,7 @@ export function matchCommitKeywords(commits: CommitInfo[], boardKeywords: BoardK
 
     for (const bk of boardKeywords) {
       // Check board period covers commit date
-      if (commit.date < bk.periodStart || commit.date > bk.periodEnd) continue
+      if (commit.date < bk.periodStart || commit.date > endOfDay(bk.periodEnd)) continue
 
       // Case-insensitive keyword search
       if (messageLower.includes(bk.keyword.toLowerCase())) {

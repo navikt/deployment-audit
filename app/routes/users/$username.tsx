@@ -41,6 +41,7 @@ import { getUserMapping, upsertUserMapping } from '~/db/user-mappings.server'
 import { getUserLandingPage, setUserLandingPage } from '~/db/user-settings.server'
 import { requireUser } from '~/lib/auth.server'
 import { formatBoardLabel } from '~/lib/board-periods'
+import { endOfDay } from '~/lib/date-utils'
 import { isValidEmail, isValidGitHubUsername, isValidNavIdent } from '~/lib/form-validators'
 import type { FourEyesStatus } from '~/lib/four-eyes-status'
 import { getBotDescription, getBotDisplayName, isGitHubBot } from '~/lib/github-bots'
@@ -1049,7 +1050,7 @@ const SelectLinkGoalModal = forwardRef<
     if (selectedDates.length === 0) return availableBoards
     return availableBoards.filter((board) => {
       const boardStart = new Date(board.period_start)
-      const boardEnd = new Date(board.period_end)
+      const boardEnd = endOfDay(new Date(board.period_end))
       return selectedDates.some((date) => {
         const d = new Date(date)
         return d >= boardStart && d <= boardEnd
@@ -1064,7 +1065,7 @@ const SelectLinkGoalModal = forwardRef<
     for (const date of selectedDates) {
       const d = new Date(date)
       for (const board of relevantBoards) {
-        if (d >= new Date(board.period_start) && d <= new Date(board.period_end)) {
+        if (d >= new Date(board.period_start) && d <= endOfDay(new Date(board.period_end))) {
           matchingBoardIds.add(board.id)
         }
       }
@@ -1073,7 +1074,7 @@ const SelectLinkGoalModal = forwardRef<
     // More precisely: check if all dates fit within a single board
     return !relevantBoards.some((board) => {
       const boardStart = new Date(board.period_start)
-      const boardEnd = new Date(board.period_end)
+      const boardEnd = endOfDay(new Date(board.period_end))
       return selectedDates.every((date) => {
         const d = new Date(date)
         return d >= boardStart && d <= boardEnd

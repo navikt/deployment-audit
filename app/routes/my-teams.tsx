@@ -16,6 +16,7 @@ import {
 } from '~/db/deployments/home.server'
 import { getUserDevTeams } from '~/db/user-dev-team-preference.server'
 import { getUserMappingByNavIdent } from '~/db/user-mappings.server'
+import { endOfDay } from '~/lib/date-utils'
 import { groupAppCards } from '~/lib/group-app-cards'
 import { getAppDeploymentStatsBatch } from '../db/deployments.server'
 import { getAllAlertCounts, getAllMonitoredApplications } from '../db/monitored-applications.server'
@@ -149,7 +150,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     const team = selectedDevTeams[i]
     const boards = boardsByTeam[i] ?? []
     for (const board of boards) {
-      if (board.is_active && new Date(board.period_end) >= now) {
+      if (board.is_active && endOfDay(new Date(board.period_end)) >= now) {
         activeBoards.push({ board, team })
       }
     }
