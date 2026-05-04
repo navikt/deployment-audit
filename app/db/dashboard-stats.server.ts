@@ -268,6 +268,7 @@ export async function getDevTeamSummaryStats(
 export async function getBoardObjectiveProgress(
   boardId: number,
   deployerUsernames?: string[],
+  options?: { startDate?: Date },
 ): Promise<BoardObjectiveProgress[]> {
   const objectivesResult = await pool.query(
     'SELECT id, title FROM board_objectives WHERE board_id = $1 AND is_active = true ORDER BY sort_order, id',
@@ -277,37 +278,62 @@ export async function getBoardObjectiveProgress(
   if (objectiveIds.length === 0) return []
 
   const hasDeployerFilter = deployerUsernames !== undefined && deployerUsernames.length > 0
-  const deployerJoin = hasDeployerFilter ? ' JOIN deployments d ON d.id = dgl.deployment_id' : ''
-  const deployerWhere = hasDeployerFilter ? ` AND ${userDeploymentMatchAnySql(2, 'd')}` : ''
-  const deployerParams = hasDeployerFilter ? [lowerUsernames(deployerUsernames)] : []
+  // Always join deployments when we need deployer filter OR date filter
+  const needsDeploymentJoin = hasDeployerFilter || options?.startDate
+  const deployerJoin = needsDeploymentJoin ? ' JOIN deployments d ON d.id = dgl.deployment_id' : ''
+
+  const baseParams: any[] = [objectiveIds]
+  let paramIndex = 2
+  let filterWhere = ''
+
+  if (hasDeployerFilter) {
+    filterWhere += ` AND ${userDeploymentMatchAnySql(paramIndex, 'd')}`
+    baseParams.push(lowerUsernames(deployerUsernames))
+    paramIndex++
+  }
+  if (options?.startDate) {
+    filterWhere += ` AND d.created_at >= $${paramIndex}`
+    baseParams.push(options.startDate)
+    paramIndex++
+  }
 
   const krResult = await pool.query(
     `SELECT bkr.id, bkr.objective_id, bkr.title, bkr.sort_order,
             COUNT(DISTINCT dgl.deployment_id) AS linked_deployments
      FROM board_key_results bkr
-     LEFT JOIN deployment_goal_links dgl ON dgl.key_result_id = bkr.id AND dgl.is_active = true${deployerJoin}${deployerWhere}
+     LEFT JOIN deployment_goal_links dgl ON dgl.key_result_id = bkr.id AND dgl.is_active = true${deployerJoin}${filterWhere}
      WHERE bkr.objective_id = ANY($1::int[]) AND bkr.is_active = true
      GROUP BY bkr.id, bkr.objective_id, bkr.title, bkr.sort_order
      ORDER BY bkr.sort_order, bkr.id`,
-    [objectiveIds, ...deployerParams],
+    baseParams,
   )
 
+  // Count distinct deployments linked to objectives directly
   const objLinksResult = await pool.query(
     `SELECT dgl.objective_id, COUNT(DISTINCT dgl.deployment_id) AS cnt
      FROM deployment_goal_links dgl${deployerJoin}
-     WHERE dgl.objective_id = ANY($1::int[]) AND dgl.is_active = true${deployerWhere}
+     WHERE dgl.objective_id = ANY($1::int[]) AND dgl.is_active = true${filterWhere}
      GROUP BY dgl.objective_id`,
-    [objectiveIds, ...deployerParams],
+    baseParams,
+  )
+
+  // Count distinct deployments linked via KRs per objective (avoids double-counting
+  // when a deployment is linked to multiple KRs under the same objective)
+  const krDistinctResult = await pool.query(
+    `SELECT bkr.objective_id, COUNT(DISTINCT dgl.deployment_id) AS cnt
+     FROM deployment_goal_links dgl
+     JOIN board_key_results bkr ON bkr.id = dgl.key_result_id AND bkr.is_active = true${deployerJoin}
+     WHERE bkr.objective_id = ANY($1::int[]) AND dgl.is_active = true${filterWhere}
+     GROUP BY bkr.objective_id`,
+    baseParams,
   )
 
   const krsByObjective = new Map<number, Array<{ id: number; title: string; linked_deployments: number }>>()
-  const krLinkedTotalByObjective = new Map<number, number>()
   for (const kr of krResult.rows) {
     const linked = Number(kr.linked_deployments)
     const list = krsByObjective.get(kr.objective_id) ?? []
     list.push({ id: kr.id, title: kr.title, linked_deployments: linked })
     krsByObjective.set(kr.objective_id, list)
-    krLinkedTotalByObjective.set(kr.objective_id, (krLinkedTotalByObjective.get(kr.objective_id) ?? 0) + linked)
   }
 
   const objLinksByObjective = new Map<number, number>()
@@ -315,11 +341,16 @@ export async function getBoardObjectiveProgress(
     objLinksByObjective.set(row.objective_id as number, Number(row.cnt))
   }
 
+  const krDistinctByObjective = new Map<number, number>()
+  for (const row of krDistinctResult.rows) {
+    krDistinctByObjective.set(row.objective_id as number, Number(row.cnt))
+  }
+
   return objectivesResult.rows.map((obj) => ({
     objective_id: obj.id,
     objective_title: obj.title,
     key_results: krsByObjective.get(obj.id) ?? [],
-    total_linked_deployments: (objLinksByObjective.get(obj.id) ?? 0) + (krLinkedTotalByObjective.get(obj.id) ?? 0),
+    total_linked_deployments: (objLinksByObjective.get(obj.id) ?? 0) + (krDistinctByObjective.get(obj.id) ?? 0),
   }))
 }
 

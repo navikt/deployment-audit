@@ -46,8 +46,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       getMembersGithubUsernamesForDevTeams([devTeam.id]).catch(() => [] as string[]),
     ])
 
+  // Top-of-page coverage stats: YTD, filtered to team members' deploys.
+  const ytdStart = new Date(new Date().getFullYear(), 0, 1)
+
   const activeBoard = boards.find((b) => b.is_active) ?? null
-  const activeBoardProgress = activeBoard ? await getBoardObjectiveProgress(activeBoard.id, deployerUsernames) : []
+  const activeBoardProgress = activeBoard
+    ? await getBoardObjectiveProgress(activeBoard.id, deployerUsernames, { startDate: ytdStart })
+    : []
 
   // Build app cards: direct links + group-owned apps + nais team matches
   const directAppIds = new Set([...directApps.map((a) => a.monitored_app_id), ...groupAppIds])
@@ -63,14 +68,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // (not from deployerUsernames which is deduplicated and may not reflect 1:1 mapping).
   const hasMappedMembers = members.some((m) => Boolean(m.github_username))
 
-  // Top-of-page coverage stats: YTD, filtered to team members' deploys.
-  const ytdStart = new Date(new Date().getFullYear(), 0, 1)
-
   const [statsByApp, teamStatsMap] = await Promise.all([
     teamApps.length > 0
       ? getAppDeploymentStatsBatch(
           teamApps.map((a) => ({ id: a.id, audit_start_year: a.audit_start_year })),
           deployerUsernames,
+          { startDate: ytdStart },
         )
       : Promise.resolve(new Map()),
     getDevTeamStatsBatch([devTeam.id], ytdStart),
