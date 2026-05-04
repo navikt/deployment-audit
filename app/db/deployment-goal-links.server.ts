@@ -45,6 +45,29 @@ export async function getLinksForDeployment(deploymentId: number): Promise<Deplo
   return result.rows
 }
 
+/**
+ * Get distinct objectives that are linked to deployments for the given app IDs.
+ * Used to populate the goal filter dropdown on the deployment list page.
+ */
+export async function getLinkedObjectivesForApps(appIds: number[]): Promise<Array<{ id: number; title: string }>> {
+  if (appIds.length === 0) return []
+  const result = await pool.query(
+    `SELECT DISTINCT COALESCE(bo.id, bo_via_kr.id) AS id,
+            COALESCE(bo.title, bo_via_kr.title) AS title
+     FROM deployment_goal_links dgl
+     JOIN deployments d ON d.id = dgl.deployment_id
+     LEFT JOIN board_objectives bo ON bo.id = dgl.objective_id
+     LEFT JOIN board_key_results bkr ON bkr.id = dgl.key_result_id
+     LEFT JOIN board_objectives bo_via_kr ON bo_via_kr.id = bkr.objective_id
+     WHERE d.monitored_app_id = ANY($1)
+       AND dgl.is_active = true
+       AND COALESCE(bo.id, bo_via_kr.id) IS NOT NULL
+     ORDER BY title`,
+    [appIds],
+  )
+  return result.rows
+}
+
 export async function addDeploymentGoalLink(data: {
   deployment_id: number
   objective_id?: number
