@@ -1,4 +1,4 @@
-import { NOT_APPROVED_STATUSES, PENDING_STATUSES } from '~/lib/four-eyes-status'
+import { APPROVED_STATUSES, PENDING_STATUSES } from '~/lib/four-eyes-status'
 import { isGitHubBot, NON_BRACKET_BOT_USERNAMES } from '~/lib/github-bots'
 import { pool } from '../connection.server'
 import type { AppWithIssues, DeploymentWithApp } from '../deployments.server'
@@ -135,7 +135,7 @@ export async function getDevTeamAppsWithIssues(
 
   const hasDeployerFilter = deployerUsernames !== undefined
   const deployerFilterClause = hasDeployerFilter ? ` AND ${userDeploymentMatchAnySql(6, 'd')}` : ''
-  const params: unknown[] = [NOT_APPROVED_STATUSES, PENDING_STATUSES, naisTeamSlugs, ids, NON_BRACKET_BOT_USERNAMES]
+  const params: unknown[] = [APPROVED_STATUSES, PENDING_STATUSES, naisTeamSlugs, ids, NON_BRACKET_BOT_USERNAMES]
   if (hasDeployerFilter) params.push(lowerUsernames(deployerUsernames))
 
   const result = await pool.query(
@@ -149,7 +149,7 @@ export async function getDevTeamAppsWithIssues(
       ma.app_name,
       ma.team_slug,
       ma.environment_name,
-      COALESCE(dep.without_four_eyes, 0)::integer as without_four_eyes,
+      GREATEST(0, COALESCE(dep.total_count, 0) - COALESCE(dep.with_four_eyes, 0) - COALESCE(dep.pending_verification, 0))::integer as without_four_eyes,
       COALESCE(dep.pending_verification, 0)::integer as pending_verification,
       COALESCE(alerts.count, 0)::integer as alert_count,
       COALESCE(dep.missing_goal_links, 0)::integer as missing_goal_links,
@@ -157,7 +157,8 @@ export async function getDevTeamAppsWithIssues(
     FROM monitored_applications ma
     LEFT JOIN LATERAL (
       SELECT 
-        SUM(CASE WHEN COALESCE(d.four_eyes_status, 'unknown') = ANY($1)${deployerFilterClause} THEN 1 ELSE 0 END) as without_four_eyes,
+        SUM(CASE WHEN true${deployerFilterClause} THEN 1 ELSE 0 END) as total_count,
+        SUM(CASE WHEN COALESCE(d.four_eyes_status, 'unknown') = ANY($1)${deployerFilterClause} THEN 1 ELSE 0 END) as with_four_eyes,
         SUM(CASE WHEN COALESCE(d.four_eyes_status, 'unknown') = ANY($2)${deployerFilterClause} THEN 1 ELSE 0 END) as pending_verification,
         SUM(CASE WHEN NOT EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = d.id AND dgl.is_active = true)${deployerFilterClause} THEN 1 ELSE 0 END) as missing_goal_links,
         COUNT(DISTINCT CASE
@@ -182,12 +183,12 @@ export async function getDevTeamAppsWithIssues(
     ) alerts ON true
     WHERE ma.is_active = true
       AND (ma.team_slug = ANY($3::text[]) OR ma.id = ANY($4::int[]))
-      AND (COALESCE(dep.without_four_eyes, 0) > 0 
+      AND (GREATEST(0, COALESCE(dep.total_count, 0) - COALESCE(dep.with_four_eyes, 0) - COALESCE(dep.pending_verification, 0)) > 0 
         OR COALESCE(dep.pending_verification, 0) > 0 
         OR COALESCE(alerts.count, 0) > 0
         OR COALESCE(dep.missing_goal_links, 0) > 0
         OR COALESCE(dep.unmapped_deployer_count, 0) > 0)
-    ORDER BY COALESCE(dep.without_four_eyes, 0) DESC, COALESCE(dep.missing_goal_links, 0) DESC, COALESCE(alerts.count, 0) DESC
+    ORDER BY GREATEST(0, COALESCE(dep.total_count, 0) - COALESCE(dep.with_four_eyes, 0) - COALESCE(dep.pending_verification, 0)) DESC, COALESCE(dep.missing_goal_links, 0) DESC, COALESCE(alerts.count, 0) DESC
   `,
     params,
   )

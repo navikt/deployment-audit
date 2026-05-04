@@ -1,4 +1,4 @@
-import { APPROVED_STATUSES_SQL, NOT_APPROVED_STATUSES_SQL, PENDING_STATUSES_SQL } from '~/lib/four-eyes-status'
+import { APPROVED_STATUSES_SQL, PENDING_STATUSES_SQL } from '~/lib/four-eyes-status'
 import { AUDIT_START_YEAR_FILTER } from './audit-start-year'
 import { pool } from './connection.server'
 import { lowerUsernames, userDeploymentMatchAnySql } from './user-deployment-match'
@@ -71,7 +71,6 @@ export async function getSectionOverallStats(
     `SELECT
        COUNT(d.id)::int AS total_deployments,
        COUNT(d.id) FILTER (WHERE COALESCE(d.four_eyes_status, 'unknown') IN (${APPROVED_STATUSES_SQL}))::int AS with_four_eyes,
-       COUNT(d.id) FILTER (WHERE COALESCE(d.four_eyes_status, 'unknown') IN (${NOT_APPROVED_STATUSES_SQL}))::int AS without_four_eyes,
        COUNT(d.id) FILTER (WHERE COALESCE(d.four_eyes_status, 'unknown') IN (${PENDING_STATUSES_SQL}))::int AS pending_verification,
        COUNT(DISTINCT dgl.deployment_id)::int AS linked_to_goal
      FROM section_teams st
@@ -88,13 +87,14 @@ export async function getSectionOverallStats(
   const row = result.rows[0]
   const total = row?.total_deployments ?? 0
   const withFourEyes = row?.with_four_eyes ?? 0
+  const pending = row?.pending_verification ?? 0
   const linked = row?.linked_to_goal ?? 0
 
   return {
     total_deployments: total,
     with_four_eyes: withFourEyes,
-    without_four_eyes: row?.without_four_eyes ?? 0,
-    pending_verification: row?.pending_verification ?? 0,
+    without_four_eyes: Math.max(0, total - withFourEyes - pending),
+    pending_verification: pending,
     linked_to_goal: linked,
     four_eyes_coverage: total > 0 ? withFourEyes / total : 0,
     goal_coverage: total > 0 ? linked / total : 0,
@@ -128,7 +128,6 @@ export async function getSectionDashboardStats(
        SELECT ta.dev_team_id,
               COUNT(d.id) AS total_deployments,
               COUNT(d.id) FILTER (WHERE COALESCE(d.four_eyes_status, 'unknown') IN (${APPROVED_STATUSES_SQL})) AS with_four_eyes,
-              COUNT(d.id) FILTER (WHERE COALESCE(d.four_eyes_status, 'unknown') IN (${NOT_APPROVED_STATUSES_SQL})) AS without_four_eyes,
               COUNT(d.id) FILTER (WHERE COALESCE(d.four_eyes_status, 'unknown') IN (${PENDING_STATUSES_SQL})) AS pending_verification,
               COUNT(DISTINCT dgl.deployment_id) AS linked_to_goal
        FROM team_apps ta
@@ -151,7 +150,7 @@ export async function getSectionDashboardStats(
             ta.nais_team_slugs,
             COALESCE(ds.total_deployments, 0)::int AS total_deployments,
             COALESCE(ds.with_four_eyes, 0)::int AS with_four_eyes,
-            COALESCE(ds.without_four_eyes, 0)::int AS without_four_eyes,
+            COALESCE(ds.total_deployments, 0)::int - COALESCE(ds.with_four_eyes, 0)::int - COALESCE(ds.pending_verification, 0)::int AS without_four_eyes,
             COALESCE(ds.pending_verification, 0)::int AS pending_verification,
             COALESCE(ds.linked_to_goal, 0)::int AS linked_to_goal
      FROM team_apps ta
@@ -210,7 +209,6 @@ export async function getDevTeamSummaryStats(
        SELECT d.monitored_app_id,
               COUNT(d.id) AS total_deployments,
               COUNT(d.id) FILTER (WHERE COALESCE(d.four_eyes_status, 'unknown') IN (${APPROVED_STATUSES_SQL})) AS with_four_eyes,
-              COUNT(d.id) FILTER (WHERE COALESCE(d.four_eyes_status, 'unknown') IN (${NOT_APPROVED_STATUSES_SQL})) AS without_four_eyes,
               COUNT(d.id) FILTER (WHERE COALESCE(d.four_eyes_status, 'unknown') IN (${PENDING_STATUSES_SQL})) AS pending_verification,
               COUNT(DISTINCT dgl.deployment_id) AS linked_to_goal
        FROM team_apps ta
@@ -230,10 +228,10 @@ export async function getDevTeamSummaryStats(
        (SELECT COUNT(*) FROM team_apps)::int AS total_apps,
        COALESCE(SUM(s.total_deployments), 0)::int AS total_deployments,
        COALESCE(SUM(s.with_four_eyes), 0)::int AS with_four_eyes,
-       COALESCE(SUM(s.without_four_eyes), 0)::int AS without_four_eyes,
+       (COALESCE(SUM(s.total_deployments), 0) - COALESCE(SUM(s.with_four_eyes), 0) - COALESCE(SUM(s.pending_verification), 0))::int AS without_four_eyes,
        COALESCE(SUM(s.pending_verification), 0)::int AS pending_verification,
        COALESCE(SUM(s.linked_to_goal), 0)::int AS linked_to_goal,
-       COUNT(*) FILTER (WHERE COALESCE(s.without_four_eyes, 0) > 0 OR COALESCE(s.pending_verification, 0) > 0 OR COALESCE(a.alert_count, 0) > 0 OR (COALESCE(s.total_deployments, 0) > 0 AND COALESCE(s.linked_to_goal, 0) < COALESCE(s.total_deployments, 0)))::int AS apps_with_issues
+       COUNT(*) FILTER (WHERE COALESCE(s.total_deployments, 0) - COALESCE(s.with_four_eyes, 0) - COALESCE(s.pending_verification, 0) > 0 OR COALESCE(s.pending_verification, 0) > 0 OR COALESCE(a.alert_count, 0) > 0 OR (COALESCE(s.total_deployments, 0) > 0 AND COALESCE(s.linked_to_goal, 0) < COALESCE(s.total_deployments, 0)))::int AS apps_with_issues
      FROM team_apps ta
      LEFT JOIN app_stats s ON s.monitored_app_id = ta.id
      LEFT JOIN app_alerts a ON a.monitored_app_id = ta.id`,
@@ -441,7 +439,6 @@ export async function getDevTeamStatsBatch(
        SELECT ta.dev_team_id,
               COUNT(DISTINCT d.id)::int AS total_deployments,
               COUNT(DISTINCT d.id) FILTER (WHERE COALESCE(d.four_eyes_status, 'unknown') IN (${APPROVED_STATUSES_SQL}))::int AS with_four_eyes,
-              COUNT(DISTINCT d.id) FILTER (WHERE COALESCE(d.four_eyes_status, 'unknown') IN (${NOT_APPROVED_STATUSES_SQL}))::int AS without_four_eyes,
               COUNT(DISTINCT d.id) FILTER (WHERE COALESCE(d.four_eyes_status, 'unknown') IN (${PENDING_STATUSES_SQL}))::int AS pending_verification,
               COUNT(DISTINCT dgl.deployment_id)::int AS linked_to_goal
        FROM team_apps ta
@@ -458,7 +455,7 @@ export async function getDevTeamStatsBatch(
      SELECT ta_distinct.dev_team_id, ta_distinct.dev_team_name, ta_distinct.dev_team_slug,
             COALESCE(ds.total_deployments, 0)::int AS total_deployments,
             COALESCE(ds.with_four_eyes, 0)::int AS with_four_eyes,
-            COALESCE(ds.without_four_eyes, 0)::int AS without_four_eyes,
+            COALESCE(ds.total_deployments, 0)::int - COALESCE(ds.with_four_eyes, 0)::int - COALESCE(ds.pending_verification, 0)::int AS without_four_eyes,
             COALESCE(ds.pending_verification, 0)::int AS pending_verification,
             COALESCE(ds.linked_to_goal, 0)::int AS linked_to_goal
      FROM (SELECT DISTINCT dev_team_id, dev_team_name, dev_team_slug FROM team_apps

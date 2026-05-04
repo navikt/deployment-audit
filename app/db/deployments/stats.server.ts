@@ -1,4 +1,4 @@
-import { APPROVED_STATUSES, NOT_APPROVED_STATUSES, PENDING_STATUSES } from '~/lib/four-eyes-status'
+import { APPROVED_STATUSES, PENDING_STATUSES } from '~/lib/four-eyes-status'
 import { pool } from '../connection.server'
 import type { AppDeploymentStats } from '../deployments.server'
 import { lowerUsernames, userDeploymentMatchAnySql } from '../user-deployment-match'
@@ -69,8 +69,10 @@ export async function getAppDeploymentStatsBatch(
   // Build base params and track param index dynamically so deployer/date
   // placeholders bind to the correct $N regardless of which optional
   // filters are active.
-  const baseParams: any[] = [appIds, APPROVED_STATUSES, NOT_APPROVED_STATUSES, PENDING_STATUSES]
-  let paramIndex = 5
+  // without_four_eyes is derived as (total - with_four_eyes - pending) in JS,
+  // so we only need APPROVED and PENDING status arrays.
+  const baseParams: any[] = [appIds, APPROVED_STATUSES, PENDING_STATUSES]
+  let paramIndex = 4
 
   // Date range filter — applied to the main WHERE clause (affects all aggregates).
   let dateFilter = ''
@@ -104,8 +106,7 @@ export async function getAppDeploymentStatsBatch(
       monitored_app_id,
       COUNT(*) FILTER (WHERE TRUE${deployerFilterClause}) as total,
       COUNT(*) FILTER (WHERE COALESCE(four_eyes_status, 'unknown') = ANY($2::text[])${deployerFilterClause}) as with_four_eyes,
-      COUNT(*) FILTER (WHERE COALESCE(four_eyes_status, 'unknown') = ANY($3)${deployerFilterClause}) as without_four_eyes,
-      COUNT(*) FILTER (WHERE COALESCE(four_eyes_status, 'unknown') = ANY($4)${deployerFilterClause}) as pending_verification,
+      COUNT(*) FILTER (WHERE COALESCE(four_eyes_status, 'unknown') = ANY($3::text[])${deployerFilterClause}) as pending_verification,
       COUNT(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = deployments.id AND dgl.is_active = true)${deployerFilterClause}) as missing_goal_links,
       MAX(created_at) as last_deployment
     FROM deployments
@@ -149,13 +150,17 @@ export async function getAppDeploymentStatsBatch(
     const appId = row.monitored_app_id
     const total = parseInt(row.total, 10) || 0
     const withFourEyes = parseInt(row.with_four_eyes, 10) || 0
+    const pending = parseInt(row.pending_verification, 10) || 0
+    // Derive without_four_eyes as remainder so numbers always sum to total,
+    // even if the DB contains unexpected/unknown status values.
+    const withoutFourEyes = Math.max(0, total - withFourEyes - pending)
     const percentage = total > 0 ? Math.round((withFourEyes / total) * 100) : 0
 
     statsMap.set(appId, {
       total,
       with_four_eyes: withFourEyes,
-      without_four_eyes: parseInt(row.without_four_eyes, 10) || 0,
-      pending_verification: parseInt(row.pending_verification, 10) || 0,
+      without_four_eyes: withoutFourEyes,
+      pending_verification: pending,
       missing_goal_links: parseInt(row.missing_goal_links, 10) || 0,
       last_deployment: row.last_deployment ? new Date(row.last_deployment) : null,
       last_deployment_id: lastDeploymentIds.get(appId) || null,
