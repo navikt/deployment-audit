@@ -177,9 +177,17 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 
   const allDeployers = allDeployersResult.rows.map((r: any) => r.deployer_username as string)
 
-  // Get display names for deployers (current page + all distinct deployers for filter)
+  // Get display names for deployers, PR creators, and mergers (current page + all distinct deployers for filter)
   const deployerUsernames = [...new Set(result.deployments.map((d) => d.deployer_username).filter(Boolean))] as string[]
-  const allUsernamesForMapping = [...new Set([...deployerUsernames, ...allDeployers])]
+  const prCreatorUsernames = result.deployments
+    .map((d: any) => d.github_pr_data?.creator?.username)
+    .filter(Boolean) as string[]
+  const prMergerUsernames = result.deployments
+    .map((d: any) => d.github_pr_data?.merged_by?.username)
+    .filter(Boolean) as string[]
+  const allUsernamesForMapping = [
+    ...new Set([...deployerUsernames, ...prCreatorUsernames, ...prMergerUsernames, ...allDeployers]),
+  ]
   const userMappings = await getUserMappings(allUsernamesForMapping)
 
   // Build deployer options with display names
@@ -495,6 +503,23 @@ export default function AppDeployments() {
                     <Detail textColor="subtle">
                       <UserName username={deployment.deployer_username} userMappings={userMappings} />
                     </Detail>
+                    {deployment.github_pr_data?.creator?.username &&
+                      deployment.github_pr_data.creator.username !== deployment.deployer_username && (
+                        <Detail textColor="subtle">
+                          PR:{' '}
+                          <UserName username={deployment.github_pr_data.creator.username} userMappings={userMappings} />
+                        </Detail>
+                      )}
+                    {deployment.github_pr_data?.merged_by?.username &&
+                      deployment.github_pr_data.merged_by.username !== deployment.deployer_username && (
+                        <Detail textColor="subtle">
+                          Merge:{' '}
+                          <UserName
+                            username={deployment.github_pr_data.merged_by.username}
+                            userMappings={userMappings}
+                          />
+                        </Detail>
+                      )}
                     <Detail textColor="subtle">
                       {deployment.commit_sha ? (
                         <ExternalLink
