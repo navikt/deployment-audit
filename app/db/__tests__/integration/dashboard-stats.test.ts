@@ -5,7 +5,8 @@
 
 import { Pool } from 'pg'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { getBoardObjectiveProgress, getDevTeamSummaryStats } from '../../dashboard-stats.server'
+import { getBoardObjectiveProgress, getDevTeamStatsBatch, getDevTeamSummaryStats } from '../../dashboard-stats.server'
+import { getAppDeploymentStatsBatch } from '../../deployments/stats.server'
 import { seedApp, seedDevTeam, seedSection, truncateAllTables } from './helpers'
 
 let pool: Pool
@@ -340,5 +341,183 @@ describe('getBoardObjectiveProgress', () => {
 
     // Total distinct deployments linked to this board = d1 (KR1), d2 (KR1+KR2), d3 (O1) = 3
     expect(totalDistinctDeployments).toBe(3)
+  })
+})
+
+describe('getDevTeamStatsBatch vs getAppDeploymentStatsBatch consistency', () => {
+  /**
+   * Helper: seed a dev team with nais team link, team members, and user mappings.
+   */
+  async function seedTeamWithMembers(
+    sectionId: number,
+    opts: {
+      teamSlug: string
+      naisTeamSlug: string
+      members: Array<{ navIdent: string; githubUsername: string }>
+    },
+  ) {
+    const devTeamId = await seedDevTeam(pool, opts.teamSlug, opts.teamSlug, sectionId)
+    await pool.query(`INSERT INTO dev_team_nais_teams (dev_team_id, nais_team_slug) VALUES ($1, $2)`, [
+      devTeamId,
+      opts.naisTeamSlug,
+    ])
+    for (const m of opts.members) {
+      await pool.query(`INSERT INTO user_mappings (github_username, nav_ident) VALUES ($1, $2)`, [
+        m.githubUsername,
+        m.navIdent,
+      ])
+      await pool.query(`INSERT INTO user_dev_team_preference (dev_team_id, nav_ident) VALUES ($1, $2)`, [
+        devTeamId,
+        m.navIdent,
+      ])
+    }
+    return { devTeamId, githubUsernames: opts.members.map((m) => m.githubUsername) }
+  }
+
+  async function seedDeployWithPrCreator(
+    monitoredAppId: number,
+    teamSlug: string,
+    createdAt: Date,
+    fourEyesStatus: string,
+    deployerUsername: string,
+    prCreatorUsername?: string,
+  ): Promise<number> {
+    const naisId = `deploy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const prData = prCreatorUsername ? JSON.stringify({ creator: { username: prCreatorUsername } }) : null
+    const { rows } = await pool.query<{ id: number }>(
+      `INSERT INTO deployments (
+        monitored_app_id, nais_deployment_id, team_slug, app_name, environment_name,
+        commit_sha, created_at, four_eyes_status, deployer_username, github_pr_data
+      ) VALUES ($1, $2, $3, 'test-app', 'prod', $4, $5, $6, $7, $8)
+      RETURNING id`,
+      [monitoredAppId, naisId, teamSlug, `sha-${naisId}`, createdAt, fourEyesStatus, deployerUsername, prData],
+    )
+    return rows[0].id
+  }
+
+  it('batch team stats matches per-app stats for without_four_eyes', async () => {
+    const sectionId = await seedSection(pool, 'sec-consistency')
+    const { devTeamId, githubUsernames } = await seedTeamWithMembers(sectionId, {
+      teamSlug: 'team-consistency',
+      naisTeamSlug: 'nais-team-c',
+      members: [
+        { navIdent: 'A100001', githubUsername: 'alice' },
+        { navIdent: 'B200002', githubUsername: 'bob' },
+      ],
+    })
+
+    const appId = await seedApp(pool, { teamSlug: 'nais-team-c', appName: 'app-c', environment: 'prod' })
+    const now = new Date()
+    const startDate = new Date(now.getFullYear(), 0, 1)
+
+    // 2 approved by alice, 1 direct_push by bob
+    await seedDeploymentWithStatus(pool, appId, 'nais-team-c', now, 'approved_pr', 'alice')
+    await seedDeploymentWithStatus(pool, appId, 'nais-team-c', now, 'approved_pr', 'alice')
+    await seedDeploymentWithStatus(pool, appId, 'nais-team-c', now, 'direct_push', 'bob')
+    // outsider — should not be counted by either query
+    await seedDeploymentWithStatus(pool, appId, 'nais-team-c', now, 'direct_push', 'mallory')
+
+    const batchMap = await getDevTeamStatsBatch([devTeamId], startDate)
+    const teamStats = batchMap.get(devTeamId)
+
+    const appStatsMap = await getAppDeploymentStatsBatch([{ id: appId }], githubUsernames, { startDate })
+    const appStats = appStatsMap.get(appId)
+
+    expect(teamStats).toBeDefined()
+    expect(appStats).toBeDefined()
+
+    // Both queries should agree on totals and four-eyes counts
+    expect(teamStats?.total_deployments).toBe(3)
+    expect(appStats?.total).toBe(3)
+    expect(teamStats?.without_four_eyes).toBe(appStats?.without_four_eyes)
+    expect(teamStats?.with_four_eyes).toBe(appStats?.with_four_eyes)
+    expect(teamStats?.without_four_eyes).toBe(1)
+    expect(teamStats?.with_four_eyes).toBe(2)
+  })
+
+  it('does not double-count when deployer AND pr_creator are both team members', async () => {
+    const sectionId = await seedSection(pool, 'sec-double')
+    const { devTeamId, githubUsernames } = await seedTeamWithMembers(sectionId, {
+      teamSlug: 'team-double',
+      naisTeamSlug: 'nais-team-d',
+      members: [
+        { navIdent: 'A100002', githubUsername: 'alice' },
+        { navIdent: 'B200003', githubUsername: 'bob' },
+      ],
+    })
+
+    const appId = await seedApp(pool, { teamSlug: 'nais-team-d', appName: 'app-d', environment: 'prod' })
+    const now = new Date()
+    const startDate = new Date(now.getFullYear(), 0, 1)
+
+    // Deployment where deployer=alice AND pr_creator=bob — both are team members.
+    // This must be counted exactly once, not twice.
+    await seedDeployWithPrCreator(appId, 'nais-team-d', now, 'direct_push', 'alice', 'bob')
+    // A normal deployment by alice (no PR creator overlap)
+    await seedDeploymentWithStatus(pool, appId, 'nais-team-d', now, 'approved_pr', 'alice')
+
+    const batchMap = await getDevTeamStatsBatch([devTeamId], startDate)
+    const teamStats = batchMap.get(devTeamId)
+
+    const appStatsMap = await getAppDeploymentStatsBatch([{ id: appId }], githubUsernames, { startDate })
+    const appStats = appStatsMap.get(appId)
+
+    expect(teamStats).toBeDefined()
+    expect(appStats).toBeDefined()
+
+    // Both should count exactly 2 deployments total
+    expect(teamStats?.total_deployments).toBe(2)
+    expect(appStats?.total).toBe(2)
+
+    // Both should agree: 1 without four-eyes, 1 with four-eyes
+    expect(teamStats?.without_four_eyes).toBe(1)
+    expect(teamStats?.with_four_eyes).toBe(1)
+    expect(teamStats?.without_four_eyes).toBe(appStats?.without_four_eyes)
+    expect(teamStats?.with_four_eyes).toBe(appStats?.with_four_eyes)
+  })
+
+  it('legacy deployments are counted as without_four_eyes in both queries', async () => {
+    // Legacy/error/mismatch statuses must count as failures (without_four_eyes)
+    // so app cards show them and match the top card's gap.
+    const sectionId = await seedSection(pool, 'sec-legacy-gap')
+    const { devTeamId, githubUsernames } = await seedTeamWithMembers(sectionId, {
+      teamSlug: 'team-legacy-gap',
+      naisTeamSlug: 'nais-team-lg',
+      members: [{ navIdent: 'A100003', githubUsername: 'alice' }],
+    })
+
+    const appId = await seedApp(pool, { teamSlug: 'nais-team-lg', appName: 'app-lg', environment: 'prod' })
+    const now = new Date()
+    const startDate = new Date(now.getFullYear(), 0, 1)
+
+    // 3 approved + 2 legacy → legacy should count as failures
+    await seedDeploymentWithStatus(pool, appId, 'nais-team-lg', now, 'approved_pr', 'alice')
+    await seedDeploymentWithStatus(pool, appId, 'nais-team-lg', now, 'approved_pr', 'alice')
+    await seedDeploymentWithStatus(pool, appId, 'nais-team-lg', now, 'approved_pr', 'alice')
+    await seedDeploymentWithStatus(pool, appId, 'nais-team-lg', now, 'legacy', 'alice')
+    await seedDeploymentWithStatus(pool, appId, 'nais-team-lg', now, 'legacy', 'alice')
+
+    const batchMap = await getDevTeamStatsBatch([devTeamId], startDate)
+    const teamStats = batchMap.get(devTeamId)
+
+    const appStatsMap = await getAppDeploymentStatsBatch([{ id: appId }], githubUsernames, { startDate })
+    const appStats = appStatsMap.get(appId)
+
+    // Both should count 5 total, 3 approved, 2 without four-eyes (legacy)
+    expect(teamStats?.total_deployments).toBe(5)
+    expect(teamStats?.with_four_eyes).toBe(3)
+    expect(teamStats?.without_four_eyes).toBe(2)
+    expect(teamStats?.pending_verification).toBe(0)
+
+    expect(appStats?.total).toBe(5)
+    expect(appStats?.with_four_eyes).toBe(3)
+    expect(appStats?.without_four_eyes).toBe(2)
+    expect(appStats?.pending_verification).toBe(0)
+
+    // No gap: total = with_four_eyes + without_four_eyes + pending
+    const total = teamStats?.total_deployments ?? 0
+    const covered =
+      (teamStats?.with_four_eyes ?? 0) + (teamStats?.without_four_eyes ?? 0) + (teamStats?.pending_verification ?? 0)
+    expect(total).toBe(covered)
   })
 })

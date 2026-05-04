@@ -58,7 +58,9 @@ export const APPROVED_STATUSES: FourEyesStatus[] = [
 export const APPROVED_STATUSES_SQL = APPROVED_STATUSES.map((s) => `'${s}'`).join(', ')
 
 /**
- * Statuses that indicate deployment is NOT approved
+ * Statuses that indicate deployment is NOT approved.
+ * Includes legacy and error statuses — these are not four-eyes verified
+ * and must be visible as failures in stats and app cards.
  */
 export const NOT_APPROVED_STATUSES: FourEyesStatus[] = [
   'direct_push',
@@ -66,6 +68,10 @@ export const NOT_APPROVED_STATUSES: FourEyesStatus[] = [
   'approved_pr_with_unreviewed',
   'unauthorized_repository',
   'unauthorized_branch',
+  'legacy',
+  'legacy_pending',
+  'error',
+  'repository_mismatch',
 ]
 
 /**

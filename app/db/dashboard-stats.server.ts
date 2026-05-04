@@ -71,7 +71,7 @@ export async function getSectionOverallStats(
     `SELECT
        COUNT(d.id)::int AS total_deployments,
        COUNT(d.id) FILTER (WHERE d.four_eyes_status IN (${APPROVED_STATUSES_SQL}))::int AS with_four_eyes,
-       COUNT(d.id) FILTER (WHERE d.four_eyes_status IN ('direct_push', 'unverified_commits', 'approved_pr_with_unreviewed', 'unauthorized_repository', 'unauthorized_branch'))::int AS without_four_eyes,
+       COUNT(d.id) FILTER (WHERE d.four_eyes_status IN ('direct_push', 'unverified_commits', 'approved_pr_with_unreviewed', 'unauthorized_repository', 'unauthorized_branch', 'legacy', 'legacy_pending', 'error', 'repository_mismatch'))::int AS without_four_eyes,
        COUNT(d.id) FILTER (WHERE d.four_eyes_status IN ('pending', 'pending_baseline', 'pending_approval', 'unknown'))::int AS pending_verification,
        COUNT(DISTINCT dgl.deployment_id)::int AS linked_to_goal
      FROM section_teams st
@@ -128,7 +128,7 @@ export async function getSectionDashboardStats(
        SELECT ta.dev_team_id,
               COUNT(d.id) AS total_deployments,
               COUNT(d.id) FILTER (WHERE d.four_eyes_status IN (${APPROVED_STATUSES_SQL})) AS with_four_eyes,
-              COUNT(d.id) FILTER (WHERE d.four_eyes_status IN ('direct_push', 'unverified_commits', 'approved_pr_with_unreviewed', 'unauthorized_repository', 'unauthorized_branch')) AS without_four_eyes,
+              COUNT(d.id) FILTER (WHERE d.four_eyes_status IN ('direct_push', 'unverified_commits', 'approved_pr_with_unreviewed', 'unauthorized_repository', 'unauthorized_branch', 'legacy', 'legacy_pending', 'error', 'repository_mismatch')) AS without_four_eyes,
               COUNT(d.id) FILTER (WHERE d.four_eyes_status IN ('pending', 'pending_baseline', 'pending_approval', 'unknown')) AS pending_verification,
               COUNT(DISTINCT dgl.deployment_id) AS linked_to_goal
        FROM team_apps ta
@@ -210,7 +210,7 @@ export async function getDevTeamSummaryStats(
        SELECT d.monitored_app_id,
               COUNT(d.id) AS total_deployments,
               COUNT(d.id) FILTER (WHERE d.four_eyes_status IN (${APPROVED_STATUSES_SQL})) AS with_four_eyes,
-              COUNT(d.id) FILTER (WHERE d.four_eyes_status IN ('direct_push', 'unverified_commits', 'approved_pr_with_unreviewed', 'unauthorized_repository', 'unauthorized_branch')) AS without_four_eyes,
+              COUNT(d.id) FILTER (WHERE d.four_eyes_status IN ('direct_push', 'unverified_commits', 'approved_pr_with_unreviewed', 'unauthorized_repository', 'unauthorized_branch', 'legacy', 'legacy_pending', 'error', 'repository_mismatch')) AS without_four_eyes,
               COUNT(d.id) FILTER (WHERE d.four_eyes_status IN ('pending', 'pending_baseline', 'pending_approval', 'unknown')) AS pending_verification,
               COUNT(DISTINCT dgl.deployment_id) AS linked_to_goal
        FROM team_apps ta
@@ -441,7 +441,7 @@ export async function getDevTeamStatsBatch(
        SELECT ta.dev_team_id,
               COUNT(DISTINCT d.id)::int AS total_deployments,
               COUNT(DISTINCT d.id) FILTER (WHERE d.four_eyes_status IN (${APPROVED_STATUSES_SQL}))::int AS with_four_eyes,
-              COUNT(DISTINCT d.id) FILTER (WHERE d.four_eyes_status IN ('direct_push', 'unverified_commits', 'approved_pr_with_unreviewed', 'unauthorized_repository', 'unauthorized_branch'))::int AS without_four_eyes,
+              COUNT(DISTINCT d.id) FILTER (WHERE d.four_eyes_status IN ('direct_push', 'unverified_commits', 'approved_pr_with_unreviewed', 'unauthorized_repository', 'unauthorized_branch', 'legacy', 'legacy_pending', 'error', 'repository_mismatch'))::int AS without_four_eyes,
               COUNT(DISTINCT d.id) FILTER (WHERE d.four_eyes_status IN ('pending', 'pending_baseline', 'pending_approval', 'unknown'))::int AS pending_verification,
               COUNT(DISTINCT dgl.deployment_id)::int AS linked_to_goal
        FROM team_apps ta

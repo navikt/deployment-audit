@@ -14,18 +14,29 @@ import {
 } from '../four-eyes-status'
 
 describe('status categorization', () => {
-  it('every status belongs to exactly one category', () => {
-    const categories = [APPROVED_STATUSES, NOT_APPROVED_STATUSES, PENDING_STATUSES, LEGACY_STATUSES]
-    // "error" and "repository_mismatch" are intentionally uncategorized
-    const uncategorized = ['error', 'repository_mismatch']
-
+  it('every status belongs to at least one category (approved, not_approved, or pending)', () => {
     for (const status of FOUR_EYES_STATUSES) {
-      const count = categories.filter((cat) => cat.includes(status)).length
-      if (uncategorized.includes(status)) {
-        expect(count, `${status} should be in 0 categories`).toBe(0)
-      } else {
-        expect(count, `${status} should be in exactly 1 category`).toBe(1)
-      }
+      const inApproved = APPROVED_STATUSES.includes(status)
+      const inNotApproved = NOT_APPROVED_STATUSES.includes(status)
+      const inPending = PENDING_STATUSES.includes(status)
+      expect(inApproved || inNotApproved || inPending, `${status} must be in APPROVED, NOT_APPROVED, or PENDING`).toBe(
+        true,
+      )
+    }
+  })
+
+  it('no status appears in more than one primary category', () => {
+    for (const status of FOUR_EYES_STATUSES) {
+      const count = [APPROVED_STATUSES, NOT_APPROVED_STATUSES, PENDING_STATUSES].filter((cat) =>
+        cat.includes(status),
+      ).length
+      expect(count, `${status} should be in exactly 1 primary category`).toBe(1)
+    }
+  })
+
+  it('LEGACY_STATUSES is a subset of NOT_APPROVED_STATUSES', () => {
+    for (const status of LEGACY_STATUSES) {
+      expect(NOT_APPROVED_STATUSES.includes(status), `${status} should be in NOT_APPROVED_STATUSES`).toBe(true)
     }
   })
 })
@@ -47,13 +58,10 @@ describe('isApprovedStatus', () => {
 })
 
 describe('APPROVED_STATUSES completeness', () => {
-  it('every status is categorized or explicitly uncategorized', () => {
-    const categorized = [...APPROVED_STATUSES, ...NOT_APPROVED_STATUSES, ...PENDING_STATUSES, ...LEGACY_STATUSES]
-    const uncategorized = ['error', 'repository_mismatch']
+  it('every status is in approved, not_approved, or pending', () => {
+    const categorized = [...APPROVED_STATUSES, ...NOT_APPROVED_STATUSES, ...PENDING_STATUSES]
     for (const status of FOUR_EYES_STATUSES) {
-      const inCategory = categorized.includes(status)
-      const inUncategorized = uncategorized.includes(status)
-      expect(inCategory || inUncategorized, `${status} must be categorized or explicitly uncategorized`).toBe(true)
+      expect(categorized.includes(status), `${status} must be categorized`).toBe(true)
     }
   })
 })
@@ -65,6 +73,10 @@ describe('isNotApprovedStatus', () => {
     'approved_pr_with_unreviewed',
     'unauthorized_repository',
     'unauthorized_branch',
+    'legacy',
+    'legacy_pending',
+    'error',
+    'repository_mismatch',
   ])('returns true for %s', (status) => {
     expect(isNotApprovedStatus(status)).toBe(true)
   })
