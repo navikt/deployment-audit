@@ -243,8 +243,13 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   // Build dropdown options for the team filter:
   // 1. "Mine team" (if user has dev-team preferences)
   // 2. Teams owning the app + teams with contributing members (deployer/PR creator/merger)
-  const allContributors = allContributorsResult.rows.map((r: any) => r.username as string)
-  const contributingTeams = await getDevTeamsForGithubUsernames(allContributors)
+  const allContributors = [...new Set(allContributorsResult.rows.map((r: any) => r.username as string))]
+  let contributingTeams: Array<{ id: number; slug: string; name: string }> = []
+  try {
+    contributingTeams = await getDevTeamsForGithubUsernames(allContributors)
+  } catch {
+    // user_dev_team_preference table may not exist yet — fall back to owning teams only
+  }
 
   const teamOptions: { value: string; label: string }[] = []
   if (userDevTeams.length > 0) {
