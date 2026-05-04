@@ -27,6 +27,7 @@ export const FOUR_EYES_STATUSES = [
   'direct_push', // Direct push to main without PR
   'legacy', // Legacy deployment (before audit)
   'legacy_pending', // Legacy awaiting review
+  'baseline', // First deployment baseline (manually approved)
   'repository_mismatch', // Repository doesn't match monitored app
   'unauthorized_repository', // Repository not approved for this app
   'unauthorized_branch', // Deployed commit not on approved branch
@@ -49,6 +50,7 @@ export const APPROVED_STATUSES: FourEyesStatus[] = [
   'implicitly_approved',
   'manually_approved',
   'no_changes',
+  'baseline',
 ]
 
 /**
@@ -100,6 +102,17 @@ export function notApprovedWhereClause(column: string): string {
  */
 export const LEGACY_STATUSES: FourEyesStatus[] = ['legacy', 'legacy_pending']
 
+/**
+ * Statuses protected from re-verification overwrite.
+ * These represent explicit admin decisions that automated verification must not change.
+ */
+const PROTECTED_STATUSES: FourEyesStatus[] = ['manually_approved', 'baseline', 'legacy']
+
+/**
+ * SQL fragment for filtering protected statuses.
+ */
+export const PROTECTED_STATUSES_SQL = PROTECTED_STATUSES.map((s) => `'${s}'`).join(', ')
+
 // =============================================================================
 // Human-Readable Labels
 // =============================================================================
@@ -118,6 +131,7 @@ export const FOUR_EYES_STATUS_LABELS: Record<FourEyesStatus, string> = {
   direct_push: 'Direkte push',
   legacy: 'Legacy',
   legacy_pending: 'Legacy (venter)',
+  baseline: 'Baseline',
   repository_mismatch: 'Repository mismatch',
   unauthorized_repository: 'Ikke godkjent repo',
   unauthorized_branch: 'Ikke på godkjent branch',
@@ -155,6 +169,14 @@ export function isLegacyStatus(status: string): boolean {
  */
 export function isPendingStatus(status: string): boolean {
   return PENDING_STATUSES.includes(status as FourEyesStatus)
+}
+
+/**
+ * Check if a status is protected from re-verification overwrite.
+ * Protected statuses represent explicit admin decisions.
+ */
+export function isProtectedStatus(status: string): boolean {
+  return PROTECTED_STATUSES.includes(status as FourEyesStatus)
 }
 
 /**

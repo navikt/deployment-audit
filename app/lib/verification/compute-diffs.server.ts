@@ -16,6 +16,7 @@ import {
   getPreviousDeploymentForDiff,
   getPrSnapshotsForDiff,
 } from '~/db/verification-diff.server'
+import { isProtectedStatus } from '~/lib/four-eyes-status'
 import { logger } from '~/lib/logger.server'
 import { buildCommitsBetweenFromCache, fetchVerificationData } from './fetch-data.server'
 import type { CompareData, PrCommit, PrMetadata, PrReview, VerificationInput } from './types'
@@ -71,9 +72,8 @@ export async function computeVerificationDiffs(
 
   for (const row of deployments) {
     try {
-      // Skip manually approved or baseline-approved — both are explicit admin
-      // actions that V2 cannot reproduce automatically.
-      if (row.four_eyes_status === 'manually_approved' || row.four_eyes_status === 'baseline') {
+      // Skip protected statuses — explicit admin actions that V2 cannot reproduce.
+      if (isProtectedStatus(row.four_eyes_status ?? '')) {
         result.skipped++
         result.deploymentsChecked++
         continue
