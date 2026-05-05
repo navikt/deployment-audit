@@ -614,9 +614,10 @@ export async function action({ request, params }: { request: Request; params: Re
     const keyResultId = formData.get('key_result_id') ? Number(formData.get('key_result_id')) : undefined
     const externalUrl = (formData.get('external_url') as string)?.trim() || undefined
     const externalUrlTitle = (formData.get('external_url_title') as string)?.trim() || undefined
+    const comment = (formData.get('comment') as string)?.trim() || undefined
 
-    if (!objectiveId && !keyResultId && !externalUrl) {
-      return { error: 'Velg et mål, nøkkelresultat, eller legg til en ekstern lenke.' }
+    if (!objectiveId && !keyResultId) {
+      return { error: 'Velg et mål eller nøkkelresultat.' }
     }
 
     try {
@@ -626,6 +627,7 @@ export async function action({ request, params }: { request: Request; params: Re
         key_result_id: keyResultId,
         external_url: externalUrl,
         external_url_title: externalUrlTitle,
+        comment,
         link_method: 'manual',
         linked_by: identity?.navIdent,
       })

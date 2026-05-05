@@ -10,6 +10,7 @@ export interface DeploymentGoalLink {
   key_result_id: number | null
   external_url: string | null
   external_url_title: string | null
+  comment: string | null
   link_method: 'manual' | 'slack' | 'commit_keyword' | 'pr_title'
   linked_by: string | null
   is_active: boolean
@@ -87,9 +88,14 @@ export async function addDeploymentGoalLink(data: {
   key_result_id?: number
   external_url?: string
   external_url_title?: string
+  comment?: string
   link_method: DeploymentGoalLink['link_method']
   linked_by?: string
 }): Promise<DeploymentGoalLink> {
+  if (!data.objective_id && !data.key_result_id) {
+    throw new Error('Må angi objective_id eller key_result_id.')
+  }
+
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
@@ -126,10 +132,8 @@ export async function addDeploymentGoalLink(data: {
       }
     }
 
-    const hasGoalId = data.objective_id != null || data.key_result_id != null
-    const insertSql = hasGoalId
-      ? `INSERT INTO deployment_goal_links (deployment_id, objective_id, key_result_id, external_url, external_url_title, link_method, linked_by)
-         SELECT $1, $2, $3, $4, $5, $6, $7
+    const insertSql = `INSERT INTO deployment_goal_links (deployment_id, objective_id, key_result_id, external_url, external_url_title, comment, link_method, linked_by)
+         SELECT $1, $2, $3, $4, $5, $6, $7, $8
          WHERE NOT EXISTS (
            SELECT 1 FROM deployment_goal_links
            WHERE deployment_id = $1
@@ -138,8 +142,6 @@ export async function addDeploymentGoalLink(data: {
              AND is_active = true
          )
          RETURNING *`
-      : `INSERT INTO deployment_goal_links (deployment_id, objective_id, key_result_id, external_url, external_url_title, link_method, linked_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`
 
     const result = await client.query(insertSql, [
       data.deployment_id,
@@ -147,10 +149,11 @@ export async function addDeploymentGoalLink(data: {
       data.key_result_id ?? null,
       data.external_url ?? null,
       data.external_url_title ?? null,
+      data.comment ?? null,
       data.link_method,
       data.linked_by ?? null,
     ])
-    if (hasGoalId && result.rowCount === 0) {
+    if (result.rowCount === 0) {
       await client.query('ROLLBACK')
       throw new Error('Koblingen finnes allerede.')
     }
@@ -203,7 +206,7 @@ export async function getUnlinkedDependabotDeploymentIds(
   let whereSql = `WHERE ${userDeploymentMatchSql(1)}
     AND LOWER(d.github_pr_data->'creator'->>'username') = 'dependabot[bot]'
     AND ${AUDIT_START_YEAR_FILTER}
-    AND NOT EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = d.id AND dgl.is_active = true)`
+    AND NOT EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = d.id AND dgl.is_active = true AND (dgl.objective_id IS NOT NULL OR dgl.key_result_id IS NOT NULL))`
   const params: (string | Date)[] = [deployerUsername]
   let idx = 2
 
@@ -241,8 +244,12 @@ export async function bulkAddDeploymentGoalLinks(
   deploymentIds: number[],
   goal: { objective_id?: number; key_result_id?: number },
   linkedBy?: string,
+  options?: { external_url?: string; comment?: string },
 ): Promise<number> {
   if (deploymentIds.length === 0) return 0
+  if (!goal.objective_id && !goal.key_result_id) {
+    throw new Error('Må angi objective_id eller key_result_id.')
+  }
 
   const client = await pool.connect()
   try {
@@ -283,11 +290,18 @@ export async function bulkAddDeploymentGoalLinks(
     let linked = 0
     for (const deploymentId of deploymentIds) {
       const result = await client.query(
-        `INSERT INTO deployment_goal_links (deployment_id, objective_id, key_result_id, link_method, linked_by)
-         VALUES ($1, $2, $3, 'manual', $4)
+        `INSERT INTO deployment_goal_links (deployment_id, objective_id, key_result_id, link_method, linked_by, external_url, comment)
+         VALUES ($1, $2, $3, 'manual', $4, $5, $6)
          ON CONFLICT DO NOTHING
          RETURNING id`,
-        [deploymentId, goal.objective_id ?? null, goal.key_result_id ?? null, linkedBy ?? null],
+        [
+          deploymentId,
+          goal.objective_id ?? null,
+          goal.key_result_id ?? null,
+          linkedBy ?? null,
+          options?.external_url ?? null,
+          options?.comment ?? null,
+        ],
       )
       if (result.rowCount && result.rowCount > 0) linked++
     }
@@ -321,6 +335,7 @@ export async function getOriginOfChangeCoverage(
        FROM deployments d
        JOIN monitored_applications ma ON d.monitored_app_id = ma.id
        LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id AND dgl.is_active = true
+         AND (dgl.objective_id IS NOT NULL OR dgl.key_result_id IS NOT NULL)
        WHERE d.monitored_app_id IN (${placeholders})
          AND d.created_at >= $${directAppIds.length + 1}
          AND d.created_at < $${directAppIds.length + 2}
@@ -340,6 +355,7 @@ export async function getOriginOfChangeCoverage(
      FROM deployments d
      JOIN monitored_applications ma ON d.monitored_app_id = ma.id
      LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id AND dgl.is_active = true
+       AND (dgl.objective_id IS NOT NULL OR dgl.key_result_id IS NOT NULL)
      WHERE d.team_slug IN (${placeholders})
        AND d.created_at >= $${naisTeamSlugs.length + 1}
        AND d.created_at < $${naisTeamSlugs.length + 2}
@@ -383,6 +399,7 @@ export async function getDevTeamCoverageStats(
        COUNT(*) FILTER (WHERE EXISTS (
          SELECT 1 FROM deployment_goal_links dgl
          WHERE dgl.deployment_id = d.id AND dgl.is_active = true
+           AND (dgl.objective_id IS NOT NULL OR dgl.key_result_id IS NOT NULL)
        )) AS with_origin
      FROM deployments d
      JOIN monitored_applications ma ON d.monitored_app_id = ma.id

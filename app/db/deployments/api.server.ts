@@ -39,6 +39,7 @@ export async function getAppChangeOriginCoverage(
       )::int AS linked
     FROM deployments d
     LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id AND dgl.is_active = true
+      AND (dgl.objective_id IS NOT NULL OR dgl.key_result_id IS NOT NULL)
     WHERE d.monitored_app_id = $1
       AND d.created_at >= $2
       AND d.created_at <= $3`
@@ -82,6 +83,7 @@ export async function getLastDeploymentSummary(monitoredAppId: number): Promise<
       d.four_eyes_status,
       EXISTS (
         SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = d.id AND dgl.is_active = true
+          AND (dgl.objective_id IS NOT NULL OR dgl.key_result_id IS NOT NULL)
       ) AS has_change_origin
     FROM deployments d
     WHERE d.monitored_app_id = $1

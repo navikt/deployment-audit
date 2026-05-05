@@ -1,10 +1,10 @@
 import { LinkIcon, PlusIcon, TrashIcon } from '@navikt/aksel-icons'
-import { BodyShort, Box, Button, Heading, HStack, Select, Tabs, Tag, TextField, VStack } from '@navikt/ds-react'
+import { BodyShort, Box, Button, Heading, HStack, Tabs, Tag, VStack } from '@navikt/ds-react'
 import { useState } from 'react'
 import { Form } from 'react-router'
 import type { DeploymentGoalLinkWithDetails } from '~/db/deployment-goal-links.server'
-import { formatBoardLabel } from '~/lib/board-periods'
 import { ExternalLink } from './ExternalLink'
+import { type GoalSelectionBoard, GoalSelectionFields } from './GoalSelectionFields'
 
 const LINK_METHOD_LABELS: Record<string, string> = {
   manual: 'Manuell',
@@ -13,16 +13,7 @@ const LINK_METHOD_LABELS: Record<string, string> = {
   pr_title: 'PR-tittel',
 }
 
-interface AvailableBoard {
-  id: number
-  period_label: string
-  dev_team_name?: string
-  objectives: Array<{
-    id: number
-    title: string
-    key_results: Array<{ id: number; title: string }>
-  }>
-}
+export type AvailableBoard = GoalSelectionBoard
 
 interface GoalLinksSectionProps {
   goalLinks: DeploymentGoalLinkWithDetails[]
@@ -51,7 +42,7 @@ export function GoalLinksSection({ goalLinks, availableBoards = [], sectionBoard
 
       {goalLinks.length === 0 && !showAddLink && (
         <BodyShort textColor="subtle" style={{ fontStyle: 'italic' }}>
-          Ingen kobling til mål eller ekstern referanse.
+          Ingen kobling til mål.
         </BodyShort>
       )}
 
@@ -84,6 +75,7 @@ function GoalLinkItem({ link }: { link: DeploymentGoalLinkWithDetails }) {
   const isGoalInactive = link.objective_is_active === false || link.key_result_is_active === false
   const isLinkRemoved = link.is_active === false
   const isInactive = isGoalInactive || isLinkRemoved
+  const isExternalOnly = link.objective_id == null && link.key_result_id == null
 
   return (
     <Box padding="space-12" borderRadius="8" background="sunken">
@@ -91,10 +83,18 @@ function GoalLinkItem({ link }: { link: DeploymentGoalLinkWithDetails }) {
         <HStack gap="space-8" align="center" wrap>
           <LinkIcon aria-hidden />
           <div>
-            {link.external_url ? (
+            {link.external_url && !link.objective_title ? (
               <ExternalLink href={link.external_url}>{label}</ExternalLink>
             ) : (
               <BodyShort weight="semibold">{label}</BodyShort>
+            )}
+            {link.external_url && link.objective_title && (
+              <ExternalLink href={link.external_url}>{link.external_url_title || link.external_url}</ExternalLink>
+            )}
+            {link.comment && (
+              <BodyShort size="small" textColor="subtle">
+                {link.comment}
+              </BodyShort>
             )}
             <HStack gap="space-4">
               {link.board_period_label && (
@@ -105,6 +105,11 @@ function GoalLinkItem({ link }: { link: DeploymentGoalLinkWithDetails }) {
               <Tag variant={link.link_method === 'commit_keyword' ? 'alt3' : 'info'} size="xsmall">
                 {LINK_METHOD_LABELS[link.link_method] ?? link.link_method}
               </Tag>
+              {isExternalOnly && (
+                <Tag variant="warning" size="xsmall">
+                  Kun ekstern lenke
+                </Tag>
+              )}
               {isLinkRemoved && (
                 <Tag variant="neutral" size="xsmall">
                   Fjernet
@@ -143,87 +148,22 @@ function AddGoalLinkForm({
   availableBoards: AvailableBoard[]
   sectionBoards: AvailableBoard[]
 }) {
-  const [selectedBoardId, setSelectedBoardId] = useState('')
-  const [selectedObjectiveId, setSelectedObjectiveId] = useState('')
-  const [selectedKeyResultId, setSelectedKeyResultId] = useState('')
-
-  const allBoards = [...availableBoards, ...sectionBoards]
-  const selectedBoard = allBoards.find((b) => String(b.id) === selectedBoardId)
-  const selectedObjective = selectedBoard?.objectives.find((o) => String(o.id) === selectedObjectiveId)
+  const [hasObjective, setHasObjective] = useState(false)
 
   const hasBoards = availableBoards.length > 0
   const hasSectionBoards = sectionBoards.length > 0
 
-  const resetSelections = () => {
-    setSelectedBoardId('')
-    setSelectedObjectiveId('')
-    setSelectedKeyResultId('')
-  }
-
   const goalForm = (boards: AvailableBoard[]) => (
     <Form method="post" onSubmit={onCancel}>
       <input type="hidden" name="intent" value="link_goal" />
-      {selectedObjectiveId && <input type="hidden" name="objective_id" value={selectedObjectiveId} />}
-      {selectedKeyResultId && <input type="hidden" name="key_result_id" value={selectedKeyResultId} />}
       <VStack gap="space-12" paddingBlock="space-16 space-0">
-        <Select
-          label="Tavle"
-          size="small"
-          value={selectedBoardId}
-          onChange={(e) => {
-            setSelectedBoardId(e.target.value)
-            setSelectedObjectiveId('')
-            setSelectedKeyResultId('')
-          }}
-        >
-          <option value="">Velg tavle…</option>
-          {boards.map((board) => (
-            <option key={board.id} value={board.id}>
-              {formatBoardLabel({ teamName: board.dev_team_name ?? '', periodLabel: board.period_label })}
-            </option>
-          ))}
-        </Select>
-
-        {selectedBoard && (
-          <Select
-            label="Mål"
-            size="small"
-            value={selectedObjectiveId}
-            onChange={(e) => {
-              setSelectedObjectiveId(e.target.value)
-              setSelectedKeyResultId('')
-            }}
-          >
-            <option value="">Velg mål…</option>
-            {selectedBoard.objectives.map((obj) => (
-              <option key={obj.id} value={obj.id}>
-                {obj.title}
-              </option>
-            ))}
-          </Select>
-        )}
-
-        {selectedObjective && selectedObjective.key_results.length > 0 && (
-          <Select
-            label="Nøkkelresultat (valgfritt)"
-            size="small"
-            value={selectedKeyResultId}
-            onChange={(e) => setSelectedKeyResultId(e.target.value)}
-          >
-            <option value="">Kun mål (ingen nøkkelresultat)</option>
-            {selectedObjective.key_results.map((kr) => (
-              <option key={kr.id} value={kr.id}>
-                {kr.title}
-              </option>
-            ))}
-          </Select>
-        )}
+        <GoalSelectionFields boards={boards} onObjectiveChange={(id) => setHasObjective(!!id)} />
 
         <HStack gap="space-8" justify="end">
           <Button variant="tertiary" size="small" onClick={onCancel}>
             Avbryt
           </Button>
-          <Button type="submit" size="small" disabled={!selectedObjectiveId}>
+          <Button type="submit" size="small" disabled={!hasObjective}>
             Legg til
           </Button>
         </HStack>
@@ -231,48 +171,33 @@ function AddGoalLinkForm({
     </Form>
   )
 
+  if (!hasBoards && !hasSectionBoards) {
+    return (
+      <Box padding="space-16" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
+        <BodyShort textColor="subtle">Ingen tilgjengelige måltavler å koble til.</BodyShort>
+      </Box>
+    )
+  }
+
+  if (hasBoards && !hasSectionBoards) {
+    return (
+      <Box padding="space-16" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
+        {goalForm(availableBoards)}
+      </Box>
+    )
+  }
+
   return (
     <Box padding="space-16" borderRadius="8" background="raised" borderColor="neutral-subtle" borderWidth="1">
-      <Tabs
-        defaultValue={hasBoards ? 'goal' : hasSectionBoards ? 'section' : 'external'}
-        size="small"
-        onChange={resetSelections}
-      >
+      <Tabs defaultValue={hasBoards ? 'goal' : 'section'} size="small">
         <Tabs.List>
           {hasBoards && <Tabs.Tab value="goal" label="Mål / nøkkelresultat" />}
           {hasSectionBoards && <Tabs.Tab value="section" label="Andre team i seksjonen" />}
-          <Tabs.Tab value="external" label="Ekstern referanse" />
         </Tabs.List>
 
         {hasBoards && <Tabs.Panel value="goal">{goalForm(availableBoards)}</Tabs.Panel>}
 
         {hasSectionBoards && <Tabs.Panel value="section">{goalForm(sectionBoards)}</Tabs.Panel>}
-
-        <Tabs.Panel value="external">
-          <Form method="post" onSubmit={onCancel}>
-            <input type="hidden" name="intent" value="link_goal" />
-            <VStack gap="space-12" paddingBlock="space-16 space-0">
-              <HStack gap="space-12" wrap>
-                <TextField
-                  label="URL"
-                  name="external_url"
-                  size="small"
-                  autoComplete="off"
-                  style={{ minWidth: '300px' }}
-                />
-                <TextField label="Tittel (valgfritt)" name="external_url_title" size="small" autoComplete="off" />
-              </HStack>
-              <HStack gap="space-8" justify="end">
-                <Button variant="tertiary" size="small" onClick={onCancel}>
-                  Avbryt
-                </Button>
-                <Button type="submit" size="small">
-                  Legg til
-                </Button>
-              </HStack>
-            </VStack>
-          </Form>
-        </Tabs.Panel>
       </Tabs>
     </Box>
   )

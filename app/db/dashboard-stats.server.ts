@@ -80,6 +80,7 @@ export async function getSectionOverallStats(
      JOIN monitored_applications ma ON ma.id = d.monitored_app_id
        AND ${AUDIT_START_YEAR_FILTER}
      LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id AND dgl.is_active = true
+         AND (dgl.objective_id IS NOT NULL OR dgl.key_result_id IS NOT NULL)
      WHERE st.section_id = $1 AND st.deleted_at IS NULL`,
     [sectionId, startDate ?? null, endDate ?? null],
   )
@@ -144,6 +145,7 @@ export async function getSectionDashboardStats(
            AND ${AUDIT_START_YEAR_FILTER}
        ) d ON true
        LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id AND dgl.is_active = true
+         AND (dgl.objective_id IS NOT NULL OR dgl.key_result_id IS NOT NULL)
        GROUP BY ta.dev_team_id
      )
      SELECT ta.dev_team_id, ta.dev_team_name, ta.dev_team_slug,
@@ -216,6 +218,7 @@ export async function getDevTeamSummaryStats(
          AND ($3::timestamptz IS NULL OR d.created_at >= $3)
          AND (ta.audit_start_year IS NULL OR d.created_at >= make_date(ta.audit_start_year, 1, 1))${deployerFilterClause}
        LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id AND dgl.is_active = true
+         AND (dgl.objective_id IS NOT NULL OR dgl.key_result_id IS NOT NULL)
        GROUP BY d.monitored_app_id
      ),
      app_alerts AS (
@@ -450,6 +453,7 @@ export async function getDevTeamStatsBatch(
          AND (LOWER(d.deployer_username) = tm.github_username
               OR LOWER(d.github_pr_data->'creator'->>'username') = tm.github_username)
        LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id AND dgl.is_active = true
+         AND (dgl.objective_id IS NOT NULL OR dgl.key_result_id IS NOT NULL)
        GROUP BY ta.dev_team_id
      )
      SELECT ta_distinct.dev_team_id, ta_distinct.dev_team_name, ta_distinct.dev_team_slug,
