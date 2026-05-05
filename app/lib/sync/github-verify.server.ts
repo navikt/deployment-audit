@@ -185,13 +185,17 @@ async function verifySingleDeployment(
 
 /**
  * Extract commit messages and dates from a deployment for keyword matching.
- * Uses PR title + unverified_commits JSONB data.
+ * Uses PR title + unverified_commits JSONB data + github_pr_data commits.
+ * Handles both raw GitHub API format ({ commit: { message } }) and stored format ({ message }).
  */
-function extractCommitInfos(deployment: {
+export function extractCommitInfos(deployment: {
   title?: string | null
   created_at: string | Date
   unverified_commits?: Array<{ message?: string; date?: string }> | null
-  github_pr_data?: { title?: string; commits?: Array<{ commit?: { message?: string }; sha?: string }> } | null
+  github_pr_data?: {
+    title?: string
+    commits?: Array<{ commit?: { message?: string }; message?: string; sha?: string; date?: string }>
+  } | null
 }): Array<{ message: string; date: Date }> {
   const infos: Array<{ message: string; date: Date }> = []
   const deployDate = new Date(deployment.created_at)
@@ -210,11 +214,12 @@ function extractCommitInfos(deployment: {
     }
   }
 
-  // Include PR commits from github_pr_data
+  // Include PR commits from github_pr_data (handles both stored and raw API format)
   if (deployment.github_pr_data?.commits) {
     for (const c of deployment.github_pr_data.commits) {
-      if (c.commit?.message) {
-        infos.push({ message: c.commit.message, date: deployDate })
+      const message = c.message ?? c.commit?.message
+      if (message) {
+        infos.push({ message, date: c.date ? new Date(c.date) : deployDate })
       }
     }
   }

@@ -1,7 +1,8 @@
 import { pool } from '~/db/connection.server'
 import { addDeploymentGoalLink } from '~/db/deployment-goal-links.server'
-import { type BoardKeywordSource, type CommitInfo, matchCommitKeywords } from '~/lib/goal-keyword-matcher'
+import { type CommitInfo, matchCommitKeywords } from '~/lib/goal-keyword-matcher'
 import { logger } from '~/lib/logger.server'
+import { findDevTeamsForDeployment, loadBoardKeywords } from './goal-keyword-helpers.server'
 
 /**
  * Auto-link a deployment to board goals based on commit message keywords.
@@ -19,75 +20,12 @@ export async function autoLinkGoalKeywords(
 ): Promise<number> {
   if (commitMessages.length === 0) return 0
 
-  // Find dev teams linked to this deployment through any ownership path:
-  // 1. Nais team mapping (dev_team_nais_teams)
-  // 2. Direct app ownership (dev_team_applications)
-  // 3. Application group ownership (dev_team_application_groups)
-  const devTeamResult = await pool.query(
-    `SELECT dt.id FROM dev_teams dt
-     JOIN dev_team_nais_teams dtn ON dtn.dev_team_id = dt.id
-     WHERE dtn.nais_team_slug = $1 AND dtn.deleted_at IS NULL AND dt.is_active = true
-     UNION
-     SELECT dt.id FROM dev_teams dt
-     JOIN dev_team_applications dta ON dta.dev_team_id = dt.id
-     WHERE dta.monitored_app_id = $2 AND dta.deleted_at IS NULL AND dt.is_active = true
-     UNION
-     SELECT dt.id FROM dev_teams dt
-     JOIN dev_team_application_groups dtag ON dtag.dev_team_id = dt.id
-     JOIN monitored_applications ma ON ma.application_group_id = dtag.application_group_id
-     WHERE ma.id = $2 AND dtag.deleted_at IS NULL AND dt.is_active = true`,
-    [teamSlug, monitoredAppId],
-  )
+  const devTeams = await findDevTeamsForDeployment(teamSlug, monitoredAppId)
+  if (devTeams.length === 0) return 0
+  const devTeamIds = devTeams.map((r) => r.id)
 
-  if (devTeamResult.rows.length === 0) return 0
-  const devTeamIds = devTeamResult.rows.map((r: { id: number }) => r.id)
-
-  // Load all board keywords for these dev teams (active boards only)
-  const keywordsResult = await pool.query(
-    `SELECT
-       b.id AS board_id,
-       b.period_start,
-       b.period_end,
-       bo.id AS objective_id,
-       NULL::int AS key_result_id,
-       unnest(bo.keywords) AS keyword
-     FROM boards b
-     JOIN board_objectives bo ON bo.board_id = b.id
-     WHERE b.dev_team_id = ANY($1) AND b.is_active = true AND bo.is_active = true AND array_length(bo.keywords, 1) > 0
-     UNION ALL
-     SELECT
-       b.id AS board_id,
-       b.period_start,
-       b.period_end,
-       bo.id AS objective_id,
-       bkr.id AS key_result_id,
-       unnest(bkr.keywords) AS keyword
-     FROM boards b
-     JOIN board_objectives bo ON bo.board_id = b.id
-     JOIN board_key_results bkr ON bkr.objective_id = bo.id
-     WHERE b.dev_team_id = ANY($1) AND b.is_active = true AND bo.is_active = true AND bkr.is_active = true AND array_length(bkr.keywords, 1) > 0`,
-    [devTeamIds],
-  )
-
-  if (keywordsResult.rows.length === 0) return 0
-
-  const boardKeywords: BoardKeywordSource[] = keywordsResult.rows.map(
-    (r: {
-      board_id: number
-      period_start: string
-      period_end: string
-      objective_id: number
-      key_result_id: number | null
-      keyword: string
-    }) => ({
-      boardId: r.board_id,
-      periodStart: new Date(r.period_start),
-      periodEnd: new Date(r.period_end),
-      objectiveId: r.objective_id,
-      keyResultId: r.key_result_id,
-      keyword: r.keyword,
-    }),
-  )
+  const { parsed: boardKeywords } = await loadBoardKeywords(devTeamIds)
+  if (boardKeywords.length === 0) return 0
 
   // Run pure matching logic
   const matches = matchCommitKeywords(commitMessages, boardKeywords)
