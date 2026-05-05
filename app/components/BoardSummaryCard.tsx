@@ -64,26 +64,28 @@ export function BoardSummaryCard({
               {totalDeployments} leveranser koblet
             </Tag>
           </HStack>
-          {board.objectives.length > 0 ? (
-            <VStack gap="space-8">
-              {board.objectives.map((obj) => (
-                <HStack key={obj.objective_id} gap="space-8" align="start">
-                  <BodyShort size="small" style={{ flex: 1 }}>
-                    {obj.objective_title}
-                  </BodyShort>
-                  <Tag
-                    variant="moderate"
-                    size="xsmall"
-                    data-color={obj.total_linked_deployments > 0 ? 'success' : 'neutral'}
-                  >
-                    {obj.total_linked_deployments}
-                  </Tag>
-                </HStack>
-              ))}
-            </VStack>
-          ) : (
-            <Detail textColor="subtle">Ingen mål er lagt til ennå.</Detail>
-          )}
+          {linkedDeploymentCount == null ? (
+            board.objectives.length > 0 ? (
+              <VStack gap="space-8">
+                {board.objectives.map((obj) => (
+                  <HStack key={obj.objective_id} gap="space-8" align="start">
+                    <BodyShort size="small" style={{ flex: 1 }}>
+                      {obj.objective_title}
+                    </BodyShort>
+                    <Tag
+                      variant="moderate"
+                      size="xsmall"
+                      data-color={obj.total_linked_deployments > 0 ? 'success' : 'neutral'}
+                    >
+                      {obj.total_linked_deployments}
+                    </Tag>
+                  </HStack>
+                ))}
+              </VStack>
+            ) : (
+              <Detail textColor="subtle">Ingen mål er lagt til ennå.</Detail>
+            )
+          ) : null}
         </VStack>
       </LinkCard.Description>
     </LinkCard>
