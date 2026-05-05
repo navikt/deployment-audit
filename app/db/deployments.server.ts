@@ -372,7 +372,7 @@ export async function getDeploymentsPaginated(filters?: DeploymentFilters): Prom
     paramIndex++
   } else if (needsGoalJoin) {
     goalJoinSql =
-      'LEFT JOIN (SELECT DISTINCT deployment_id FROM deployment_goal_links WHERE is_active = true) dgl ON dgl.deployment_id = d.id'
+      'LEFT JOIN (SELECT DISTINCT deployment_id FROM deployment_goal_links WHERE is_active = true AND (objective_id IS NOT NULL OR key_result_id IS NOT NULL)) dgl ON dgl.deployment_id = d.id'
   }
 
   if (filters?.goal_filter === 'missing') {
@@ -405,7 +405,7 @@ export async function getDeploymentsPaginated(filters?: DeploymentFilters): Prom
       ma.environment_name,
       ma.app_name,
       ma.default_branch,
-      EXISTS (SELECT 1 FROM deployment_goal_links WHERE deployment_id = d.id AND is_active = true) AS has_goal_link
+      EXISTS (SELECT 1 FROM deployment_goal_links WHERE deployment_id = d.id AND is_active = true AND (objective_id IS NOT NULL OR key_result_id IS NOT NULL)) AS has_goal_link
     FROM deployments d
     JOIN monitored_applications ma ON d.monitored_app_id = ma.id
     LEFT JOIN commits c ON c.sha = d.commit_sha
@@ -970,7 +970,7 @@ export async function getDeployerMonthlyStats(
        )::int AS with_goal_non_dep
      FROM deployments d
      JOIN monitored_applications ma ON d.monitored_app_id = ma.id
-     LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id AND dgl.is_active = true
+     LEFT JOIN deployment_goal_links dgl ON dgl.deployment_id = d.id AND dgl.is_active = true AND (dgl.objective_id IS NOT NULL OR dgl.key_result_id IS NOT NULL)
      ${whereSql}
      GROUP BY DATE_TRUNC('month', d.created_at)
      ORDER BY month`,
@@ -1042,10 +1042,10 @@ export async function getDeployerDeploymentsPaginated(
 
   if (filters?.goal === 'with_goal') {
     whereSql +=
-      ' AND EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = d.id AND dgl.is_active = true)'
+      ' AND EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = d.id AND dgl.is_active = true AND (dgl.objective_id IS NOT NULL OR dgl.key_result_id IS NOT NULL))'
   } else if (filters?.goal === 'without_goal') {
     whereSql +=
-      ' AND NOT EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = d.id AND dgl.is_active = true)'
+      ' AND NOT EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = d.id AND dgl.is_active = true AND (dgl.objective_id IS NOT NULL OR dgl.key_result_id IS NOT NULL))'
   }
 
   if (filters?.dependabot === 'only') {
@@ -1083,7 +1083,7 @@ export async function getDeployerDeploymentsPaginated(
          ma.team_slug,
          ma.environment_name,
          ma.app_name,
-         EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = d.id AND dgl.is_active = true) AS has_goal_link,
+         EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = d.id AND dgl.is_active = true AND (dgl.objective_id IS NOT NULL OR dgl.key_result_id IS NOT NULL)) AS has_goal_link,
          LOWER(d.github_pr_data->'creator'->>'username') = 'dependabot[bot]' AS is_dependabot
        FROM deployments d
        JOIN monitored_applications ma ON d.monitored_app_id = ma.id

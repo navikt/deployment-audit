@@ -107,7 +107,7 @@ export async function getAppDeploymentStatsBatch(
       COUNT(*) FILTER (WHERE TRUE${deployerFilterClause}) as total,
       COUNT(*) FILTER (WHERE COALESCE(four_eyes_status, 'unknown') = ANY($2::text[])${deployerFilterClause}) as with_four_eyes,
       COUNT(*) FILTER (WHERE COALESCE(four_eyes_status, 'unknown') = ANY($3::text[])${deployerFilterClause}) as pending_verification,
-      COUNT(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = deployments.id AND dgl.is_active = true)${deployerFilterClause}) as missing_goal_links,
+      COUNT(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM deployment_goal_links dgl WHERE dgl.deployment_id = deployments.id AND dgl.is_active = true AND (dgl.objective_id IS NOT NULL OR dgl.key_result_id IS NOT NULL))${deployerFilterClause}) as missing_goal_links,
       MAX(created_at) as last_deployment
     FROM deployments
     WHERE monitored_app_id = ANY($1) ${auditYearFilter}${dateFilter}
