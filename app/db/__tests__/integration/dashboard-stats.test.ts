@@ -5,7 +5,12 @@
 
 import { Pool } from 'pg'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { getBoardObjectiveProgress, getDevTeamStatsBatch, getDevTeamSummaryStats } from '../../dashboard-stats.server'
+import {
+  getBoardObjectiveProgress,
+  getContributedBoards,
+  getDevTeamStatsBatch,
+  getDevTeamSummaryStats,
+} from '../../dashboard-stats.server'
 import { getAppDeploymentStatsBatch } from '../../deployments/stats.server'
 import { seedApp, seedDevTeam, seedSection, truncateAllTables } from './helpers'
 
@@ -713,5 +718,114 @@ describe('Regression: unrecognized four_eyes_status values sum correctly', () =>
     expect(team?.without_four_eyes).toBe(1)
     const sum = (team?.with_four_eyes ?? 0) + (team?.without_four_eyes ?? 0) + (team?.pending_verification ?? 0)
     expect(sum).toBe(team?.total_deployments)
+  })
+})
+
+describe('getContributedBoards', () => {
+  async function seedBoardWithObjectiveAndKr(
+    devTeamId: number,
+    periodLabel: string,
+  ): Promise<{ boardId: number; objectiveId: number; keyResultId: number }> {
+    const boardId = (
+      await pool.query<{ id: number }>(
+        `INSERT INTO boards (dev_team_id, title, period_type, period_start, period_end, period_label, is_active)
+         VALUES ($1, 'B', 'tertiary', '2026-01-01', '2026-04-30', $2, true) RETURNING id`,
+        [devTeamId, periodLabel],
+      )
+    ).rows[0].id
+    const objectiveId = (
+      await pool.query<{ id: number }>(
+        `INSERT INTO board_objectives (board_id, title, sort_order, is_active)
+         VALUES ($1, 'Obj', 0, true) RETURNING id`,
+        [boardId],
+      )
+    ).rows[0].id
+    const keyResultId = (
+      await pool.query<{ id: number }>(
+        `INSERT INTO board_key_results (objective_id, title, sort_order, is_active)
+         VALUES ($1, 'KR', 0, true) RETURNING id`,
+        [objectiveId],
+      )
+    ).rows[0].id
+    return { boardId, objectiveId, keyResultId }
+  }
+
+  it('returns boards from other teams with objective-linked deployments', async () => {
+    const sectionId = await seedSection(pool, 'sec-contrib')
+    const myTeamId = await seedDevTeam(pool, 'my-team', 'My Team', sectionId)
+    const otherTeamId = await seedDevTeam(pool, 'other-team', 'Other Team', sectionId)
+    const appId = await seedApp(pool, { teamSlug: 'my-team', appName: 'my-app', environment: 'prod' })
+
+    const { objectiveId } = await seedBoardWithObjectiveAndKr(otherTeamId, 'T1 2026')
+    const depId = await seedDeploymentWithStatus(pool, appId, 'my-team', new Date(), 'approved_pr', 'alice')
+    await pool.query(
+      `INSERT INTO deployment_goal_links (deployment_id, objective_id, link_method, is_active)
+       VALUES ($1, $2, 'manual', true)`,
+      [depId, objectiveId],
+    )
+
+    const result = await getContributedBoards(myTeamId, ['alice'])
+    expect(result).toHaveLength(1)
+    expect(result[0].team_name).toBe('Other Team')
+    expect(result[0].linked_deployment_count).toBe(1)
+  })
+
+  it('returns boards with key-result-linked deployments', async () => {
+    const sectionId = await seedSection(pool, 'sec-contrib-kr')
+    const myTeamId = await seedDevTeam(pool, 'my-team-kr', 'My Team', sectionId)
+    const otherTeamId = await seedDevTeam(pool, 'other-team-kr', 'Other Team', sectionId)
+    const appId = await seedApp(pool, { teamSlug: 'my-team-kr', appName: 'my-app', environment: 'prod' })
+
+    const { keyResultId } = await seedBoardWithObjectiveAndKr(otherTeamId, 'T1 2026')
+    const depId = await seedDeploymentWithStatus(pool, appId, 'my-team-kr', new Date(), 'approved_pr', 'bob')
+    await pool.query(
+      `INSERT INTO deployment_goal_links (deployment_id, key_result_id, link_method, is_active)
+       VALUES ($1, $2, 'manual', true)`,
+      [depId, keyResultId],
+    )
+
+    const result = await getContributedBoards(myTeamId, ['bob'])
+    expect(result).toHaveLength(1)
+    expect(result[0].linked_deployment_count).toBe(1)
+  })
+
+  it('excludes boards from the teams own team', async () => {
+    const sectionId = await seedSection(pool, 'sec-contrib-own')
+    const myTeamId = await seedDevTeam(pool, 'my-team-own', 'My Team', sectionId)
+    const appId = await seedApp(pool, { teamSlug: 'my-team-own', appName: 'my-app', environment: 'prod' })
+
+    const { objectiveId } = await seedBoardWithObjectiveAndKr(myTeamId, 'T1 2026')
+    const depId = await seedDeploymentWithStatus(pool, appId, 'my-team-own', new Date(), 'approved_pr', 'charlie')
+    await pool.query(
+      `INSERT INTO deployment_goal_links (deployment_id, objective_id, link_method, is_active)
+       VALUES ($1, $2, 'manual', true)`,
+      [depId, objectiveId],
+    )
+
+    const result = await getContributedBoards(myTeamId, ['charlie'])
+    expect(result).toHaveLength(0)
+  })
+
+  it('filters by deployer username', async () => {
+    const sectionId = await seedSection(pool, 'sec-contrib-filter')
+    const myTeamId = await seedDevTeam(pool, 'my-team-f', 'My Team', sectionId)
+    const otherTeamId = await seedDevTeam(pool, 'other-team-f', 'Other Team', sectionId)
+    const appId = await seedApp(pool, { teamSlug: 'my-team-f', appName: 'my-app', environment: 'prod' })
+
+    const { objectiveId } = await seedBoardWithObjectiveAndKr(otherTeamId, 'T1 2026')
+    const depId = await seedDeploymentWithStatus(pool, appId, 'my-team-f', new Date(), 'approved_pr', 'someone-else')
+    await pool.query(
+      `INSERT INTO deployment_goal_links (deployment_id, objective_id, link_method, is_active)
+       VALUES ($1, $2, 'manual', true)`,
+      [depId, objectiveId],
+    )
+
+    const result = await getContributedBoards(myTeamId, ['alice'])
+    expect(result).toHaveLength(0)
+  })
+
+  it('returns empty for empty deployer list', async () => {
+    const result = await getContributedBoards(1, [])
+    expect(result).toHaveLength(0)
   })
 })

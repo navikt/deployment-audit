@@ -480,3 +480,58 @@ export async function getDevTeamStatsBatch(
   }
   return map
 }
+
+interface ContributedBoard {
+  board_id: number
+  period_label: string
+  period_type: 'tertiary' | 'quarterly'
+  team_name: string
+  team_slug: string
+  section_slug: string
+  linked_deployment_count: number
+}
+
+/**
+ * Find active boards from other teams where the given deployers have
+ * deployments linked via `deployment_goal_links`.
+ */
+export async function getContributedBoards(
+  excludeDevTeamId: number,
+  deployerUsernames: string[],
+): Promise<ContributedBoard[]> {
+  if (deployerUsernames.length === 0) return []
+
+  const result = await pool.query<ContributedBoard>(
+    `SELECT sub.board_id, sub.period_label, sub.period_type,
+            sub.team_name, sub.team_slug, sub.section_slug,
+            COUNT(DISTINCT sub.deployment_id)::int AS linked_deployment_count
+     FROM (
+       SELECT b.id AS board_id, b.period_label, b.period_type,
+              dt.name AS team_name, dt.slug AS team_slug, s.slug AS section_slug,
+              dgl.deployment_id
+       FROM boards b
+       JOIN dev_teams dt ON dt.id = b.dev_team_id
+       JOIN sections s ON s.id = dt.section_id
+       JOIN board_objectives bo ON bo.board_id = b.id AND bo.is_active = true
+       JOIN deployment_goal_links dgl ON dgl.objective_id = bo.id AND dgl.is_active = true
+       JOIN deployments d ON d.id = dgl.deployment_id AND ${userDeploymentMatchAnySql(2, 'd')}
+       WHERE b.is_active = true AND b.dev_team_id != $1
+       UNION
+       SELECT b.id, b.period_label, b.period_type,
+              dt.name, dt.slug, s.slug,
+              dgl.deployment_id
+       FROM boards b
+       JOIN dev_teams dt ON dt.id = b.dev_team_id
+       JOIN sections s ON s.id = dt.section_id
+       JOIN board_objectives bo ON bo.board_id = b.id AND bo.is_active = true
+       JOIN board_key_results bkr ON bkr.objective_id = bo.id AND bkr.is_active = true
+       JOIN deployment_goal_links dgl ON dgl.key_result_id = bkr.id AND dgl.is_active = true
+       JOIN deployments d ON d.id = dgl.deployment_id AND ${userDeploymentMatchAnySql(2, 'd')}
+       WHERE b.is_active = true AND b.dev_team_id != $1
+     ) sub
+     GROUP BY sub.board_id, sub.period_label, sub.period_type, sub.team_name, sub.team_slug, sub.section_slug
+     ORDER BY linked_deployment_count DESC`,
+    [excludeDevTeamId, lowerUsernames(deployerUsernames)],
+  )
+  return result.rows
+}
