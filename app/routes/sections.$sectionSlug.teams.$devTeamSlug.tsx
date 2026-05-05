@@ -107,9 +107,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
   const linkedToGoal = totalDeployments - totalMissingGoalLinks
 
-  // When an active board exists, use its distinct deployment count for "endringsopphav"
-  // since the board covers the same period as YTD. This ensures the top card matches the board.
-  const withOrigin = activeBoardProgress ? activeBoardProgress.totalDistinctDeployments : linkedToGoal
+  // Use linkedToGoal which counts deployments linked to ANY board (own + contributed)
+  const withOrigin = linkedToGoal
   const teamCoverage = {
     total: totalDeployments,
     with_four_eyes: totalWithFourEyes,
