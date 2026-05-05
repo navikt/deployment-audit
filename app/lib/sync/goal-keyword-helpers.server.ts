@@ -54,7 +54,7 @@ export async function loadBoardKeywords(devTeamIds: number[]): Promise<{
   const result = await pool.query(
     `SELECT
        b.id AS board_id,
-       b.name AS board_name,
+       b.title AS board_name,
        b.period_start,
        b.period_end,
        bo.id AS objective_id,
@@ -68,7 +68,7 @@ export async function loadBoardKeywords(devTeamIds: number[]): Promise<{
      UNION ALL
      SELECT
        b.id AS board_id,
-       b.name AS board_name,
+       b.title AS board_name,
        b.period_start,
        b.period_end,
        bo.id AS objective_id,
