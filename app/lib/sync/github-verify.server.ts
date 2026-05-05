@@ -120,11 +120,19 @@ export async function verifyDeploymentsFourEyes(filters?: DeploymentFilters & { 
           if (freshDeployment) {
             const commitInfos = extractCommitInfos(freshDeployment as Parameters<typeof extractCommitInfos>[0])
             if (commitInfos.length > 0) {
-              await autoLinkGoalKeywords(deployment.id, deployment.team_slug, deployment.monitored_app_id, commitInfos)
+              await autoLinkGoalKeywords(
+                freshDeployment.id,
+                freshDeployment.team_slug,
+                freshDeployment.monitored_app_id,
+                commitInfos,
+              )
             }
           }
         } catch (e) {
-          logger.warn(`⚠️  Goal keyword auto-linking failed for deployment ${deployment.id}: ${e}`)
+          logger.warn(`⚠️  Goal keyword auto-linking failed for deployment ${deployment.id}`, {
+            error: e instanceof Error ? e.message : String(e),
+            stack: e instanceof Error ? e.stack : undefined,
+          })
         }
       } else {
         skipped++
