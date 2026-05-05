@@ -439,14 +439,24 @@ export default function DeploymentDetail({ loaderData, actionData }: Route.Compo
         {/* Debug button - only shown in debug mode */}
         <div>
           {isDebugMode && (
-            <Button
-              as={Link}
-              to={`${appUrl}/deployments/${deployment.id}/debug-verify`}
-              variant="tertiary"
-              size="xsmall"
-            >
-              🔬 Debug verifisering
-            </Button>
+            <HStack gap="space-2">
+              <Button
+                as={Link}
+                to={`${appUrl}/deployments/${deployment.id}/debug-verify`}
+                variant="tertiary"
+                size="xsmall"
+              >
+                🔬 Debug verifisering
+              </Button>
+              <Button
+                as={Link}
+                to={`${appUrl}/deployments/${deployment.id}/debug-keywords`}
+                variant="tertiary"
+                size="xsmall"
+              >
+                🔑 Debug nøkkelord
+              </Button>
+            </HStack>
           )}
         </div>
         <HStack gap="space-8">

@@ -187,7 +187,7 @@ async function verifySingleDeployment(
  * Extract commit messages and dates from a deployment for keyword matching.
  * Uses PR title + unverified_commits JSONB data.
  */
-function extractCommitInfos(deployment: {
+export function extractCommitInfos(deployment: {
   title?: string | null
   created_at: string | Date
   unverified_commits?: Array<{ message?: string; date?: string }> | null

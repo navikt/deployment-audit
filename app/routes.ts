@@ -52,6 +52,10 @@ export default [
       'team/:team/env/:env/app/:app/deployments/:deploymentId/debug-verify',
       'routes/team/$team.env.$env.app.$app.deployments.$deploymentId.debug-verify.tsx',
     ),
+    route(
+      'team/:team/env/:env/app/:app/deployments/:deploymentId/debug-keywords',
+      'routes/team/$team.env.$env.app.$app.deployments.$deploymentId.debug-keywords.tsx',
+    ),
     route('deployments/verify', 'routes/deployments/verify.tsx'),
     route('deployments/:id', 'routes/deployments/$id.tsx'),
     route('users/:username', 'routes/users/$username.tsx'),
