@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vite
 // Mock DB modules
 vi.mock('~/db/deployments.server', () => ({
   getAllDeployments: vi.fn(),
+  getDeploymentById: vi.fn(),
   updateDeploymentFourEyes: vi.fn(),
 }))
 
@@ -16,13 +17,21 @@ vi.mock('~/lib/logger.server', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 
-import { getAllDeployments, updateDeploymentFourEyes } from '~/db/deployments.server'
+// Mock goal keyword sync
+vi.mock('~/lib/sync/goal-keyword-sync.server', () => ({
+  autoLinkGoalKeywords: vi.fn(),
+}))
+
+import { getAllDeployments, getDeploymentById, updateDeploymentFourEyes } from '~/db/deployments.server'
 import { verifyDeploymentsFourEyes } from '~/lib/sync/github-verify.server'
+import { autoLinkGoalKeywords } from '~/lib/sync/goal-keyword-sync.server'
 import { runVerification } from '~/lib/verification'
 
 const mockGetAll = getAllDeployments as Mock
+const mockGetById = getDeploymentById as Mock
 const mockUpdateFourEyes = updateDeploymentFourEyes as Mock
 const mockRunVerification = runVerification as Mock
+const mockAutoLink = autoLinkGoalKeywords as Mock
 
 function makeDeployment(overrides: Record<string, unknown> = {}) {
   return {
@@ -205,5 +214,62 @@ describe('verifyDeploymentsFourEyes', () => {
         per_page: 10000,
       }),
     )
+  })
+
+  it('re-reads deployment from DB after verification for keyword auto-linking', async () => {
+    // The original deployment loaded in batch has no title/PR data (simulates stale data)
+    const staleDeployment = makeDeployment({
+      id: 99,
+      team_slug: 'my-team',
+      title: null,
+      github_pr_data: null,
+      unverified_commits: null,
+    })
+
+    // After verification writes to DB, the fresh read has title populated
+    const freshDeployment = {
+      ...staleDeployment,
+      title: 'MP-BAU: Fjern automerge av Dependabot pull requests',
+      github_pr_data: { title: 'MP-BAU: Fjern automerge av Dependabot pull requests' },
+    }
+
+    mockGetAll.mockResolvedValue([staleDeployment])
+    mockRunVerification.mockResolvedValue({ status: 'approved' })
+    mockGetById.mockResolvedValue(freshDeployment)
+    mockAutoLink.mockResolvedValue(1)
+
+    const promise = verifyDeploymentsFourEyes()
+    await vi.advanceTimersByTimeAsync(1000)
+    await promise
+
+    // Should have re-read the deployment from DB
+    expect(mockGetById).toHaveBeenCalledWith(99)
+
+    // Should have called autoLinkGoalKeywords with commit infos from the fresh data
+    expect(mockAutoLink).toHaveBeenCalledTimes(1)
+    const [deploymentId, teamSlug, monitoredAppId, commitInfos] = mockAutoLink.mock.calls[0]
+    expect(deploymentId).toBe(99)
+    expect(teamSlug).toBe('my-team')
+    expect(monitoredAppId).toBe(10)
+    // The commit infos should include the PR title from the fresh deployment
+    expect(commitInfos.some((c: { message: string }) => c.message.includes('MP-BAU'))).toBe(true)
+  })
+
+  it('does NOT auto-link if deployment has no title/PR data even after re-read', async () => {
+    const deployment = makeDeployment({ id: 50, team_slug: 'team-x', title: null })
+
+    mockGetAll.mockResolvedValue([deployment])
+    mockRunVerification.mockResolvedValue({ status: 'approved' })
+    // Fresh read also has no title/PR data
+    mockGetById.mockResolvedValue({ ...deployment, github_pr_data: null, unverified_commits: null })
+    mockAutoLink.mockResolvedValue(0)
+
+    const promise = verifyDeploymentsFourEyes()
+    await vi.advanceTimersByTimeAsync(1000)
+    await promise
+
+    expect(mockGetById).toHaveBeenCalledWith(50)
+    // Should NOT call autoLinkGoalKeywords since commitInfos would be empty
+    expect(mockAutoLink).not.toHaveBeenCalled()
   })
 })
