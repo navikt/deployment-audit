@@ -11,8 +11,10 @@ import { Link } from 'react-router'
 import { pool } from '~/db/connection.server'
 import { getDeploymentById } from '~/db/deployments.server'
 import { getUserIdentity } from '~/lib/auth.server'
-import { type BoardKeywordSource, matchCommitKeywords } from '~/lib/goal-keyword-matcher'
+import { endOfDay } from '~/lib/date-utils'
+import { matchCommitKeywords } from '~/lib/goal-keyword-matcher'
 import { extractCommitInfos } from '~/lib/sync/github-verify.server'
+import { findDevTeamsForDeployment, loadBoardKeywords } from '~/lib/sync/goal-keyword-helpers.server'
 import type { Route } from './+types/$team.env.$env.app.$app.deployments.$deploymentId.debug-keywords'
 
 export async function loader({ params, request }: Route.LoaderArgs) {
@@ -34,86 +36,82 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   // Extract commit messages (same logic as the sync job)
   const commitInfos = extractCommitInfos(deployment as Parameters<typeof extractCommitInfos>[0])
 
-  // Find dev teams for this deployment (same query as autoLinkGoalKeywords)
-  const devTeamResult = await pool.query(
-    `SELECT dt.id, dt.name FROM dev_teams dt
-     JOIN dev_team_nais_teams dtn ON dtn.dev_team_id = dt.id
-     WHERE dtn.nais_team_slug = $1 AND dtn.deleted_at IS NULL AND dt.is_active = true
-     UNION
-     SELECT dt.id, dt.name FROM dev_teams dt
-     JOIN dev_team_applications dta ON dta.dev_team_id = dt.id
-     WHERE dta.monitored_app_id = $2 AND dta.deleted_at IS NULL AND dt.is_active = true
-     UNION
-     SELECT dt.id, dt.name FROM dev_teams dt
-     JOIN dev_team_application_groups dtag ON dtag.dev_team_id = dt.id
-     JOIN monitored_applications ma ON ma.application_group_id = dtag.application_group_id
-     WHERE ma.id = $2 AND dtag.deleted_at IS NULL AND dt.is_active = true`,
-    [deployment.team_slug, deployment.monitored_app_id],
-  )
+  // Find dev teams for this deployment
+  if (!deployment.monitored_app_id) {
+    return {
+      deployment: {
+        id: deployment.id,
+        title: deployment.title,
+        team_slug: deployment.team_slug,
+        environment_name: deployment.environment_name,
+        app_name: deployment.app_name,
+        created_at: deployment.created_at,
+        commit_sha: deployment.commit_sha,
+        monitored_app_id: null as number | null,
+      },
+      commitInfos: [] as Array<{ message: string; date: string }>,
+      devTeams: [] as Array<{ id: number; name: string }>,
+      ambiguousKeywords: [] as string[],
+      boardKeywords: [] as Array<{
+        boardId: number
+        boardName: string
+        periodStart: string
+        periodEnd: string
+        objectiveId: number
+        objectiveTitle: string
+        keyResultId: number | null
+        keyResultTitle: string | null
+        keyword: string
+      }>,
+      matches: [] as Array<{
+        boardId: number
+        objectiveId: number
+        keyResultId: number | null
+        keyword: string
+        objectiveTitle: string
+        keyResultTitle: string | null
+      }>,
+      existingLinks: [] as Array<{
+        objective_id: number
+        key_result_id: number | null
+        link_method: string
+        objective_title: string | null
+        key_result_title: string | null
+      }>,
+      error: 'Deployment er ikke koblet til en overvåket applikasjon',
+    }
+  }
 
-  const devTeams = devTeamResult.rows as Array<{ id: number; name: string }>
-  const devTeamIds = devTeams.map((r) => r.id)
+  const devTeams = await findDevTeamsForDeployment(deployment.team_slug, deployment.monitored_app_id)
 
   // Load board keywords
-  let boardKeywords: BoardKeywordSource[] = []
-  let boardKeywordsRaw: Array<{
-    board_id: number
-    board_name: string
-    period_start: string
-    period_end: string
-    objective_id: number
-    objective_title: string
-    key_result_id: number | null
-    key_result_title: string | null
-    keyword: string
-  }> = []
-
-  if (devTeamIds.length > 0) {
-    const keywordsResult = await pool.query(
-      `SELECT
-         b.id AS board_id,
-         b.name AS board_name,
-         b.period_start,
-         b.period_end,
-         bo.id AS objective_id,
-         bo.title AS objective_title,
-         NULL::int AS key_result_id,
-         NULL::text AS key_result_title,
-         unnest(bo.keywords) AS keyword
-       FROM boards b
-       JOIN board_objectives bo ON bo.board_id = b.id
-       WHERE b.dev_team_id = ANY($1) AND b.is_active = true AND bo.is_active = true AND array_length(bo.keywords, 1) > 0
-       UNION ALL
-       SELECT
-         b.id AS board_id,
-         b.name AS board_name,
-         b.period_start,
-         b.period_end,
-         bo.id AS objective_id,
-         bo.title AS objective_title,
-         bkr.id AS key_result_id,
-         bkr.title AS key_result_title,
-         unnest(bkr.keywords) AS keyword
-       FROM boards b
-       JOIN board_objectives bo ON bo.board_id = b.id
-       JOIN board_key_results bkr ON bkr.objective_id = bo.id
-       WHERE b.dev_team_id = ANY($1) AND b.is_active = true AND bo.is_active = true AND bkr.is_active = true AND array_length(bkr.keywords, 1) > 0`,
-      [devTeamIds],
-    )
-
-    boardKeywordsRaw = keywordsResult.rows
-    boardKeywords = boardKeywordsRaw.map((r) => ({
-      boardId: r.board_id,
-      periodStart: new Date(r.period_start),
-      periodEnd: new Date(r.period_end),
-      objectiveId: r.objective_id,
-      keyResultId: r.key_result_id,
-      keyword: r.keyword,
-    }))
-  }
+  const devTeamIds = devTeams.map((r) => r.id)
+  const { rows: boardKeywordsRaw, parsed: boardKeywords } = await loadBoardKeywords(devTeamIds)
 
   // Run matching
   const matches = matchCommitKeywords(commitInfos, boardKeywords)
+
+  // Compute date-aware ambiguous keywords (same logic as matcher):
+  // A keyword is ambiguous only if it matches in multiple boards for commits whose dates
+  // fall within those boards' periods.
+  const ambiguousKeywords: string[] = []
+  if (commitInfos.length > 0 && boardKeywords.length > 0) {
+    const keywordBoardHits = new Map<string, Set<number>>()
+    for (const commit of commitInfos) {
+      const msgLower = commit.message.toLowerCase()
+      for (const bk of boardKeywords) {
+        if (commit.date < bk.periodStart || commit.date > endOfDay(bk.periodEnd)) continue
+        if (msgLower.includes(bk.keyword.toLowerCase())) {
+          const hits = keywordBoardHits.get(bk.keyword.toLowerCase()) ?? new Set()
+          hits.add(bk.boardId)
+          keywordBoardHits.set(bk.keyword.toLowerCase(), hits)
+        }
+      }
+    }
+    for (const [kw, boards] of keywordBoardHits) {
+      if (boards.size > 1) ambiguousKeywords.push(kw)
+    }
+  }
 
   // Load existing goal links for comparison
   const existingLinksResult = await pool.query(
@@ -135,9 +133,11 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       app_name: deployment.app_name,
       created_at: deployment.created_at,
       commit_sha: deployment.commit_sha,
+      monitored_app_id: deployment.monitored_app_id,
     },
     commitInfos: commitInfos.map((c) => ({ message: c.message, date: c.date.toISOString() })),
     devTeams,
+    ambiguousKeywords,
     boardKeywords: boardKeywordsRaw.map((r) => ({
       boardId: r.board_id,
       boardName: r.board_name,
@@ -179,7 +179,8 @@ function downloadJson(data: unknown, filename: string) {
 }
 
 export default function DebugKeywordsPage({ loaderData }: Route.ComponentProps) {
-  const { deployment, commitInfos, devTeams, boardKeywords, matches, existingLinks } = loaderData
+  const { deployment, commitInfos, devTeams, boardKeywords, matches, existingLinks, ambiguousKeywords } = loaderData
+  const error = 'error' in loaderData ? (loaderData.error as string) : null
   const appUrl = `/team/${deployment.team_slug}/env/${deployment.environment_name}/app/${deployment.app_name}`
 
   const handleExport = () => {
@@ -195,18 +196,7 @@ export default function DebugKeywordsPage({ loaderData }: Route.ComponentProps) 
     keywordsByBoard.set(bk.boardId, entry)
   }
 
-  // Detect ambiguous keywords (matched in multiple boards)
-  const keywordBoardMap = new Map<string, Set<number>>()
-  for (const bk of boardKeywords) {
-    const lower = bk.keyword.toLowerCase()
-    const set = keywordBoardMap.get(lower) ?? new Set()
-    set.add(bk.boardId)
-    keywordBoardMap.set(lower, set)
-  }
-  const ambiguousKeywords = new Set<string>()
-  for (const [kw, boards] of keywordBoardMap) {
-    if (boards.size > 1) ambiguousKeywords.add(kw)
-  }
+  const ambiguousSet = new Set(ambiguousKeywords)
 
   return (
     <Box paddingBlock="space-8" paddingInline={{ xs: 'space-4', md: 'space-8' }}>
@@ -231,6 +221,12 @@ export default function DebugKeywordsPage({ loaderData }: Route.ComponentProps) 
             </Link>
           </HStack>
         </HStack>
+
+        {error && (
+          <Alert variant="error">
+            <BodyShort>{error}</BodyShort>
+          </Alert>
+        )}
 
         {/* Summary */}
         <Box background={matches.length > 0 ? 'success-soft' : 'warning-soft'} padding="space-4" borderRadius="8">
@@ -262,8 +258,8 @@ export default function DebugKeywordsPage({ loaderData }: Route.ComponentProps) 
               </HStack>
             ) : (
               <Alert variant="error" size="small">
-                Ingen utviklingsteam funnet for team_slug=&quot;{deployment.team_slug}&quot; / app_id=
-                {deployment.id}
+                Ingen utviklingsteam funnet for team_slug=&quot;{deployment.team_slug}&quot; / monitored_app_id=
+                {deployment.monitored_app_id}
               </Alert>
             )}
           </VStack>
@@ -324,7 +320,7 @@ export default function DebugKeywordsPage({ loaderData }: Route.ComponentProps) 
                         {keywords.map((kw) => (
                           <Tag
                             key={`${kw.keyword}-${kw.objectiveId}-${kw.keyResultId}`}
-                            variant={ambiguousKeywords.has(kw.keyword.toLowerCase()) ? 'warning' : 'neutral'}
+                            variant={ambiguousSet.has(kw.keyword.toLowerCase()) ? 'warning' : 'neutral'}
                             size="small"
                           >
                             {kw.keyword}
@@ -337,9 +333,10 @@ export default function DebugKeywordsPage({ loaderData }: Route.ComponentProps) 
                 ))}
               </VStack>
             )}
-            {ambiguousKeywords.size > 0 && (
+            {ambiguousSet.size > 0 && (
               <Alert variant="warning" size="small">
-                Tvetydige nøkkelord (finnes i flere tavler, ignoreres): {[...ambiguousKeywords].join(', ')}
+                Tvetydige nøkkelord (matchet i flere tavler for disse commit-datoene, ignoreres):{' '}
+                {ambiguousKeywords.join(', ')}
               </Alert>
             )}
           </VStack>
