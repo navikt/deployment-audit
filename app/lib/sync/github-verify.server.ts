@@ -1,5 +1,10 @@
 import { pool } from '~/db/connection.server'
-import { type DeploymentFilters, getAllDeployments, updateDeploymentFourEyes } from '~/db/deployments.server'
+import {
+  type DeploymentFilters,
+  getAllDeployments,
+  getDeploymentById,
+  updateDeploymentFourEyes,
+} from '~/db/deployments.server'
 import { isApprovedStatus } from '~/lib/four-eyes-status'
 import { logger } from '~/lib/logger.server'
 import { runVerification } from '~/lib/verification'
@@ -109,10 +114,14 @@ export async function verifyDeploymentsFourEyes(filters?: DeploymentFilters & { 
         verified++
 
         // Auto-link to board goals via commit message keywords
+        // Re-read deployment from DB to get freshly populated PR data/title from verification
         try {
-          const commitInfos = extractCommitInfos(deployment as Parameters<typeof extractCommitInfos>[0])
-          if (commitInfos.length > 0) {
-            await autoLinkGoalKeywords(deployment.id, deployment.team_slug, deployment.monitored_app_id, commitInfos)
+          const freshDeployment = await getDeploymentById(deployment.id)
+          if (freshDeployment) {
+            const commitInfos = extractCommitInfos(freshDeployment as Parameters<typeof extractCommitInfos>[0])
+            if (commitInfos.length > 0) {
+              await autoLinkGoalKeywords(deployment.id, deployment.team_slug, deployment.monitored_app_id, commitInfos)
+            }
           }
         } catch (e) {
           logger.warn(`⚠️  Goal keyword auto-linking failed for deployment ${deployment.id}: ${e}`)
