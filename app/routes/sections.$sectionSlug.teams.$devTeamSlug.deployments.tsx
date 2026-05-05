@@ -66,7 +66,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       errorReasons: {} as Record<number, string>,
       teamFilterEmptyReason: null as string | null,
       hasUnmappedDeployers: false,
-      goalOptions: [] as { id: number; title: string }[],
+      goalOptions: [] as { id: number; title: string; dev_team_name: string | null; period_label: string | null }[],
       appOptions: [] as { value: string; label: string }[],
     }
   }

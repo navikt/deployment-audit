@@ -45,24 +45,37 @@ export async function getLinksForDeployment(deploymentId: number): Promise<Deplo
   return result.rows
 }
 
+interface GoalFilterOption {
+  id: number
+  title: string
+  dev_team_name: string | null
+  period_label: string | null
+}
+
 /**
  * Get distinct objectives that are linked to deployments for the given app IDs.
  * Used to populate the goal filter dropdown on the deployment list page.
+ * Returns team name and period label to disambiguate goals with the same title.
  */
-export async function getLinkedObjectivesForApps(appIds: number[]): Promise<Array<{ id: number; title: string }>> {
+export async function getLinkedObjectivesForApps(appIds: number[]): Promise<GoalFilterOption[]> {
   if (appIds.length === 0) return []
-  const result = await pool.query(
+  const result = await pool.query<GoalFilterOption>(
     `SELECT DISTINCT COALESCE(bo.id, bo_via_kr.id) AS id,
-            COALESCE(bo.title, bo_via_kr.title) AS title
+            COALESCE(bo.title, bo_via_kr.title) AS title,
+            dt.name AS dev_team_name,
+            COALESCE(b.period_label, b_via_kr.period_label) AS period_label
      FROM deployment_goal_links dgl
      JOIN deployments d ON d.id = dgl.deployment_id
      LEFT JOIN board_objectives bo ON bo.id = dgl.objective_id
      LEFT JOIN board_key_results bkr ON bkr.id = dgl.key_result_id
      LEFT JOIN board_objectives bo_via_kr ON bo_via_kr.id = bkr.objective_id
+     LEFT JOIN boards b ON b.id = bo.board_id
+     LEFT JOIN boards b_via_kr ON b_via_kr.id = bo_via_kr.board_id
+     LEFT JOIN dev_teams dt ON dt.id = COALESCE(b.dev_team_id, b_via_kr.dev_team_id)
      WHERE d.monitored_app_id = ANY($1)
        AND dgl.is_active = true
        AND COALESCE(bo.id, bo_via_kr.id) IS NOT NULL
-     ORDER BY title`,
+     ORDER BY dev_team_name, period_label, title`,
     [appIds],
   )
   return result.rows

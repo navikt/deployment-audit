@@ -10,6 +10,8 @@ interface FilterOption {
 interface GoalOption {
   id: number
   title: string
+  dev_team_name: string | null
+  period_label: string | null
 }
 
 interface DeploymentFiltersProps {
@@ -105,15 +107,25 @@ export function DeploymentFilters({
               <option value="">Alle</option>
               <option value="missing">Mangler kobling</option>
               <option value="linked">Alle koblede</option>
-              {goalOptions.length > 0 && (
-                <optgroup label="Mål">
-                  {goalOptions.map((obj) => (
-                    <option key={obj.id} value={`obj:${obj.id}`}>
-                      {obj.title}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
+              {goalOptions.length > 0 &&
+                (() => {
+                  const groups = new Map<string, GoalOption[]>()
+                  for (const obj of goalOptions) {
+                    const groupKey = [obj.dev_team_name, obj.period_label].filter(Boolean).join(' – ') || 'Mål'
+                    const existing = groups.get(groupKey) ?? []
+                    existing.push(obj)
+                    groups.set(groupKey, existing)
+                  }
+                  return Array.from(groups.entries()).map(([groupLabel, options]) => (
+                    <optgroup key={groupLabel} label={groupLabel}>
+                      {options.map((obj) => (
+                        <option key={obj.id} value={`obj:${obj.id}`}>
+                          {obj.title}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))
+                })()}
             </Select>
 
             <Select
