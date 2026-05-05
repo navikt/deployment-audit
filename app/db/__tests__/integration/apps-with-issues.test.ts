@@ -31,6 +31,31 @@ async function seedUserMapping(githubUsername: string): Promise<void> {
   ])
 }
 
+async function seedObjective(): Promise<number> {
+  const sectionId = (
+    await pool.query<{ id: number }>(`INSERT INTO sections (slug, name) VALUES ('s-${Date.now()}', 'S') RETURNING id`)
+  ).rows[0].id
+  const teamId = (
+    await pool.query<{ id: number }>(
+      `INSERT INTO dev_teams (slug, name, section_id) VALUES ('team-a', 'Team A', $1) ON CONFLICT (slug) DO UPDATE SET name = 'Team A' RETURNING id`,
+      [sectionId],
+    )
+  ).rows[0].id
+  const boardId = (
+    await pool.query<{ id: number }>(
+      `INSERT INTO boards (dev_team_id, title, period_type, period_start, period_end, period_label, is_active)
+       VALUES ($1, 'B', 'quarterly', '2025-01-01', '2025-03-31', 'Q1', true) RETURNING id`,
+      [teamId],
+    )
+  ).rows[0].id
+  return (
+    await pool.query<{ id: number }>(
+      `INSERT INTO board_objectives (board_id, title, sort_order, is_active) VALUES ($1, 'Obj', 0, true) RETURNING id`,
+      [boardId],
+    )
+  ).rows[0].id
+}
+
 describe('getDevTeamAppsWithIssues - unmapped_deployer_count', () => {
   it('includes app with only unmapped deployers in results', async () => {
     const appId = await seedApp(pool, { teamSlug: 'team-a', appName: 'svc', environment: 'prod' })
@@ -146,10 +171,11 @@ describe('getDevTeamAppsWithIssues - unmapped_deployer_count', () => {
       fourEyesStatus: 'approved',
     })
     await seedUserMapping('mapped-user')
-    // Add goal link so app doesn't appear due to missing_goal_links
+    const objectiveId = await seedObjective()
+    // Add goal link with objective so app doesn't appear due to missing_goal_links
     await pool.query(
-      `INSERT INTO deployment_goal_links (deployment_id, external_url, link_method, is_active) VALUES ($1, 'http://example.com', 'manual', true)`,
-      [deployId],
+      `INSERT INTO deployment_goal_links (deployment_id, objective_id, link_method, is_active) VALUES ($1, $2, 'manual', true)`,
+      [deployId, objectiveId],
     )
 
     const result = await getDevTeamAppsWithIssues(['team-a'])
@@ -167,10 +193,11 @@ describe('getDevTeamAppsWithIssues - unmapped_deployer_count', () => {
       fourEyesStatus: 'approved',
     })
     await seedUserMapping('alice')
-    // Add goal link so app doesn't appear due to missing_goal_links
+    const objectiveId = await seedObjective()
+    // Add goal link with objective so app doesn't appear due to missing_goal_links
     await pool.query(
-      `INSERT INTO deployment_goal_links (deployment_id, external_url, link_method, is_active) VALUES ($1, 'http://example.com', 'manual', true)`,
-      [deployId],
+      `INSERT INTO deployment_goal_links (deployment_id, objective_id, link_method, is_active) VALUES ($1, $2, 'manual', true)`,
+      [deployId, objectiveId],
     )
 
     const result = await getDevTeamAppsWithIssues(['team-a'])
