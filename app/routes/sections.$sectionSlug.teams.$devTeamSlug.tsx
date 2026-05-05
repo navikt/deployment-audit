@@ -15,10 +15,11 @@ import {
 } from '@navikt/ds-react'
 import { Link, useLoaderData, useRouteLoaderData, useSearchParams } from 'react-router'
 import { AppCard, type AppCardData } from '~/components/AppCard'
+import { BoardSummaryCard } from '~/components/BoardSummaryCard'
 import { getGroupNamesByIds } from '~/db/application-groups.server'
 import { getAllActiveRepositories } from '~/db/application-repositories.server'
 import { type Board, getBoardsByDevTeam } from '~/db/boards.server'
-import { type BoardProgressResult, getBoardObjectiveProgress } from '~/db/dashboard-stats.server'
+import { type BoardProgressResult, getBoardObjectiveProgress, getContributedBoards } from '~/db/dashboard-stats.server'
 import { getAppDeploymentStatsBatch } from '~/db/deployments.server'
 import { getDevTeamApplications, getDevTeamBySlug, getGroupAppIdsForDevTeams } from '~/db/dev-teams.server'
 import { getAllAlertCounts, getAllMonitoredApplications } from '~/db/monitored-applications.server'
@@ -57,11 +58,17 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   // Top-of-page coverage stats: YTD, filtered to team members' deploys.
   const ytdStart = new Date(new Date().getFullYear(), 0, 1)
+  const url = new URL(request.url)
+  const showAllApps = url.searchParams.get('allApps') === 'true'
+  const showAllBoards = url.searchParams.get('allBoards') === 'true'
 
   const activeBoard = boards.find((b) => b.is_active) ?? null
-  const activeBoardProgress = activeBoard
-    ? await getBoardObjectiveProgress(activeBoard.id, deployerUsernames, { startDate: ytdStart })
-    : null
+  const [activeBoardProgress, contributedBoards] = await Promise.all([
+    activeBoard
+      ? getBoardObjectiveProgress(activeBoard.id, deployerUsernames, { startDate: ytdStart })
+      : Promise.resolve(null),
+    showAllBoards ? getContributedBoards(devTeam.id, deployerUsernames) : Promise.resolve([]),
+  ])
 
   // Build app cards: direct links + group-owned apps + nais team matches
   const directAppIds = new Set([...directApps.map((a) => a.monitored_app_id), ...groupAppIds])
@@ -70,9 +77,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     (app) => app.is_active && (directAppIds.has(app.id) || naisTeamSlugs.includes(app.team_slug)),
   )
 
-  // When ?allApps=true, show all apps where team members have deployed (not just team-owned).
-  const url = new URL(request.url)
-  const showAllApps = url.searchParams.get('allApps') === 'true'
   const appsForStats = showAllApps ? allApps.filter((a) => a.is_active) : teamApps
 
   // Filter stats to deploys made by team members (their GitHub usernames).
@@ -151,9 +155,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     devTeam,
     activeBoard,
     activeBoardProgress,
+    contributedBoards,
     members,
     appCards,
     showAllApps,
+    showAllBoards,
     sectionSlug: params.sectionSlug,
     sectionName: section?.name ?? params.sectionSlug,
     teamCoverage,
@@ -167,9 +173,11 @@ export default function DevTeamPage() {
     devTeam,
     activeBoard,
     activeBoardProgress,
+    contributedBoards,
     members,
     appCards,
     showAllApps,
+    showAllBoards,
     sectionSlug,
     teamCoverage,
     hasMappedMembers,
@@ -212,11 +220,60 @@ export default function DevTeamPage() {
       />
 
       {/* Active board */}
-      {activeBoard ? (
-        <ActiveBoardSection board={activeBoard} progress={activeBoardProgress} teamBasePath={teamBasePath} />
-      ) : (
-        <Alert variant="info">Ingen aktiv tavle. Opprett en ny tavle via Administrer-knappen.</Alert>
-      )}
+      <VStack gap="space-8">
+        <HStack align="center" justify="space-between" wrap>
+          <Heading level="2" size="small">
+            Tavler
+          </Heading>
+          <Switch
+            size="small"
+            checked={showAllBoards}
+            onChange={(e) => {
+              const next = new URLSearchParams(searchParams)
+              if (e.target.checked) {
+                next.set('allBoards', 'true')
+              } else {
+                next.delete('allBoards')
+              }
+              setSearchParams(next)
+            }}
+          >
+            Vis alle tavler med teamaktivitet
+          </Switch>
+        </HStack>
+        {activeBoard ? (
+          <ActiveBoardSection board={activeBoard} progress={activeBoardProgress} teamBasePath={teamBasePath} />
+        ) : (
+          <Alert variant="info">Ingen aktiv tavle. Opprett en ny tavle via Administrer-knappen.</Alert>
+        )}
+        {showAllBoards && contributedBoards.length > 0 && (
+          <VStack gap="space-8">
+            <Detail textColor="subtle">Tavler fra andre team som teammedlemmene har bidratt til med leveranser.</Detail>
+            <HGrid gap="space-12" columns={{ xs: 1, md: 2 }}>
+              {contributedBoards.map((board) => (
+                <BoardSummaryCard
+                  key={board.board_id}
+                  board={{
+                    boardId: board.board_id,
+                    periodLabel: board.period_label,
+                    periodType: board.period_type,
+                    teamName: board.team_name,
+                    teamSlug: board.team_slug,
+                    sectionSlug: board.section_slug,
+                    objectives: [],
+                  }}
+                  linkedDeploymentCount={board.linked_deployment_count}
+                />
+              ))}
+            </HGrid>
+          </VStack>
+        )}
+        {showAllBoards && contributedBoards.length === 0 && (
+          <BodyShort size="small" textColor="subtle">
+            Ingen leveranser fra teammedlemmer er koblet til andre teams tavler.
+          </BodyShort>
+        )}
+      </VStack>
 
       {/* Members */}
       {members.length > 0 && (

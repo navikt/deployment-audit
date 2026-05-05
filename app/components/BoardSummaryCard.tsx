@@ -32,10 +32,21 @@ export interface BoardSummary {
  * the semantic anchor (via `LinkCard.Anchor asChild` around React Router's
  * `<Link>`). Avoid adding nested interactive elements (buttons, links) inside
  * the card — that would break `LinkCard`'s a11y contract.
+ *
+ * When `linkedDeploymentCount` is provided, it overrides the computed total
+ * from objectives (used for contributed boards where per-objective data is
+ * not fetched).
  */
-export function BoardSummaryCard({ board }: { board: BoardSummary }) {
+export function BoardSummaryCard({
+  board,
+  linkedDeploymentCount,
+}: {
+  board: BoardSummary
+  linkedDeploymentCount?: number
+}) {
   const dashboardUrl = `/sections/${board.sectionSlug}/teams/${board.teamSlug}/dashboard?periodType=${board.periodType}&period=${encodeURIComponent(board.periodLabel)}`
-  const totalDeployments = board.objectives.reduce((sum, o) => sum + o.total_linked_deployments, 0)
+  const totalDeployments =
+    linkedDeploymentCount ?? board.objectives.reduce((sum, o) => sum + o.total_linked_deployments, 0)
 
   return (
     <LinkCard>
